@@ -39,23 +39,42 @@ const STORAGE_PENDING_JOIN_KEY = 'trivio_pending_join'
 
 function hasStoredAuth(): boolean {
   try {
-    return (
-      localStorage.getItem(STORAGE_AUTH_KEY) === 'true' ||
-      Boolean(localStorage.getItem('wagmi.recentConnectorId'))
-    )
+    if (localStorage.getItem(STORAGE_AUTH_KEY) === 'true') return true
+    const wagmiStore = localStorage.getItem('wagmi.store')
+    if (wagmiStore) {
+      const parsed = JSON.parse(wagmiStore)
+      const current = parsed?.state?.current
+      const connections = parsed?.state?.connections?.value || parsed?.state?.connections
+      if (current && connections) return true
+    }
+    if (localStorage.getItem('wagmi.recentConnectorId')) return true
+    return false
   } catch {
     return false
   }
+}
+
+function getSavedCategory(): Category {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_SCREEN_KEY) || localStorage.getItem(STORAGE_SCREEN_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed?.category) return parsed.category as Category
+    }
+  } catch {
+    // fallback
+  }
+  return 'General Knowledge'
 }
 
 function getInitialScreen(): Screen {
   const joinCode = getJoinCodeFromUrl()
   const isAuth = hasStoredAuth()
 
-  // If a join code was clicked via invite link:
+  // 1. If an invite link ?join=CODE was opened:
   if (joinCode) {
-    // If not connected / authenticated yet, save pending code and force login on landing page
     if (!isAuth) {
+      // Unauthenticated user: MUST authenticate first on landing page
       try {
         sessionStorage.setItem(STORAGE_PENDING_JOIN_KEY, joinCode)
       } catch {
@@ -63,12 +82,43 @@ function getInitialScreen(): Screen {
       }
       return { name: 'landing' }
     }
-    // If already authenticated, proceed directly to join screen with code
+    // Already authenticated: proceed to join room
     return { name: 'join', category: 'General Knowledge', prefillCode: joinCode }
   }
 
-  // Restore previous screen on refresh for authenticated users
+  // 2. If authenticated, determine screen synchronously from URL hash or storage
   if (isAuth) {
+    const hash = window.location.hash
+
+    if (hash.startsWith('#/game/')) {
+      const code = hash.replace('#/game/', '').trim().toUpperCase()
+      if (code) {
+        return { name: 'game', roomCode: code, category: getSavedCategory() }
+      }
+    }
+    if (hash === '#/create') {
+      return { name: 'create', category: getSavedCategory() }
+    }
+    if (hash === '#/join') {
+      return { name: 'join', category: getSavedCategory() }
+    }
+    if (hash === '#/results') {
+      try {
+        const raw = sessionStorage.getItem(STORAGE_SCREEN_KEY) || localStorage.getItem(STORAGE_SCREEN_KEY)
+        if (raw) {
+          const parsed = JSON.parse(raw) as Screen
+          if (parsed.name === 'results') return parsed
+        }
+      } catch {
+        // ignore
+      }
+      return { name: 'lobby' }
+    }
+    if (hash === '#/lobby') {
+      return { name: 'lobby' }
+    }
+
+    // Fallback to storage
     try {
       const raw = sessionStorage.getItem(STORAGE_SCREEN_KEY) || localStorage.getItem(STORAGE_SCREEN_KEY)
       if (raw) {
@@ -83,16 +133,16 @@ function getInitialScreen(): Screen {
     return { name: 'lobby' }
   }
 
+  // 3. Not authenticated -> landing page
   return { name: 'landing' }
 }
 
 export default function App() {
   const { isConnected, isReconnecting, status, address } = useAccount()
   const [screen, setScreen] = useState<Screen>(getInitialScreen)
-  const [reconnectGraceOver, setReconnectGraceOver] = useState(false)
   const wasConnectedRef = useRef(false)
 
-  // Track connected status in localStorage
+  // Track connected status in localStorage and transition from landing to lobby/join
   useEffect(() => {
     if (isConnected) {
       wasConnectedRef.current = true
@@ -101,41 +151,53 @@ export default function App() {
       } catch {
         // ignore
       }
+      if (screen.name === 'landing') {
+        handleConnected()
+      }
     }
-  }, [isConnected])
+  }, [isConnected, screen.name])
 
-  // Give wagmi a 1.5s grace period on initial load to restore existing wallet session
+  // If user explicitly disconnects in wallet, clear state and return to landing
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setReconnectGraceOver(true)
-    }, 1500)
-    return () => clearTimeout(timer)
-  }, [])
-
-  // If user explicitly disconnects, clear auth state and return to landing
-  useEffect(() => {
-    if (status === 'disconnected' && reconnectGraceOver && wasConnectedRef.current) {
+    if (status === 'disconnected' && !isReconnecting && wasConnectedRef.current) {
+      wasConnectedRef.current = false
       try {
         localStorage.removeItem(STORAGE_AUTH_KEY)
         localStorage.removeItem(STORAGE_SCREEN_KEY)
         sessionStorage.removeItem(STORAGE_SCREEN_KEY)
+        if (window.location.hash) {
+          window.history.replaceState(null, '', window.location.pathname)
+        }
       } catch {
         // ignore
       }
       setScreen({ name: 'landing' })
     }
-  }, [status, reconnectGraceOver])
+  }, [status, isReconnecting])
 
-  // Persist screen state so browser refresh stays on the current screen
+  // Synchronize URL hash and storage whenever screen changes
   useEffect(() => {
     try {
       if (screen.name === 'landing') {
         sessionStorage.removeItem(STORAGE_SCREEN_KEY)
         localStorage.removeItem(STORAGE_SCREEN_KEY)
+        if (window.location.hash) {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search)
+        }
       } else {
         const json = JSON.stringify(screen)
         sessionStorage.setItem(STORAGE_SCREEN_KEY, json)
         localStorage.setItem(STORAGE_SCREEN_KEY, json)
+
+        let targetHash = '#/lobby'
+        if (screen.name === 'create') targetHash = '#/create'
+        else if (screen.name === 'join') targetHash = '#/join'
+        else if (screen.name === 'game') targetHash = `#/game/${screen.roomCode}`
+        else if (screen.name === 'results') targetHash = '#/results'
+
+        if (window.location.hash !== targetHash) {
+          window.history.replaceState(null, '', targetHash)
+        }
       }
     } catch {
       // ignore
@@ -148,7 +210,7 @@ export default function App() {
       const url = new URL(window.location.href)
       if (url.searchParams.has('join')) {
         url.searchParams.delete('join')
-        window.history.replaceState({}, '', url.toString())
+        window.history.replaceState({}, '', url.pathname + window.location.hash)
       }
     }
   }, [screen])
@@ -163,7 +225,7 @@ export default function App() {
         sessionStorage.removeItem(STORAGE_PENDING_JOIN_KEY)
         const url = new URL(window.location.href)
         url.searchParams.delete('join')
-        window.history.replaceState({}, '', url.toString())
+        window.history.replaceState({}, '', url.pathname + '#/join')
         setScreen({ name: 'join', category: 'General Knowledge', prefillCode: pendingJoin })
         return
       }
@@ -174,16 +236,36 @@ export default function App() {
     setScreen(prev => (prev.name !== 'landing' ? prev : { name: 'lobby' }))
   }
 
-  // Security check: Unconnected users who are not reconnecting an existing session
-  // MUST NOT bypass authentication to access protected screens.
-  const isAuthWaiting = !reconnectGraceOver && (isReconnecting || hasStoredAuth())
-  const canAccessApp = isConnected || isAuthWaiting
+  // Auth guard: If user is definitely not connected and has no saved session:
+  // Strictly prevent accessing protected screens (no bypass).
+  const isAuth = isConnected || isReconnecting || hasStoredAuth()
 
-  if (!canAccessApp && screen.name !== 'landing') {
+  if (!isAuth && screen.name !== 'landing') {
     return <LandingPage onConnected={handleConnected} />
   }
 
   if (screen.name === 'landing') {
+    if (isConnected) {
+      const pendingJoin =
+        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(STORAGE_PENDING_JOIN_KEY)) ||
+        getJoinCodeFromUrl()
+      if (pendingJoin) {
+        return (
+          <JoinRoom
+            initialCategory="General Knowledge"
+            prefillCode={pendingJoin}
+            onBack={() => setScreen({ name: 'lobby' })}
+            onJoined={(roomCode, category) => setScreen({ name: 'game', roomCode, category })}
+          />
+        )
+      }
+      return (
+        <Lobby
+          onCreateRoom={(category) => setScreen({ name: 'create', category })}
+          onJoinRoom={(category) => setScreen({ name: 'join', category })}
+        />
+      )
+    }
     return <LandingPage onConnected={handleConnected} />
   }
 
