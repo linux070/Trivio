@@ -6,11 +6,11 @@ import type { Category } from '@/lib/questions'
 
 const CATEGORIES: { label: Category; emoji: string }[] = [
   { label: 'General Knowledge', emoji: '🧠' },
-  { label: 'Crypto',            emoji: '⚡' },
-  { label: 'Sports',            emoji: '🏆' },
-  { label: 'Pop Culture',       emoji: '🎬' },
-  { label: 'Science',           emoji: '🔬' },
-  { label: 'History',           emoji: '📜' },
+  { label: 'Crypto', emoji: '⚡' },
+  { label: 'Sports', emoji: '🏆' },
+  { label: 'Pop Culture', emoji: '🎬' },
+  { label: 'Science', emoji: '🔬' },
+  { label: 'History', emoji: '📜' },
 ]
 
 interface LobbyProps {
@@ -38,10 +38,10 @@ export default function Lobby({ onCreateRoom, onJoinRoom }: LobbyProps) {
           className="mb-6 sm:mb-8 flex items-center justify-between gap-3"
         >
           <h1
-            className="funoa-title shrink-0 select-none"
+            className="trivio-title shrink-0 select-none"
             style={{ fontSize: 'clamp(22px, 6vw, 32px)', color: '#1e0a3c', letterSpacing: '0.04em' }}
           >
-            TRIVIO
+            trivio
           </h1>
           <div className="shrink-0">
             <ConnectKitButton showBalance={false} />
@@ -56,8 +56,8 @@ export default function Lobby({ onCreateRoom, onJoinRoom }: LobbyProps) {
           className="mb-6"
         >
           <p
-            className="mb-3 text-xs font-semibold uppercase tracking-widest"
-            style={{ color: '#7c3aed', letterSpacing: '0.12em' }}
+            className="mb-3 text-xs font-semibold uppercase tracking-widest text-black"
+            style={{ color: '#000000', letterSpacing: '0.12em' }}
           >
             Pick a category
           </p>
@@ -70,17 +70,17 @@ export default function Lobby({ onCreateRoom, onJoinRoom }: LobbyProps) {
                   onClick={() => setSelected(label)}
                   className="group flex flex-col items-center justify-center min-h-[74px] sm:min-h-[82px] gap-1.5 rounded-2xl p-1.5 sm:p-2.5 text-center transition-all duration-150 active:scale-95"
                   style={{
-                    background: active ? '#ede9fe' : '#f3f4f6',
-                    border: active ? '1px solid #7c3aed' : '1px solid transparent',
-                    boxShadow: active ? '0 2px 10px rgba(124,58,237,0.15)' : 'none',
+                    background: '#f3f4f6',
+                    border: active ? '1.5px solid #7c3aed' : '1.5px solid transparent',
+                    boxShadow: 'none',
                   }}
                   onMouseEnter={e => { if (!active) (e.currentTarget).style.background = '#e5e7eb' }}
                   onMouseLeave={e => { if (!active) (e.currentTarget).style.background = '#f3f4f6' }}
                 >
                   <span className="text-xl leading-none">{emoji}</span>
                   <span
-                    className="text-[11px] sm:text-xs font-semibold leading-tight line-clamp-2"
-                    style={{ color: active ? '#5b21b6' : '#6b7280' }}
+                    className="text-[11px] sm:text-xs font-semibold leading-tight line-clamp-2 text-black"
+                    style={{ color: '#000000' }}
                   >
                     {label}
                   </span>
@@ -101,14 +101,14 @@ export default function Lobby({ onCreateRoom, onJoinRoom }: LobbyProps) {
           <button
             onClick={() => onCreateRoom(selected)}
             className="group flex flex-col items-center gap-2.5 sm:gap-3 rounded-2xl p-3.5 sm:py-5 sm:px-4 text-center transition-all duration-150 hover:brightness-105 active:scale-95"
-            style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)', boxShadow: '0 4px 20px rgba(124,58,237,0.28)' }}
+            style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', boxShadow: '0 4px 16px rgba(124,58,237,0.20)' }}
           >
             <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: 'rgba(255,255,255,0.18)' }}>
               <Plus size={18} className="text-white" />
             </div>
             <div>
-              <p className="text-sm font-bold text-white">Create</p>
-              <p className="text-xs text-white/60">Host a game</p>
+              <p className="text-sm font-medium text-white">Create</p>
+              <p className="text-xs text-white/70">Host a game</p>
             </div>
           </button>
 
@@ -122,7 +122,7 @@ export default function Lobby({ onCreateRoom, onJoinRoom }: LobbyProps) {
               <LogIn size={18} style={{ color: '#7c3aed' }} />
             </div>
             <div>
-              <p className="text-sm font-bold" style={{ color: '#1e0a3c' }}>Join</p>
+              <p className="text-sm font-medium" style={{ color: '#1e0a3c' }}>Join</p>
               <p className="text-xs" style={{ color: '#9ca3af' }}>Enter a code</p>
             </div>
           </button>
@@ -133,7 +133,8 @@ export default function Lobby({ onCreateRoom, onJoinRoom }: LobbyProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.28 }}
-          className="mt-6 text-center text-xs text-gray-300"
+          className="mt-6 text-center text-xs font-medium"
+          style={{ color: '#4b5563' }}
         >
           Prizes paid in USDC on Arc Testnet · instant, verifiable, zero ETH
         </motion.p>

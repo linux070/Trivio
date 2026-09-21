@@ -19,9 +19,9 @@ input[type='number'] { -moz-appearance: textfield; }
   --subtle: #8a849c;
   --border: rgba(18, 45, 69, 0.12);
   --border-strong: rgba(25, 53, 77, 0.50);
-  --accent: #122d45;
-  --accent-hover: #1061a6;
-  --focus: #85b1ed;
+  --accent: #7c3aed;
+  --accent-hover: #6d28d9;
+  --focus: #c4b5fd;
   --success: #1a8047;
   --danger: #ba2b4c;
 }
@@ -49,12 +49,12 @@ body {
 }
 
 /* ── TRIVIO game font ── */
-.funoa-title {
+.trivio-title {
   font-family: 'Righteous', 'Fredoka One', 'Boogaloo', 'Space Grotesk', sans-serif;
 }
 
 /* ── Floating shapes background — Deep Purple ── */
-.funoa-bg {
+.trivio-bg {
   background: linear-gradient(160deg, #7c3aed 0%, #6d28d9 30%, #5b21b6 65%, #4c1d95 100%);
 }
 

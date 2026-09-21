@@ -164,11 +164,8 @@ function HowToPlayModal({ open, onClose }: { open: boolean; onClose: () => void 
             {/* Header */}
             <div className="flex items-start justify-between px-6 pt-5 pb-4">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: '#7c3aed' }}>
-                  HOW IT WORKS
-                </p>
                 <h2 className="mt-0.5 text-xl font-bold" style={{ color: '#1e0a3c', fontFamily: "'Space Grotesk', sans-serif" }}>
-                  How to play TRIVIO
+                  How to play trivio?
                 </h2>
               </div>
               <button
@@ -311,8 +308,8 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
                           <button
                             type="submit"
                             disabled={!emailInput.trim()}
-                            className="rounded-xl px-3.5 py-1.5 text-xs font-bold text-white transition-opacity hover:opacity-85 disabled:opacity-40"
-                            style={{ background: 'linear-gradient(135deg, #7c3aed, #5b21b6)' }}
+                            className="rounded-xl px-3.5 py-1.5 text-xs font-medium text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 shadow-sm"
+                            style={{ background: 'linear-gradient(135deg, #a78bfa, #8b5cf6)' }}
                           >
                             Go
                           </button>
@@ -360,7 +357,7 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
         )}
       </AnimatePresence>
 
-      <div className="funoa-bg relative flex min-h-dvh flex-col items-center justify-between overflow-hidden px-4 pb-8 pt-10 sm:px-5 sm:pb-10 sm:pt-16">
+      <div className="trivio-bg relative flex min-h-dvh flex-col items-center justify-between overflow-hidden px-4 pb-8 pt-10 sm:px-5 sm:pb-10 sm:pt-16">
         <FloatingShapes />
 
         {/* ── Wordmark + Get Started ───────────────────────────────────────── */}
@@ -373,7 +370,7 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
           >
             {/* TRIVIO wordmark */}
             <h1
-              className="funoa-title select-none leading-none"
+              className="trivio-title select-none leading-none"
               style={{
                 fontSize: 'clamp(52px, 18vw, 108px)',
                 color: '#ffffff',
@@ -388,7 +385,7 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
                 letterSpacing: '0.04em',
               }}
             >
-              TRIVIO
+              trivio
             </h1>
 
             {/* Typewriter tagline */}

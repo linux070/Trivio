@@ -13,7 +13,7 @@ import {
   formatUSDCRaw,
 } from '@/hooks/useTriviaContract'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
-import { ALL_CATEGORIES, type Category } from '@/lib/questions'
+import type { Category } from '@/lib/questions'
 import { parseUSDC } from '@/hooks/useTriviaContract'
 
 const glass = {
@@ -43,7 +43,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
   const { switchChain } = useSwitchChain()
 
   const [mode, setMode] = useState<Mode>('buyin')
-  const [category, setCategory] = useState<Category>(initialCategory)
+  const [category] = useState<Category>(initialCategory)
   const [maxPlayers, setMaxPlayers] = useState(4)
   const [maxPlayersInput, setMaxPlayersInput] = useState('4')
   const [buyIn, setBuyIn] = useState('1')
@@ -223,26 +223,6 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
             )}
           </div>
 
-          {/* Category */}
-          <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
-            <p className="mb-2 text-xs font-semibold uppercase" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>Category</p>
-            <div className="flex flex-wrap gap-1.5 sm:gap-2">
-              {ALL_CATEGORIES.map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setCategory(cat)}
-                  className="rounded-full px-3 py-1.5 text-xs font-semibold transition-all"
-                  style={{
-                    background: category === cat ? 'var(--accent)' : 'rgba(255,255,255,0.5)',
-                    color: category === cat ? 'white' : 'var(--muted)',
-                    border: category === cat ? '1px solid transparent' : '1px solid var(--border)',
-                  }}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-          </div>
 
           {/* Max players */}
           <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>

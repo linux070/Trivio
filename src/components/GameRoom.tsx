@@ -195,19 +195,13 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
               }}
             >
               {/* Header row */}
-              <div className="mb-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-md bg-slate-200 text-slate-700">
-                    <Link2 size={12} />
-                  </span>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800">
-                    Invite Players
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[10px] font-semibold">
-                  <span className="text-slate-400 font-medium">ROOM</span>
-                  <span className="font-mono font-bold tracking-wider text-slate-800">{roomCode}</span>
-                </div>
+              <div className="mb-2.5 flex items-center gap-1.5">
+                <span className="flex h-5 w-5 items-center justify-center rounded-md bg-slate-200 text-slate-700">
+                  <Link2 size={12} />
+                </span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800">
+                  Invite Players
+                </span>
               </div>
 
               {/* Integrated modern input container */}
@@ -233,7 +227,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                   className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all duration-200 active:scale-95 ${
                     copiedLink
                       ? 'bg-emerald-600 hover:bg-emerald-500'
-                      : 'bg-[#122d45] hover:bg-slate-600 active:bg-slate-800'
+                      : 'bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6]'
                   }`}
                 >
                   {copiedLink ? <Check size={13} className="stroke-[2.5]" /> : <Copy size={13} />}
