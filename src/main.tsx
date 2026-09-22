@@ -15,10 +15,11 @@ import './console-capture'
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { WagmiProvider } from 'wagmi'
+import { PrivyProvider } from '@privy-io/react-auth'
+import { WagmiProvider } from '@privy-io/wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ConnectKitProvider } from 'connectkit'
 import { Toaster } from 'sonner'
+import { arcTestnet } from 'viem/chains'
 import { config } from './config'
 import App from './App'
 import './index.css'
@@ -68,15 +69,30 @@ const StudioWatermark = () => (
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <WagmiProvider config={config}>
+    <PrivyProvider
+      appId={import.meta.env.VITE_PRIVY_APP_ID || 'clxxxxxxxxxxxxxxxxx'}
+      config={{
+        loginMethods: ['google', 'passkey', 'email', 'wallet'],
+        appearance: {
+          theme: 'light',
+          accentColor: '#7c3aed',
+          logo: '/logo.png',
+          showWalletLoginFirst: false,
+        },
+        defaultChain: arcTestnet,
+        supportedChains: [arcTestnet],
+        embeddedWallets: {
+          createOnLogin: 'users-without-wallets',
+        },
+      }}
+    >
       <QueryClientProvider client={queryClient}>
-        <ConnectKitProvider>
+        <WagmiProvider config={config}>
           <App />
           <StudioWatermark />
           <Toaster position="top-center" />
-        </ConnectKitProvider>
+        </WagmiProvider>
       </QueryClientProvider>
-    </WagmiProvider>
+    </PrivyProvider>
   </StrictMode>,
 )
-

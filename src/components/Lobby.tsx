@@ -1,7 +1,9 @@
-import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { ConnectKitButton } from 'connectkit'
-import { Plus, LogIn } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useAccount, useDisconnect } from 'wagmi'
+import { usePrivy } from '@privy-io/react-auth'
+import { Plus, LogIn, LogOut, Copy, Check, Fingerprint, Wallet, ChevronDown } from 'lucide-react'
+import { getUserProfile } from '@/lib/userProfile'
 import type { Category } from '@/lib/questions'
 
 const CATEGORIES: { label: Category; emoji: string }[] = [
@@ -16,9 +18,156 @@ const CATEGORIES: { label: Category; emoji: string }[] = [
 interface LobbyProps {
   onCreateRoom: (category: Category) => void
   onJoinRoom: (category: Category) => void
+  onDisconnect?: () => void
 }
 
-export default function Lobby({ onCreateRoom, onJoinRoom }: LobbyProps) {
+function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
+  const { address: wagmiAddress } = useAccount()
+  const { disconnect } = useDisconnect()
+  const [open, setOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const profile = getUserProfile()
+  const { user } = usePrivy()
+  const privyWalletAddress = user?.wallet?.address as `0x${string}` | undefined
+  const activeAddress = wagmiAddress || privyWalletAddress || '0x0000000000000000000000000000000000000000'
+  const provider = (() => {
+    if (!user) return 'wallet' as const
+    const linkedAccounts = user.linkedAccounts || []
+    if ((user as any).google || linkedAccounts.some((a: any) => a.type === 'google_oauth' || a.type === 'google')) return 'google' as const
+    if ((user as any).passkey || linkedAccounts.some((a: any) => a.type === 'passkey')) return 'passkey' as const
+    if ((user as any).email || linkedAccounts.some((a: any) => a.type === 'email')) return 'email' as const
+    return 'wallet' as const
+  })()
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleCopy = () => {
+    if (!activeAddress) return
+    navigator.clipboard.writeText(activeAddress)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleDisconnectClick = () => {
+    try {
+      disconnect()
+    } catch {
+      // ignore
+    }
+    setOpen(false)
+    if (onDisconnect) {
+      onDisconnect()
+    }
+  }
+
+  const shortAddr = activeAddress ? `${activeAddress.slice(0, 5)}...${activeAddress.slice(-4)}` : ''
+  const displayName = profile?.username ? `@${profile.username}` : shortAddr
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      {/* Profile Chip */}
+      <button
+        onClick={() => setOpen(prev => !prev)}
+        className="flex items-center gap-2 rounded-full border border-purple-200/80 bg-purple-50/70 py-1 pl-1.5 pr-3 text-xs font-semibold text-purple-950 transition-all hover:bg-purple-100 hover:border-purple-300 active:scale-95 shadow-sm"
+      >
+        {/* Avatar / Provider Icon */}
+        {profile?.avatarUrl ? (
+          <img
+            src={profile.avatarUrl}
+            alt={profile.username}
+            className="h-6 w-6 rounded-full bg-white ring-1 ring-purple-300 object-cover"
+          />
+        ) : (
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white shadow-xs">
+            {provider === 'google' && (
+              <svg width="13" height="13" viewBox="0 0 48 48">
+                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                <path fill="#FBBC05" d="M10.53 28.59a14.5 14.5 0 0 1 0-9.18l-7.98-6.19a24.003 24.003 0 0 0 0 21.56l7.98-6.19z"/>
+                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+              </svg>
+            )}
+            {provider === 'passkey' && (
+              <Fingerprint size={13} className="text-purple-600" />
+            )}
+            {provider === 'wallet' && (
+              <Wallet size={13} className="text-purple-600" />
+            )}
+          </span>
+        )}
+
+        <span className="font-medium text-[11px] sm:text-xs tracking-tight max-w-[110px] truncate">{displayName}</span>
+        <ChevronDown size={13} className={`text-purple-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {/* Profile Dropdown */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 6 }}
+            transition={{ duration: 0.15 }}
+            className="absolute right-0 top-full mt-2 w-64 rounded-2xl bg-white p-3.5 shadow-xl border border-purple-100 z-50"
+            style={{ boxShadow: '0 12px 36px rgba(30, 10, 60, 0.14)' }}
+          >
+            {/* Header info */}
+            <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2.5">
+              <div className="flex items-center gap-2">
+                {profile?.avatarUrl && (
+                  <img src={profile.avatarUrl} alt="" className="h-7 w-7 rounded-full bg-purple-50 ring-1 ring-purple-200" />
+                )}
+                <div>
+                  <p className="text-xs font-bold text-gray-900">{profile?.username ? `@${profile.username}` : 'Player'}</p>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wider">
+                    {provider === 'google' ? 'Google' : provider === 'passkey' ? 'Passkey' : provider === 'email' ? 'Email' : 'Wallet'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-[10px] font-medium text-gray-500">Arc Testnet</span>
+              </div>
+            </div>
+
+            {/* Address Box */}
+            <div className="mb-3 flex items-center justify-between rounded-xl bg-gray-50 p-2 border border-gray-100">
+              <span className="font-mono text-[11px] text-gray-700 truncate mr-2">{activeAddress}</span>
+              <button
+                onClick={handleCopy}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-gray-200 transition-colors text-gray-500"
+                title="Copy Address"
+              >
+                {copied ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+              </button>
+            </div>
+
+            {/* Disconnect Button */}
+            <button
+              onClick={handleDisconnectClick}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-50 py-2 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 active:scale-98"
+            >
+              <LogOut size={13} />
+              <span>Disconnect</span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+export default function Lobby({ onCreateRoom, onJoinRoom, onDisconnect }: LobbyProps) {
   const [selected, setSelected] = useState<Category>('General Knowledge')
 
   return (
@@ -44,7 +193,7 @@ export default function Lobby({ onCreateRoom, onJoinRoom }: LobbyProps) {
             trivio
           </h1>
           <div className="shrink-0">
-            <ConnectKitButton showBalance={false} />
+            <WalletProfile onDisconnect={onDisconnect} />
           </div>
         </motion.header>
 

@@ -6,9 +6,11 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills'
 export default defineConfig({
   plugins: [react(), nodePolyfills()],
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
+    alias: [
+      { find: '@', replacement: path.resolve(__dirname, './src') },
+      { find: /^@phosphor-icons\/webcomponents(\/.*)?$/, replacement: path.resolve(__dirname, './src/shims/phosphor-icons.ts') },
+      { find: /^@stripe\/stripe-js(\/.*)?$/, replacement: path.resolve(__dirname, './src/shims/stripe.ts') },
+    ],
     dedupe: ['react', 'react-dom'],
   },
   optimizeDeps: {
@@ -17,13 +19,14 @@ export default defineConfig({
       'react-dom',
       'react-dom/client',
       'react/jsx-runtime',
+      '@privy-io/react-auth',
+      '@privy-io/wagmi',
       '@tanstack/react-query',
       'wagmi',
       'wagmi/chains',
       'wagmi/connectors',
       'viem',
       'viem/chains',
-      'connectkit',
       'framer-motion',
       'lucide-react',
       'sonner',
@@ -33,6 +36,15 @@ export default defineConfig({
       'vite-plugin-node-polyfills/shims/global',
       'vite-plugin-node-polyfills/shims/process',
     ],
+    esbuildOptions: {
+      target: 'esnext',
+    },
+  },
+  build: {
+    target: 'esnext',
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
   },
   server: {
     allowedHosts: true,

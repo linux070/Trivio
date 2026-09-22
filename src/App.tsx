@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAccount } from 'wagmi'
+import { usePrivy } from '@privy-io/react-auth'
 import type { Category } from '@/lib/questions'
+import { hasUserProfile } from '@/lib/userProfile'
 import LandingPage from '@/components/LandingPage'
 import Lobby from '@/components/Lobby'
 import CreateRoom from '@/components/CreateRoom'
 import JoinRoom from '@/components/JoinRoom'
 import GameRoom from '@/components/GameRoom'
 import Results from '@/components/Results'
+import OnboardingModal from '@/components/OnboardingModal'
 
 type Screen =
   | { name: 'landing' }
@@ -138,13 +141,28 @@ function getInitialScreen(): Screen {
 }
 
 export default function App() {
-  const { isConnected, isReconnecting, status, address } = useAccount()
+  const { address } = useAccount()
+  const { authenticated, user, logout } = usePrivy()
   const [screen, setScreen] = useState<Screen>(getInitialScreen)
   const wasConnectedRef = useRef(false)
 
+  // Derive active wallet address from Privy user or wagmi
+  const privyWalletAddress = user?.wallet?.address as `0x${string}` | undefined
+  const activeAddress = address || privyWalletAddress || ''
+
+  // Determine auth provider for display purposes
+  const provider = (() => {
+    if (!user) return 'wallet' as const
+    const linkedAccounts = user.linkedAccounts || []
+    if ((user as any).google || linkedAccounts.some((a: any) => a.type === 'google_oauth' || a.type === 'google')) return 'google' as const
+    if ((user as any).passkey || linkedAccounts.some((a: any) => a.type === 'passkey')) return 'passkey' as const
+    if ((user as any).email || linkedAccounts.some((a: any) => a.type === 'email')) return 'email' as const
+    return 'wallet' as const
+  })()
+
   // Track connected status in localStorage and transition from landing to lobby/join
   useEffect(() => {
-    if (isConnected) {
+    if (authenticated) {
       wasConnectedRef.current = true
       try {
         localStorage.setItem(STORAGE_AUTH_KEY, 'true')
@@ -155,11 +173,11 @@ export default function App() {
         handleConnected()
       }
     }
-  }, [isConnected, screen.name])
+  }, [authenticated, screen.name])
 
-  // If user explicitly disconnects in wallet, clear state and return to landing
+  // If user explicitly disconnects / logs out, clear state and return to landing
   useEffect(() => {
-    if (status === 'disconnected' && !isReconnecting && wasConnectedRef.current) {
+    if (!authenticated && wasConnectedRef.current) {
       wasConnectedRef.current = false
       try {
         localStorage.removeItem(STORAGE_AUTH_KEY)
@@ -173,7 +191,7 @@ export default function App() {
       }
       setScreen({ name: 'landing' })
     }
-  }, [status, isReconnecting])
+  }, [authenticated])
 
   // Synchronize URL hash and storage whenever screen changes
   useEffect(() => {
@@ -229,10 +247,16 @@ export default function App() {
     }
   }, [screen.name])
 
-  // Handler called when user connects wallet or signs in with email on LandingPage
+  const [showOnboarding, setShowOnboarding] = useState(false)
+
+  // Handler called when user connects wallet or signs in via Privy
   const handleConnected = () => {
     try {
       localStorage.setItem(STORAGE_AUTH_KEY, 'true')
+      if (!hasUserProfile()) {
+        setShowOnboarding(true)
+        return
+      }
       const pendingJoin =
         sessionStorage.getItem(STORAGE_PENDING_JOIN_KEY) || getJoinCodeFromUrl()
       if (pendingJoin) {
@@ -250,45 +274,126 @@ export default function App() {
     setScreen(prev => (prev.name !== 'landing' ? prev : { name: 'lobby' }))
   }
 
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false)
+    const pendingJoin =
+      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(STORAGE_PENDING_JOIN_KEY)) ||
+      getJoinCodeFromUrl()
+    if (pendingJoin) {
+      sessionStorage.removeItem(STORAGE_PENDING_JOIN_KEY)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('join')
+      window.history.replaceState({}, '', url.pathname + '#/join')
+      setScreen({ name: 'join', category: 'General Knowledge', prefillCode: pendingJoin })
+      return
+    }
+    setScreen({ name: 'lobby' })
+  }
+
+  const handleDisconnect = async () => {
+    try {
+      await logout()
+    } catch {
+      // ignore
+    }
+    try {
+      localStorage.removeItem(STORAGE_AUTH_KEY)
+      localStorage.removeItem(STORAGE_SCREEN_KEY)
+      sessionStorage.removeItem(STORAGE_SCREEN_KEY)
+      if (window.location.hash) {
+        window.history.replaceState(null, '', window.location.pathname)
+      }
+    } catch {
+      // ignore
+    }
+    setScreen({ name: 'landing' })
+  }
+
   // Auth guard: If user is definitely not connected and has no saved session:
   // Strictly prevent accessing protected screens (no bypass).
-  const isAuth = isConnected || isReconnecting || hasStoredAuth()
+  const isAuth = authenticated || hasStoredAuth()
 
   if (!isAuth && screen.name !== 'landing') {
-    return <LandingPage onConnected={handleConnected} />
+    return (
+      <>
+        <LandingPage onConnected={handleConnected} />
+        <OnboardingModal
+          open={showOnboarding}
+          address={activeAddress}
+          provider={provider}
+          onComplete={handleOnboardingComplete}
+        />
+      </>
+    )
   }
 
   if (screen.name === 'landing') {
-    if (isConnected) {
+    if (authenticated || hasStoredAuth()) {
       const pendingJoin =
         (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(STORAGE_PENDING_JOIN_KEY)) ||
         getJoinCodeFromUrl()
       if (pendingJoin) {
         return (
-          <JoinRoom
-            initialCategory="General Knowledge"
-            prefillCode={pendingJoin}
-            onBack={() => setScreen({ name: 'lobby' })}
-            onJoined={(roomCode, category) => setScreen({ name: 'game', roomCode, category })}
-          />
+          <>
+            <JoinRoom
+              initialCategory="General Knowledge"
+              prefillCode={pendingJoin}
+              onBack={() => setScreen({ name: 'lobby' })}
+              onJoined={(roomCode, category) => setScreen({ name: 'game', roomCode, category })}
+            />
+            <OnboardingModal
+              open={showOnboarding}
+              address={activeAddress}
+              provider={provider}
+              onComplete={handleOnboardingComplete}
+            />
+          </>
         )
       }
       return (
-        <Lobby
-          onCreateRoom={(category) => setScreen({ name: 'create', category })}
-          onJoinRoom={(category) => setScreen({ name: 'join', category })}
-        />
+        <>
+          <Lobby
+            onCreateRoom={(category) => setScreen({ name: 'create', category })}
+            onJoinRoom={(category) => setScreen({ name: 'join', category })}
+            onDisconnect={handleDisconnect}
+          />
+          <OnboardingModal
+            open={showOnboarding}
+            address={activeAddress}
+            provider={provider}
+            onComplete={handleOnboardingComplete}
+          />
+        </>
       )
     }
-    return <LandingPage onConnected={handleConnected} />
+    return (
+      <>
+        <LandingPage onConnected={handleConnected} />
+        <OnboardingModal
+          open={showOnboarding}
+          address={activeAddress}
+          provider={provider}
+          onComplete={handleOnboardingComplete}
+        />
+      </>
+    )
   }
 
   if (screen.name === 'lobby') {
     return (
-      <Lobby
-        onCreateRoom={(category) => setScreen({ name: 'create', category })}
-        onJoinRoom={(category) => setScreen({ name: 'join', category })}
-      />
+      <>
+        <Lobby
+          onCreateRoom={(category) => setScreen({ name: 'create', category })}
+          onJoinRoom={(category) => setScreen({ name: 'join', category })}
+          onDisconnect={handleDisconnect}
+        />
+        <OnboardingModal
+          open={showOnboarding}
+          address={activeAddress}
+          provider={provider}
+          onComplete={handleOnboardingComplete}
+        />
+      </>
     )
   }
 
@@ -336,7 +441,7 @@ export default function App() {
         winnerAddress={screen.winnerAddress}
         prizeAmount={screen.prizeAmount}
         txHash={screen.txHash}
-        myAddress={address}
+        myAddress={activeAddress}
         onPlayAgain={() => setScreen({ name: 'lobby' })}
       />
     )
