@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, startTransition } from 'react'
 import { useAccount } from 'wagmi'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ConnectKitButton } from 'connectkit'
-import { Users, Zap, Trophy, X, Mail, Wallet } from 'lucide-react'
+import { Users, Zap, Trophy, X, Wallet, Fingerprint } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 
 /* ── Typewriter hook ─────────────────────────────────────────────────────── */
@@ -219,21 +219,12 @@ interface LandingPageProps {
 
 export default function LandingPage({ onConnected }: LandingPageProps) {
   const { isConnected } = useAccount()
-  const [emailInput, setEmailInput] = useState('')
-  const [emailStep, setEmailStep] = useState<'idle' | 'sent'>('idle')
   const [modalOpen, setModalOpen] = useState(false)
   const [showSignIn, setShowSignIn] = useState(false)
-  const emailRef = useRef<HTMLInputElement>(null)
 
   const { displayed, done } = useTypewriter('having fun onchain', 52, 800)
 
   if (isConnected) { onConnected(); return null }
-
-  const handleEmailSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!emailInput.trim()) return
-    setEmailStep('sent')
-  }
 
   return (
     <>
@@ -248,11 +239,12 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22 }}
-            className="fixed inset-0 z-50 flex flex-col items-center justify-end sm:justify-center p-4 sm:p-5 pb-8 sm:pb-5"
+            className="fixed inset-0 z-50 flex flex-col items-center justify-end sm:justify-center overflow-y-auto"
             style={{
-              background: 'rgba(25, 8, 55, 0.40)',
-              backdropFilter: 'blur(5px)',
-              WebkitBackdropFilter: 'blur(5px)',
+              background: 'rgba(25, 8, 55, 0.45)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              padding: 'env(safe-area-inset-top, 16px) 16px env(safe-area-inset-bottom, 24px)',
             }}
             onClick={() => setShowSignIn(false)}
           >
@@ -263,7 +255,7 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
               exit={{ opacity: 0, y: 40, scale: 0.95 }}
               transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
               onClick={e => e.stopPropagation()}
-              className="relative w-full max-w-[360px] sm:max-w-sm overflow-hidden rounded-3xl"
+              className="relative w-full max-w-[380px] overflow-hidden rounded-3xl my-auto sm:my-0"
               style={{
                 background: 'rgba(255,255,255,0.97)',
                 boxShadow: '0 24px 70px rgba(30,10,60,0.35)',
@@ -272,85 +264,90 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
               {/* Close button */}
               <button
                 onClick={() => setShowSignIn(false)}
-                className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-purple-100"
+                className="absolute right-3.5 top-3.5 flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-purple-100 z-10"
                 style={{ color: '#7c3aed' }}
                 aria-label="Close"
               >
                 <X size={17} />
               </button>
 
-              <div className="px-7 pb-7 pt-6">
-                <p className="mb-5 text-center text-sm font-semibold" style={{ color: '#334155' }}>
-                  Continue with
+              <div className="px-6 pb-6 pt-7 sm:px-7 sm:pb-7">
+                <p className="mb-1.5 text-center text-base font-bold" style={{ color: '#1e0a3c' }}>
+                  Sign in to trivio
+                </p>
+                <p className="mb-5 text-center text-sm font-normal" style={{ color: '#334155' }}>
+                  Choose how you'd like to continue
                 </p>
 
-                <div className="space-y-3">
-                  {/* Email path */}
-                  {emailStep === 'idle' ? (
-                    <div className="space-y-2">
-                      <div
-                        className="flex items-center gap-2 rounded-2xl border px-4 py-2"
-                        style={{ borderColor: 'rgba(109,40,217,0.18)', background: '#faf7ff' }}
-                      >
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style={{ background: '#ede9fe' }}>
-                          <Mail size={13} style={{ color: '#7c3aed' }} />
-                        </span>
-                        <form onSubmit={handleEmailSubmit} className="flex flex-1 gap-2">
-                          <input
-                            ref={emailRef}
-                            type="email"
-                            placeholder="Enter your email"
-                            value={emailInput}
-                            onChange={e => setEmailInput(e.target.value)}
-                            className="flex-1 bg-transparent py-1.5 text-sm outline-none"
-                            style={{ color: '#1e0a3c', fontFamily: "'DM Sans', sans-serif" }}
-                          />
-                          <button
-                            type="submit"
-                            disabled={!emailInput.trim()}
-                            className="rounded-xl px-3.5 py-1.5 text-xs font-medium text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 shadow-sm"
-                            style={{ background: 'linear-gradient(135deg, #a78bfa, #8b5cf6)' }}
-                          >
-                            Go
-                          </button>
-                        </form>
-                      </div>
-                    </div>
-                  ) : (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.97 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="flex items-start gap-3 rounded-2xl px-4 py-3.5 text-sm"
-                      style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534' }}
-                    >
-                      <Mail size={16} className="mt-0.5 shrink-0" />
-                      <span>Check inbox at <strong>{emailInput}</strong>. Click the link to create your wallet and join.</span>
-                    </motion.div>
-                  )}
+                <div className="space-y-2.5">
+                  {/* ── Social / Passkey sign-in buttons ──────────────── */}
 
-                  {/* Divider */}
-                  <div className="flex items-center gap-3 py-0.5">
+                  {/* Continue with Google */}
+                  <button
+                    onClick={() => {
+                      // TODO: Wire Circle User-Controlled Wallet social login
+                      console.log('Google sign-in clicked')
+                    }}
+                    className="group flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold transition-all hover:shadow-md hover:border-purple-200 active:scale-[0.98]"
+                    style={{ borderColor: 'rgba(109,40,217,0.14)', color: '#1e0a3c', background: '#fff' }}
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl" style={{ background: '#fff', border: '1px solid #e2e8f0' }}>
+                      <svg width="16" height="16" viewBox="0 0 48 48">
+                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                        <path fill="#FBBC05" d="M10.53 28.59a14.5 14.5 0 0 1 0-9.18l-7.98-6.19a24.003 24.003 0 0 0 0 21.56l7.98-6.19z"/>
+                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                      </svg>
+                    </span>
+                    <span className="flex-1 text-left">Continue with Google</span>
+                    <svg className="shrink-0 opacity-30 group-hover:opacity-50 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+
+                  {/* Continue with Passkey */}
+                  <button
+                    onClick={() => {
+                      // TODO: Wire Circle Modular Wallet passkey registration/login
+                      console.log('Passkey sign-in clicked')
+                    }}
+                    className="group flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold transition-all hover:shadow-md hover:border-purple-200 active:scale-[0.98]"
+                    style={{ borderColor: 'rgba(109,40,217,0.14)', color: '#1e0a3c', background: '#fff' }}
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl" style={{ background: '#ede9fe' }}>
+                      <Fingerprint size={16} style={{ color: '#7c3aed' }} />
+                    </span>
+                    <span className="flex-1 text-left">Continue with Passkey</span>
+                    <svg className="shrink-0 opacity-30 group-hover:opacity-50 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+
+                  {/* ── Divider ───────────────────────────────────────── */}
+                  <div className="flex items-center gap-3 py-1">
                     <div className="h-px flex-1" style={{ background: 'rgba(109,40,217,0.10)' }} />
-                    <span className="text-xs font-medium" style={{ color: '#a78bfa' }}>or</span>
+                    <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: '#a78bfa' }}>or</span>
                     <div className="h-px flex-1" style={{ background: 'rgba(109,40,217,0.10)' }} />
                   </div>
 
-                  {/* Connect Wallet */}
+                  {/* ── Connect Wallet ────────────────────────────────── */}
                   <ConnectKitButton.Custom>
                     {({ show }) => (
                       <button
                         onClick={show}
-                        className="flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-sm font-semibold transition-colors hover:bg-purple-50 active:bg-purple-100"
-                        style={{ borderColor: 'rgba(109,40,217,0.18)', color: '#1e0a3c', background: '#fff' }}
+                        className="group flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold transition-all hover:shadow-md hover:border-purple-200 active:scale-[0.98]"
+                        style={{ borderColor: 'rgba(109,40,217,0.14)', color: '#1e0a3c', background: '#fff' }}
                       >
-                        <span className="flex h-6 w-6 items-center justify-center rounded-full" style={{ background: '#ede9fe' }}>
-                          <Wallet size={13} style={{ color: '#7c3aed' }} />
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl" style={{ background: '#ede9fe' }}>
+                          <Wallet size={15} style={{ color: '#7c3aed' }} />
                         </span>
-                        Connect Wallet
+                        <span className="flex-1 text-left">Connect Wallet</span>
+                        <svg className="shrink-0 opacity-30 group-hover:opacity-50 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                       </button>
                     )}
                   </ConnectKitButton.Custom>
                 </div>
+
+                {/* Terms note */}
+                <p className="mt-5 text-center text-xs font-normal leading-relaxed" style={{ color: '#475569' }}>
+                  By continuing, you agree to trivio's Terms of Service
+                </p>
               </div>
             </motion.div>
           </motion.div>
