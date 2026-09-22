@@ -64,7 +64,7 @@ export default function Results({
 
   return (
     <div
-      className="relative min-h-dvh overflow-hidden"
+      className="relative min-h-screen min-h-[100dvh] w-full overflow-x-hidden"
       style={{ background: 'linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%)' }}
     >
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -72,7 +72,7 @@ export default function Results({
         <div style={{ position: 'absolute', bottom: '8%', right: '5%', width: 320, height: 320, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,205,131,0.22) 0%, transparent 70%)', filter: 'blur(70px)' }} />
       </div>
 
-      <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-12 pt-6 sm:max-w-lg sm:px-6 sm:pt-10">
+      <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-8 pt-5 sm:max-w-lg sm:px-6 sm:pt-8">
 
         {/* Trophy header */}
         <motion.div

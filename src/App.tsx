@@ -215,6 +215,20 @@ export default function App() {
     }
   }, [screen])
 
+  // Synchronize document background color and mobile theme-color with active screen
+  useEffect(() => {
+    const isLanding = screen.name === 'landing'
+    const bg = isLanding ? '#5b21b6' : '#f9f9fc'
+    const themeColor = isLanding ? '#6d28d9' : '#ffffff'
+
+    document.documentElement.style.backgroundColor = bg
+    document.body.style.backgroundColor = bg
+    const themeMeta = document.getElementById('theme-color-meta')
+    if (themeMeta) {
+      themeMeta.setAttribute('content', themeColor)
+    }
+  }, [screen.name])
+
   // Handler called when user connects wallet or signs in with email on LandingPage
   const handleConnected = () => {
     try {

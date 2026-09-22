@@ -106,7 +106,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
 
   return (
     <div
-      className="relative min-h-dvh overflow-hidden"
+      className="relative min-h-screen min-h-[100dvh] w-full overflow-x-hidden"
       style={{ background: 'linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%)' }}
     >
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -114,7 +114,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
         <div style={{ position: 'absolute', bottom: '12%', left: '6%', width: 240, height: 240, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,205,131,0.16) 0%, transparent 70%)', filter: 'blur(60px)' }} />
       </div>
 
-      <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-12 pt-5 sm:max-w-lg sm:px-6 sm:pt-6">
+      <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-8 pt-4 sm:max-w-lg sm:px-6 sm:py-6">
         <div className="mb-5 sm:mb-6 flex items-center gap-3">
           <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-full transition-opacity hover:opacity-70" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid var(--border)' }}>
             <ArrowLeft size={16} style={{ color: 'var(--ink)' }} />

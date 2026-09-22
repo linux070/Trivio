@@ -150,12 +150,12 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   // ─── Lobby phase ─────────────────────────────────────────────────────────────
   if (phase === 'lobby') {
     return (
-      <div className="relative min-h-dvh overflow-hidden" style={{ background: 'linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%)' }}>
+      <div className="relative min-h-screen min-h-[100dvh] w-full overflow-x-hidden" style={{ background: 'linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%)' }}>
         <div className="pointer-events-none fixed inset-0 overflow-hidden">
           <div style={{ position: 'absolute', top: '5%', left: '3%', width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, rgba(133,177,237,0.18) 0%, transparent 70%)', filter: 'blur(65px)' }} />
           <div style={{ position: 'absolute', bottom: '10%', right: '5%', width: 260, height: 260, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,205,131,0.16) 0%, transparent 70%)', filter: 'blur(60px)' }} />
         </div>
-        <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-12 pt-5 sm:max-w-lg sm:px-6 sm:pt-6">
+        <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-8 pt-4 sm:max-w-lg sm:px-6 sm:py-6">
           <div className="mb-5 sm:mb-6 flex items-center gap-3">
             <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-full transition-opacity hover:opacity-70" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid var(--border)' }}>
               <ArrowLeft size={16} style={{ color: 'var(--ink)' }} />
@@ -213,7 +213,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                   boxShadow: '0 2px 6px -2px rgba(15, 23, 42, 0.04), inset 0 1px 2px rgba(0,0,0,0.02)',
                 }}
               >
-                <span className="flex-1 truncate font-mono text-xs text-slate-600 select-all">
+                <span className="flex-1 min-w-0 truncate font-mono text-xs text-slate-600 select-all">
                   {buildJoinUrl(roomCode)}
                 </span>
 
@@ -224,7 +224,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                     setTimeout(() => setCopiedLink(false), 2000)
                     toast.success('Invite link copied!')
                   }}
-                  className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all duration-200 active:scale-95 ${
+                  className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all duration-200 active:scale-95 ${
                     copiedLink
                       ? 'bg-emerald-600 hover:bg-emerald-500'
                       : 'bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6]'
@@ -296,11 +296,11 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   if (phase === 'playing' && currentQ) {
     const timeFraction = timeLeft / QUESTION_TIME
     return (
-      <div className="relative min-h-dvh overflow-hidden" style={{ background: 'linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%)' }}>
+      <div className="relative min-h-screen min-h-[100dvh] w-full overflow-x-hidden" style={{ background: 'linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%)' }}>
         <div className="pointer-events-none fixed inset-0 overflow-hidden">
           <div style={{ position: 'absolute', top: '3%', right: '3%', width: 280, height: 280, borderRadius: '50%', background: 'radial-gradient(circle, rgba(133,177,237,0.18) 0%, transparent 70%)', filter: 'blur(65px)' }} />
         </div>
-        <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-12 pt-5 sm:max-w-lg sm:px-6 sm:pt-6">
+        <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-6 pt-4 sm:max-w-lg sm:px-6 sm:py-6">
           {/* Progress bar */}
           <div className="mb-4 sm:mb-5">
             <div className="mb-2 flex items-center justify-between">
@@ -405,12 +405,12 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   // ─── Finished phase ───────────────────────────────────────────────────────────
   if (phase === 'finished') {
     return (
-      <div className="relative min-h-dvh overflow-hidden" style={{ background: 'linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%)' }}>
+      <div className="relative min-h-screen min-h-[100dvh] w-full overflow-x-hidden" style={{ background: 'linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%)' }}>
         <div className="pointer-events-none fixed inset-0 overflow-hidden">
           <div style={{ position: 'absolute', top: '5%', left: '3%', width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, rgba(133,177,237,0.18) 0%, transparent 70%)', filter: 'blur(65px)' }} />
           <div style={{ position: 'absolute', bottom: '10%', right: '5%', width: 260, height: 260, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,205,131,0.2) 0%, transparent 70%)', filter: 'blur(60px)' }} />
         </div>
-        <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-12 pt-5 sm:max-w-lg sm:px-6 sm:pt-6">
+        <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-8 pt-4 sm:max-w-lg sm:px-6 sm:py-6">
           <div className="mb-5 sm:mb-6 flex items-center gap-3">
             <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-full transition-opacity hover:opacity-70" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid var(--border)' }}>
               <ArrowLeft size={16} style={{ color: 'var(--ink)' }} />

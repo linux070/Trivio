@@ -30,13 +30,36 @@ input[type='number'] { -moz-appearance: textfield; }
   box-sizing: border-box;
 }
 
+html {
+  min-height: 100%;
+  min-height: 100dvh;
+  background-color: #5b21b6;
+}
+
 body {
   margin: 0;
   font-family: 'DM Sans', sans-serif;
+  min-height: 100%;
   min-height: 100dvh;
-  background: var(--bg-gradient);
+  background-color: #5b21b6;
   -webkit-tap-highlight-color: transparent;
   overflow-x: hidden;
+  overscroll-behavior-y: none;
+}
+
+#root {
+  min-height: 100%;
+  min-height: 100dvh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Prevent iOS auto-zoom on inputs */
+@media screen and (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
 }
 
 .display {

@@ -357,16 +357,16 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
         )}
       </AnimatePresence>
 
-      <div className="trivio-bg relative flex min-h-dvh flex-col items-center justify-between overflow-hidden px-4 pb-8 pt-10 sm:px-5 sm:pb-10 sm:pt-16">
+      <div className="trivio-bg relative flex min-h-screen min-h-[100dvh] w-full flex-col items-center justify-center overflow-x-hidden px-4 py-6 sm:px-5 sm:py-10">
         <FloatingShapes />
 
-          {/* ── Wordmark + Get Started ───────────────────────────────────────── */}
-        <div className="relative z-10 flex flex-1 flex-col items-center justify-center w-full max-w-md">
+        {/* ── Wordmark + Get Started ───────────────────────────────────────── */}
+        <div className="relative z-10 flex flex-col items-center justify-center w-full max-w-md my-auto">
           <motion.div
             initial={{ opacity: 0, scale: 0.85, y: -10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="order-1 mb-3 text-center w-full"
+            className="order-1 mb-2.5 sm:mb-3 text-center w-full"
           >
             {/* TRIVIO wordmark */}
             <h1
@@ -390,8 +390,8 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
 
             {/* Typewriter tagline */}
             <div
-              className="mt-2 flex items-center justify-center text-base font-medium"
-              style={{ color: 'rgba(255,255,255,0.72)', minHeight: 28, letterSpacing: '0.02em' }}
+              className="mt-1.5 sm:mt-2 flex items-center justify-center text-sm sm:text-base font-medium"
+              style={{ color: 'rgba(255,255,255,0.72)', minHeight: 26, letterSpacing: '0.02em' }}
             >
               <span>{displayed}</span>
               {!done && <span className="cursor-blink" />}
@@ -403,7 +403,7 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.38, duration: 0.4 }}
-            className="order-3 sm:order-2 mt-6 sm:mt-0 sm:mb-4 flex flex-wrap items-center justify-center gap-2 sm:gap-3 px-2 text-center"
+            className="order-3 sm:order-2 mt-5 sm:mt-0 sm:mb-4 flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 px-2 text-center"
           >
             {/* Live player count */}
             <div
@@ -442,7 +442,7 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
             initial={{ opacity: 0, y: 32 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.18, duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
-            className="order-2 sm:order-3 mt-5 sm:mt-8 flex flex-col items-center gap-3.5"
+            className="order-2 sm:order-3 mt-4 sm:mt-7 flex flex-col items-center gap-3"
           >
             <button
               onClick={() => setShowSignIn(true)}
