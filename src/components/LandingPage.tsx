@@ -138,39 +138,40 @@ function HowToPlayModal({ open, onClose }: { open: boolean; onClose: () => void 
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.22 }}
-          className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6"
-          style={{ background: 'rgba(15,5,40,0.72)', backdropFilter: 'blur(8px)' }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
+          style={{
+            background: 'rgba(15, 5, 40, 0.72)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            paddingTop: 'max(16px, env(safe-area-inset-top, 16px))',
+            paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))',
+            paddingLeft: 'max(16px, env(safe-area-inset-left, 16px))',
+            paddingRight: 'max(16px, env(safe-area-inset-right, 16px))',
+          }}
           onClick={onClose}
         >
           <motion.div
             key="modal"
-            initial={{ opacity: 0, y: 56, scale: 0.95 }}
+            initial={{ opacity: 0, y: 32, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.95 }}
-            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+            exit={{ opacity: 0, y: 24, scale: 0.95 }}
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
             onClick={e => e.stopPropagation()}
-            className="relative w-full sm:max-w-2xl sm:rounded-[28px]"
+            className="relative w-full max-w-lg sm:max-w-2xl rounded-[28px] my-auto flex flex-col overflow-hidden"
             style={{
               background: '#f5f3ff',
-              borderRadius: '28px 28px 0 0',
               boxShadow: '0 28px 90px rgba(30,10,60,0.38)',
-              maxHeight: '90dvh',
-              overflowY: 'auto',
+              maxHeight: 'min(88dvh, 88vh)',
             }}
           >
-            {/* Drag pill */}
-            <div className="mx-auto mt-3 mb-0 h-1 w-10 rounded-full bg-purple-200 sm:hidden" />
-
             {/* Header */}
-            <div className="flex items-start justify-between px-6 pt-5 pb-4">
-              <div>
-                <h2 className="mt-0.5 text-xl font-bold" style={{ color: '#1e0a3c', fontFamily: "'Space Grotesk', sans-serif" }}>
-                  How to play trivio?
-                </h2>
-              </div>
+            <div className="flex items-center justify-between px-6 pt-5 pb-3 shrink-0">
+              <h2 className="text-xl font-bold" style={{ color: '#1e0a3c', fontFamily: "'Space Grotesk', sans-serif" }}>
+                How to play trivio?
+              </h2>
               <button
                 onClick={onClose}
-                className="ml-4 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-purple-100"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-purple-100"
                 style={{ color: '#7c3aed' }}
                 aria-label="Close"
               >
@@ -178,32 +179,35 @@ function HowToPlayModal({ open, onClose }: { open: boolean; onClose: () => void 
               </button>
             </div>
 
-            {/* Step cards */}
-            <div className="grid grid-cols-1 gap-3 px-6 pb-2 sm:grid-cols-3">
-              {HOW_TO_PLAY.map(({ icon: Icon, label, desc, iconBg, iconColor }, i) => (
-                <motion.div
-                  key={label}
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.06 + i * 0.08, duration: 0.32 }}
-                  className="rounded-2xl bg-white p-5"
-                  style={{ border: '1px solid rgba(109,40,217,0.10)', boxShadow: '0 2px 12px rgba(109,40,217,0.06)' }}
-                >
-                  <div className="mb-3.5 flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: iconBg }}>
-                    <Icon size={20} style={{ color: iconColor }} />
-                  </div>
-                  <p className="mb-1 text-sm font-bold" style={{ color: '#1e0a3c' }}>{label}</p>
-                  <p className="text-sm leading-snug text-pretty" style={{ color: '#6b7280' }}>{desc}</p>
-                </motion.div>
-              ))}
-            </div>
+            {/* Scrollable content container */}
+            <div className="overflow-y-auto px-6 pb-6 pt-1">
+              {/* Step cards */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {HOW_TO_PLAY.map(({ icon: Icon, label, desc, iconBg, iconColor }, i) => (
+                  <motion.div
+                    key={label}
+                    initial={{ opacity: 0, y: 14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.04 + i * 0.06, duration: 0.28 }}
+                    className="rounded-2xl bg-white p-4 sm:p-5"
+                    style={{ border: '1px solid rgba(109,40,217,0.10)', boxShadow: '0 2px 12px rgba(109,40,217,0.06)' }}
+                  >
+                    <div className="mb-3 flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl" style={{ background: iconBg }}>
+                      <Icon size={19} style={{ color: iconColor }} />
+                    </div>
+                    <p className="mb-1 text-sm font-bold" style={{ color: '#1e0a3c' }}>{label}</p>
+                    <p className="text-xs sm:text-sm leading-snug text-pretty" style={{ color: '#6b7280' }}>{desc}</p>
+                  </motion.div>
+                ))}
+              </div>
 
-            {/* USDC note */}
-            <div className="mx-6 mb-6 mt-3 flex items-center gap-2 rounded-xl px-4 py-3" style={{ background: '#ede9fe' }}>
-              <TokenUSDC variant="branded" size={15} />
-              <p className="text-xs" style={{ color: '#5b21b6' }}>
-                All prizes paid in <strong>USDC</strong> on Arc Testnet — instant, verifiable, zero ETH needed.
-              </p>
+              {/* USDC note */}
+              <div className="mt-3.5 flex items-center gap-2 rounded-xl px-4 py-3" style={{ background: '#ede9fe' }}>
+                <TokenUSDC variant="branded" size={15} />
+                <p className="text-xs" style={{ color: '#5b21b6' }}>
+                  All prizes paid in <strong>USDC</strong> on Arc Testnet — instant, verifiable, zero ETH needed.
+                </p>
+              </div>
             </div>
           </motion.div>
         </motion.div>
@@ -354,7 +358,13 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
         )}
       </AnimatePresence>
 
-      <div className="trivio-bg relative flex min-h-screen min-h-[100dvh] w-full flex-col items-center justify-center overflow-x-hidden px-4 py-6 sm:px-5 sm:py-10">
+      <div
+        className="trivio-bg relative flex flex-1 min-h-screen min-h-[100dvh] w-full flex-col items-center justify-center overflow-x-hidden px-4 py-6 sm:px-5 sm:py-10"
+        style={{
+          paddingTop: 'max(1.5rem, env(safe-area-inset-top, 1.5rem))',
+          paddingBottom: 'max(2rem, env(safe-area-inset-bottom, 2rem))',
+        }}
+      >
         <FloatingShapes />
 
         {/* ── Wordmark + Get Started ───────────────────────────────────────── */}
