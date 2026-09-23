@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
+import { usePrivy } from '@privy-io/react-auth'
 import { ArrowLeft, Copy, Check } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
@@ -40,7 +41,11 @@ interface CreateRoomProps {
 
 export default function CreateRoom({ initialCategory = 'General Knowledge', onBack, onRoomCreated }: CreateRoomProps) {
   const { address, chainId } = useAccount()
+  const { user } = usePrivy()
   const { switchChain } = useSwitchChain()
+
+  const privyWalletAddress = user?.wallet?.address as `0x${string}` | undefined
+  const activeAddress = address || privyWalletAddress || undefined
 
   const [mode, setMode] = useState<Mode>('buyin')
   const [category] = useState<Category>(initialCategory)
@@ -52,12 +57,12 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
   const [copied, setCopied] = useState(false)
   const [codeEdited, setCodeEdited] = useState(false)
 
-  const { data: rawBalance } = useUsdcBalance(address)
+  const { data: rawBalance } = useUsdcBalance(activeAddress)
   const balanceHuman = rawBalance !== undefined ? formatUSDCRaw(rawBalance) : null
 
   const amountStr = mode === 'sponsored' ? sponsoredPrize : '0'
   const { data: rawAllowance, refetch: refetchAllowance } = useUsdcAllowance(
-    address,
+    activeAddress,
     TRIVIA_GAME_ADDRESS ?? undefined
   )
 

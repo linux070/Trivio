@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
+import { usePrivy } from '@privy-io/react-auth'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Users } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
@@ -41,7 +42,11 @@ interface JoinRoomProps {
 
 export default function JoinRoom({ initialCategory = 'General Knowledge', prefillCode, onBack, onJoined }: JoinRoomProps) {
   const { address, chainId } = useAccount()
+  const { user } = usePrivy()
   const { switchChain } = useSwitchChain()
+
+  const privyWalletAddress = user?.wallet?.address as `0x${string}` | undefined
+  const activeAddress = address || privyWalletAddress || undefined
 
   const [input, setInput] = useState(prefillCode ?? '')
   const [checkedCode, setCheckedCode] = useState<string | null>(prefillCode ?? null)
@@ -54,11 +59,11 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   const buyInHuman = buyIn !== undefined ? formatUSDCRaw(buyIn) : null
   const prizePoolHuman = prizePool !== undefined ? formatUSDCRaw(prizePool) : null
 
-  const { data: rawBalance } = useUsdcBalance(address)
+  const { data: rawBalance } = useUsdcBalance(activeAddress)
   const balanceHuman = rawBalance !== undefined ? formatUSDCRaw(rawBalance) : null
 
   const { data: rawAllowance, refetch: refetchAllowance } = useUsdcAllowance(
-    address,
+    activeAddress,
     TRIVIA_GAME_ADDRESS ?? undefined
   )
 

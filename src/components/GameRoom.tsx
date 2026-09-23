@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, startTransition } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
+import { usePrivy } from '@privy-io/react-auth'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Clock, Trophy, Copy, Check, Link2 } from 'lucide-react'
+import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2 } from 'lucide-react'
 import { buildJoinUrl } from '@/App'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
@@ -35,8 +36,12 @@ interface GameRoomProps {
 type GamePhase = 'lobby' | 'playing' | 'finished'
 
 export default function GameRoom({ roomCode, category, onBack, onGameEnd }: GameRoomProps) {
-  const { address, chainId } = useAccount()
+  const { address: wagmiAddress, chainId } = useAccount()
+  const { user } = usePrivy()
   const { switchChain } = useSwitchChain()
+
+  const privyWalletAddress = user?.wallet?.address as `0x${string}` | undefined
+  const activeAddress = wagmiAddress || privyWalletAddress || ''
 
   const [phase, setPhase] = useState<GamePhase>('lobby')
   const [questions, setQuestions] = useState<TriviaQuestion[]>([])
@@ -50,35 +55,41 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const [copiedLink, setCopiedLink] = useState(false)
   const answerStartRef = useRef(0)
 
-  const { data: roomInfo } = useRoomInfo(roomCode)
+  // Auto-polls onchain every 1.5s
+  const { data: roomInfo, refetch: refetchRoomInfo } = useRoomInfo(roomCode, 1500)
   type RoomTuple = readonly [`0x${string}`, bigint, bigint, number, number, number, `0x${string}`]
-  const [_host, _buyIn, prizePool, _maxP, playerCount] = (roomInfo as RoomTuple) ?? []
+  const [host, _buyIn, prizePool, maxP, playerCount, status, winner] = (roomInfo as RoomTuple) ?? []
   const prizeHuman = prizePool !== undefined ? formatUSDCRaw(prizePool) : '0'
-  const isHost = address && roomInfo && (roomInfo)[0]?.toLowerCase() === address.toLowerCase()
+
+  const isHost = Boolean(
+    activeAddress && host && host.toLowerCase() === activeAddress.toLowerCase()
+  )
 
   const { startGame, isPending: startPending, isConfirming: startConfirming, isSuccess: gameStarted } = useStartGame()
   const { declareWinner, isPending: declarePending, isConfirming: declareConfirming, isSuccess: declared, hash: declareHash } = useDeclareWinner()
 
   const isWrongChain = chainId !== ARC_TESTNET_CHAIN_ID
 
-  // When game starts onchain, move to playing phase
+  // When game starts onchain (either via host tx confirmation OR polled status === 1), move all players to playing phase
   useEffect(() => {
-    if (!gameStarted) return
-    toast.success('Game started!')
-    const qs = getQuestions(category, 10)
-    startTransition(() => {
-      setQuestions(qs)
-      setQIndex(0)
-      setTimeLeft(QUESTION_TIME)
-      setAnswered(false)
-      setSelectedIndex(null)
-      setScore(0)
-      setPhase('playing')
-    })
-    answerStartRef.current = Date.now()
-  }, [gameStarted, category])
+    const isGameActive = gameStarted || status === 1
+    if (isGameActive && phase === 'lobby') {
+      toast.success('Game started!')
+      const qs = getQuestions(category, 10, roomCode)
+      startTransition(() => {
+        setQuestions(qs)
+        setQIndex(0)
+        setTimeLeft(QUESTION_TIME)
+        setAnswered(false)
+        setSelectedIndex(null)
+        setScore(0)
+        setPhase('playing')
+      })
+      answerStartRef.current = Date.now()
+    }
+  }, [gameStarted, status, phase, category, roomCode])
 
-  // Timer
+  // Timer for questions
   useEffect(() => {
     if (phase !== 'playing' || answered) return
     if (timeLeft <= 0) {
@@ -94,11 +105,14 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     return () => clearTimeout(t)
   }, [timeLeft, phase, answered, qIndex, questions])
 
-  // Winner payout effect
+  // Winner payout synchronization (for host who triggered payout or guest receiving finished status)
   useEffect(() => {
-    if (!declared || !address) return
-    onGameEnd(address, prizeHuman, declareHash)
-  }, [declared, address, prizeHuman, declareHash, onGameEnd])
+    if (declared && activeAddress) {
+      onGameEnd(activeAddress, prizeHuman, declareHash)
+    } else if (status === 2 && winner && winner !== '0x0000000000000000000000000000000000000000' && phase === 'finished') {
+      onGameEnd(winner, prizeHuman)
+    }
+  }, [declared, activeAddress, prizeHuman, declareHash, status, winner, phase, onGameEnd])
 
   function advanceQuestion(currentIndex: number, qs: TriviaQuestion[]) {
     const next = currentIndex + 1
@@ -141,8 +155,8 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   }
 
   const handleDeclareWinner = () => {
-    if (!address || isWrongChain) { switchChain({ chainId: ARC_TESTNET_CHAIN_ID }); return }
-    declareWinner(roomCode, address)
+    if (!activeAddress || isWrongChain) { switchChain({ chainId: ARC_TESTNET_CHAIN_ID }); return }
+    declareWinner(roomCode, activeAddress as `0x${string}`)
   }
 
   const currentQ = questions[qIndex]
@@ -164,16 +178,24 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
               <h1 className="display text-xl sm:text-2xl font-bold" style={{ color: 'var(--ink)', letterSpacing: '-0.03em' }}>
                 Room <span style={{ color: 'var(--accent)' }}>{roomCode}</span>
               </h1>
-              <p className="text-xs" style={{ color: 'var(--subtle)' }}>{category} · Waiting for host to start</p>
+              <p className="text-xs" style={{ color: 'var(--subtle)' }}>
+                {category} · {isHost ? 'You are the Host' : 'Waiting for host to start'}
+              </p>
             </div>
           </div>
 
           <div className="mb-4 rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
             <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-3">
-              <div className="rounded-2xl p-3 text-center" style={glass.inner}>
-                <p className="text-xs" style={{ color: 'var(--subtle)' }}>Players</p>
+              <div className="rounded-2xl p-3 text-center relative" style={glass.inner}>
+                <div className="flex items-center justify-center gap-1.5 mb-0.5">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <p className="text-xs" style={{ color: 'var(--subtle)' }}>Players</p>
+                </div>
                 <p className="display text-2xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
-                  {playerCount ?? '—'}<span className="text-base font-medium" style={{ color: 'var(--muted)' }}>/{_maxP ?? '—'}</span>
+                  {playerCount ?? '—'}<span className="text-base font-medium" style={{ color: 'var(--muted)' }}>/{maxP ?? '—'}</span>
                 </p>
               </div>
               <div className="rounded-2xl p-3 text-center" style={glass.inner}>
@@ -261,16 +283,17 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
             )}
 
             {!isHost && (
-              <p className="rounded-2xl px-4 py-3 text-center text-sm" style={{ ...glass.inner, color: 'var(--muted)' }}>
-                Waiting for the host to start the game...
-              </p>
+              <div className="flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-center text-sm" style={{ ...glass.inner, color: 'var(--muted)' }}>
+                <Loader2 size={15} className="animate-spin text-purple-600 shrink-0" />
+                <span>Waiting for the host to start the game...</span>
+              </div>
             )}
 
             {/* Demo: play locally without contract */}
             {!TRIVIA_GAME_ADDRESS && (
               <button
                 onClick={() => {
-                  const qs = getQuestions(category, 10)
+                  const qs = getQuestions(category, 10, roomCode)
                   setQuestions(qs)
                   setQIndex(0)
                   setTimeLeft(QUESTION_TIME)
@@ -449,9 +472,21 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
             </motion.div>
           )}
 
+          {!isHost && TRIVIA_GAME_ADDRESS && (
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl p-4 text-center" style={glass.inner}>
+              <div className="flex items-center justify-center gap-2 mb-1 text-purple-700">
+                <Loader2 size={16} className="animate-spin" />
+                <p className="text-sm font-bold">Game Completed!</p>
+              </div>
+              <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                Waiting for host to finalize the game and distribute the prize...
+              </p>
+            </motion.div>
+          )}
+
           {!TRIVIA_GAME_ADDRESS && (
             <button
-              onClick={() => onGameEnd(address ?? '0x0000000000000000000000000000000000000000', prizeHuman)}
+              onClick={() => onGameEnd(activeAddress || '0x0000000000000000000000000000000000000000', prizeHuman)}
               className="w-full rounded-2xl py-4 text-sm font-semibold transition-opacity hover:opacity-80"
               style={{ background: 'var(--accent)', color: 'white' }}
             >

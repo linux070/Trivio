@@ -96,13 +96,34 @@ const QUESTION_BANK: Record<Category, TriviaQuestion[]> = {
   ],
 }
 
-/** Returns `count` questions from the given category (shuffled). */
-export function getQuestions(category: Category, count: number): TriviaQuestion[] {
+function createPrng(seedStr?: string): () => number {
+  if (!seedStr) return Math.random
+
+  // Hash the seed string into a 32-bit integer
+  let h = 2166136261 >>> 0
+  for (let i = 0; i < seedStr.length; i++) {
+    h = Math.imul(h ^ seedStr.charCodeAt(i), 16777619) >>> 0
+  }
+
+  // Mulberry32 algorithm
+  return function mulberry32() {
+    let t = (h += 0x6d2b79f5)
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/** Returns `count` questions from the given category (shuffled, deterministically if seed provided). */
+export function getQuestions(category: Category, count: number, seed?: string): TriviaQuestion[] {
   const pool = [...(QUESTION_BANK[category] ?? QUESTION_BANK['General Knowledge'])]
-  // Fisher-Yates shuffle
+  const random = createPrng(seed ? `${category}_${seed}` : undefined)
+
+  // Fisher-Yates shuffle with seeded or standard random
   for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
+    const j = Math.floor(random() * (i + 1))
     ;[pool[i], pool[j]] = [pool[j], pool[i]]
   }
   return pool.slice(0, count)
 }
+

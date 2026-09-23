@@ -82,7 +82,7 @@ export function generateRoomCode(): string {
 
 // ── Reads ─────────────────────────────────────────────────────────────────────
 
-export function useRoomInfo(code: string | null) {
+export function useRoomInfo(code: string | null, pollInterval: number = 1500) {
   const roomId = code ? roomCodeToBytes32(code) : undefined
   return useReadContract({
     address: TRIVIA_GAME_ADDRESS ?? undefined,
@@ -90,7 +90,10 @@ export function useRoomInfo(code: string | null) {
     functionName: 'getRoom',
     args: roomId ? [roomId] : undefined,
     chainId: ARC_TESTNET_CHAIN_ID,
-    query: { enabled: Boolean(TRIVIA_GAME_ADDRESS) && Boolean(roomId) },
+    query: {
+      enabled: Boolean(TRIVIA_GAME_ADDRESS) && Boolean(roomId),
+      refetchInterval: pollInterval,
+    },
   })
 }
 
