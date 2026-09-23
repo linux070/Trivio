@@ -328,20 +328,40 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
         />
       </button>
 
-      {/* Profile Popover */}
+      {/* Profile Popover / Mobile Bottom Drawer */}
       <AnimatePresence>
         {open && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 8 }}
-            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute right-0 top-full mt-2 w-[calc(100vw-28px)] max-w-[320px] sm:max-w-[330px] rounded-2xl bg-white shadow-2xl border border-gray-100/90 overflow-hidden z-50"
-            style={{
-              boxShadow: '0 20px 48px -12px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.04)',
-            }}
-          >
-            <div className="relative h-20 bg-gradient-to-r from-violet-700 via-purple-600 to-indigo-700" />
+          <>
+            {/* Backdrop on mobile */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              onClick={() => {
+                setOpen(false)
+                setNetworkDropdownOpen(false)
+                setIsEditingName(false)
+              }}
+              className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 sm:hidden"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-white shadow-2xl border-t border-gray-100 overflow-hidden max-h-[92dvh] overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:static sm:inset-auto sm:absolute sm:right-0 sm:top-full sm:mt-2 sm:w-[330px] sm:max-w-[330px] sm:rounded-2xl sm:border sm:border-gray-100/90 sm:shadow-2xl sm:max-h-none sm:overflow-visible sm:pb-0"
+              style={{
+                boxShadow: '0 20px 48px -12px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.04)',
+              }}
+            >
+              {/* Mobile top handle bar */}
+              <div className="sm:hidden pt-2.5 pb-1 flex justify-center">
+                <div className="w-10 h-1 rounded-full bg-gray-300" />
+              </div>
+
+              <div className="relative h-20 bg-gradient-to-r from-violet-700 via-purple-600 to-indigo-700" />
 
             <div className="relative px-4 pt-0 pb-3.5">
               <div className="flex items-end justify-between -mt-8 mb-2.5">
@@ -555,6 +575,7 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
               </div>
             </div>
           </motion.div>
+        </>
         )}
       </AnimatePresence>
     </div>
@@ -576,7 +597,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
   const effectiveCategory = selected || 'General Knowledge'
 
   return (
-    <div className="relative flex min-h-screen min-h-[100dvh] w-full flex-col justify-between overflow-x-hidden bg-[#fafafa]">
+    <div className="relative flex min-h-screen min-h-[100dvh] w-full flex-col overflow-x-hidden bg-[#fafafa]">
       {/* Subtle light background blobs */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div style={{ position: 'absolute', top: '-10%', left: '-8%', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(124,58,237,0.06) 0%, transparent 70%)', filter: 'blur(70px)' }} />
@@ -584,7 +605,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
       </div>
 
       {/* ── Top Navbar ── */}
-      <header className="sticky top-0 z-40 w-full bg-transparent px-3.5 sm:px-6 md:px-8 py-3 sm:py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-40 w-full bg-transparent px-3.5 sm:px-6 md:px-8 py-3.5 sm:py-4 flex items-center justify-between">
         <div className="flex items-center gap-2 sm:gap-3">
           <h1
             className="trivio-title shrink-0 select-none cursor-pointer"
@@ -600,11 +621,11 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
       </header>
 
       {/* ── Main Game Hub Content ── */}
-      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-3.5 sm:px-6 py-4 sm:py-8 w-full max-w-lg mx-auto my-auto">
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-start px-3.5 sm:px-6 pt-2 pb-8 sm:pt-6 sm:pb-10 w-full max-w-lg mx-auto">
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="w-full space-y-3.5 sm:space-y-4"
         >
           {/* ── Active Session Recovery Banner ── */}
