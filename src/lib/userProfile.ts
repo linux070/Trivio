@@ -16,10 +16,11 @@ const STORAGE_PROFILE_KEY = 'trivio_user_profile'
 export const DICEBEAR_STYLES = [
   { id: 'bottts-neutral', label: 'Robots' },
   { id: 'adventurer', label: 'Adventurers' },
-  { id: 'thumbs', label: 'Thumbs' },
-  { id: 'fun-emoji', label: 'Emojis' },
+  { id: 'lorelei', label: 'Portraits' },
+  { id: 'avataaars', label: 'Avatars' },
+  { id: 'thumbs', label: 'Playful' },
+  { id: 'notionists', label: 'Minimalist' },
   { id: 'shapes', label: 'Abstract' },
-  { id: 'identicon', label: 'Identicon' },
 ] as const
 
 export const DEFAULT_AVATAR_SEEDS = [
@@ -29,14 +30,16 @@ export const DEFAULT_AVATAR_SEEDS = [
   'trivio_nova',
   'trivio_quantum',
   'trivio_stellar',
+  'trivio_cosmos',
+  'trivio_vortex',
 ]
 
 /**
- * Generate a DiceBear SVG URL
+ * Generate a modern, aesthetic DiceBear SVG URL
  */
 export function getDiceBearAvatarUrl(style: string = 'bottts-neutral', seed: string = 'trivio'): string {
   const cleanSeed = encodeURIComponent(seed.trim().toLowerCase())
-  return `https://api.dicebear.com/9.x/${style}/svg?seed=${cleanSeed}&radius=50&backgroundColor=ede9fe,f5f3ff,e0e7ff`
+  return `https://api.dicebear.com/9.x/${style}/svg?seed=${cleanSeed}&radius=50&backgroundColor=ede9fe,f5f3ff,e0e7ff,fce7f3,dbeafe,fef3c7`
 }
 
 /**

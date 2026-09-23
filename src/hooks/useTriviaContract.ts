@@ -106,14 +106,18 @@ export function useRoomExists(code: string) {
   })
 }
 
-export function useUsdcBalance(address: `0x${string}` | undefined) {
+export function useUsdcBalance(
+  address: `0x${string}` | undefined,
+  chainId: number = ARC_TESTNET_CHAIN_ID
+) {
+  const usdcAddr = (getUsdc(chainId)?.address ?? '0x3600000000000000000000000000000000000000') as `0x${string}`
   return useReadContract({
-    address: USDC_ADDRESS,
+    address: usdcAddr,
     abi: erc20Abi,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
-    chainId: ARC_TESTNET_CHAIN_ID,
-    query: { enabled: Boolean(USDC_ADDRESS) && Boolean(address) },
+    chainId: chainId,
+    query: { enabled: Boolean(usdcAddr) && Boolean(address) },
   })
 }
 
@@ -140,11 +144,20 @@ export function parseUSDC(amount: string): bigint {
   return BigInt(Math.round(n * 1_000_000))
 }
 
-/** Format raw USDC bigint → human string e.g. "1.50" */
+/** Format raw USDC bigint → human string e.g. "1.50" or "865,034,306.42" */
 export function formatUSDCRaw(raw: bigint): string {
-  const num = Number(raw) / 1_000_000
-  return num.toFixed(2)
+  try {
+    const num = Number(raw) / 1_000_000
+    if (isNaN(num)) return '0.00'
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(num)
+  } catch {
+    return '0.00'
+  }
 }
+
 
 // ── Writes ────────────────────────────────────────────────────────────────────
 

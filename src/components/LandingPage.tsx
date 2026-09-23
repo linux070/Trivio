@@ -1,5 +1,5 @@
 import { useState, useEffect, startTransition } from 'react'
-import { usePrivy } from '@privy-io/react-auth'
+import { usePrivy, useLogin } from '@privy-io/react-auth'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Users, Zap, Trophy, X } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
@@ -221,20 +221,25 @@ interface LandingPageProps {
 }
 
 export default function LandingPage({ onConnected }: LandingPageProps) {
-  const { login, authenticated } = usePrivy()
+  const { authenticated } = usePrivy()
+  const { login } = useLogin({
+    onComplete: () => {
+      onConnected()
+    },
+  })
   const [modalOpen, setModalOpen] = useState(false)
 
   const { displayed, done } = useTypewriter('having fun onchain', 52, 800)
 
   // If already authenticated via Privy, immediately notify parent
-  if (authenticated) { onConnected(); return null }
+  useEffect(() => {
+    if (authenticated) {
+      onConnected()
+    }
+  }, [authenticated, onConnected])
 
   const handleGetStarted = () => {
-    login({
-      onComplete: () => {
-        onConnected()
-      },
-    })
+    login()
   }
 
   return (

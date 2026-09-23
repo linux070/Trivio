@@ -20,7 +20,7 @@ import { WagmiProvider } from '@privy-io/wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { arcTestnet } from 'viem/chains'
-import { config } from './config'
+import { config, arcMainnet } from './config'
 import App from './App'
 import './index.css'
 
@@ -80,9 +80,11 @@ createRoot(document.getElementById('root')!).render(
           showWalletLoginFirst: false,
         },
         defaultChain: arcTestnet,
-        supportedChains: [arcTestnet],
+        supportedChains: [arcTestnet, arcMainnet],
         embeddedWallets: {
-          createOnLogin: 'users-without-wallets',
+          ethereum: {
+            createOnLogin: 'users-without-wallets',
+          },
         },
       }}
     >

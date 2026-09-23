@@ -13,19 +13,43 @@ interface OnboardingModalProps {
   open: boolean
   address?: string
   provider?: string
+  initialProfile?: UserProfile | null
+  isEditing?: boolean
+  onClose?: () => void
   onComplete: (profile: UserProfile) => void
 }
 
 const STYLES = ['bottts-neutral', 'thumbs', 'fun-emoji', 'shapes', 'adventurer']
 
-export default function OnboardingModal({ open, address, provider, onComplete }: OnboardingModalProps) {
+export default function OnboardingModal({
+  open,
+  address,
+  provider,
+  initialProfile,
+  isEditing = false,
+  onClose,
+  onComplete,
+}: OnboardingModalProps) {
   const suggestions = getDefaultProfileSuggestions(address, provider)
 
-  const [username, setUsername] = useState(suggestions.username)
+  const [username, setUsername] = useState(initialProfile?.username || suggestions.username)
   const [styleIndex, setStyleIndex] = useState(0)
-  const [seed, setSeed] = useState(suggestions.seed)
-  const [customAvatarUrl, setCustomAvatarUrl] = useState<string | null>(null)
+  const [seed, setSeed] = useState(initialProfile?.avatarSeed || suggestions.seed)
+  const [customAvatarUrl, setCustomAvatarUrl] = useState<string | null>(
+    initialProfile?.avatarStyle === 'custom' ? initialProfile.avatarUrl : null
+  )
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Re-sync with initialProfile if opened
+  const lastOpenRef = useRef(open)
+  if (open && !lastOpenRef.current) {
+    if (initialProfile) {
+      setUsername(initialProfile.username)
+      setSeed(initialProfile.avatarSeed || suggestions.seed)
+      setCustomAvatarUrl(initialProfile.avatarStyle === 'custom' ? initialProfile.avatarUrl : null)
+    }
+  }
+  lastOpenRef.current = open
 
   const currentStyle = STYLES[styleIndex % STYLES.length]
   const displayedAvatarUrl = customAvatarUrl || getDiceBearAvatarUrl(currentStyle, seed)
@@ -107,17 +131,16 @@ export default function OnboardingModal({ open, address, provider, onComplete }:
     onComplete(profile)
   }
 
-  if (!open) return null
-
   return (
     <AnimatePresence>
-      <motion.div
-        key="onboarding-overlay"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.18 }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      {open && (
+        <motion.div
+          key="onboarding-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
         style={{
           background: 'rgba(0, 0, 0, 0.45)',
           backdropFilter: 'blur(4px)',
@@ -138,7 +161,7 @@ export default function OnboardingModal({ open, address, provider, onComplete }:
           {/* Close button */}
           <button
             type="button"
-            onClick={handleSkip}
+            onClick={() => (onClose ? onClose() : handleSkip())}
             className="absolute right-3.5 top-3.5 flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
             aria-label="Close"
           >
@@ -148,10 +171,10 @@ export default function OnboardingModal({ open, address, provider, onComplete }:
           {/* Header */}
           <div className="mb-5 text-center">
             <h2 className="text-base font-semibold text-gray-900">
-              Create your profile
+              {isEditing ? 'Edit profile' : 'Create your profile'}
             </h2>
             <p className="mt-1 text-xs text-gray-500">
-              Set a display name and avatar for games
+              {isEditing ? 'Update your display name and avatar' : 'Set a display name and avatar for games'}
             </p>
           </div>
 
@@ -236,20 +259,32 @@ export default function OnboardingModal({ open, address, provider, onComplete }:
                 type="submit"
                 className="w-full h-9 flex items-center justify-center rounded-xl bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-xs font-medium text-white transition-all shadow-xs active:scale-[0.99]"
               >
-                Continue
+                {isEditing ? 'Save changes' : 'Continue'}
               </button>
 
-              <button
-                type="button"
-                onClick={handleSkip}
-                className="w-full text-center text-xs font-medium text-gray-400 hover:text-gray-600 py-1 transition-colors"
-              >
-                Skip for now
-              </button>
+              {!isEditing && (
+                <button
+                  type="button"
+                  onClick={handleSkip}
+                  className="w-full text-center text-xs font-medium text-gray-400 hover:text-gray-600 py-1 transition-colors"
+                >
+                  Skip for now
+                </button>
+              )}
+              {isEditing && (
+                <button
+                  type="button"
+                  onClick={() => (onClose ? onClose() : handleSkip())}
+                  className="w-full text-center text-xs font-medium text-gray-400 hover:text-gray-600 py-1 transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
             </div>
           </form>
         </motion.div>
       </motion.div>
+      )}
     </AnimatePresence>
   )
 }

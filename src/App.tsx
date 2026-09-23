@@ -42,16 +42,7 @@ const STORAGE_PENDING_JOIN_KEY = 'trivio_pending_join'
 
 function hasStoredAuth(): boolean {
   try {
-    if (localStorage.getItem(STORAGE_AUTH_KEY) === 'true') return true
-    const wagmiStore = localStorage.getItem('wagmi.store')
-    if (wagmiStore) {
-      const parsed = JSON.parse(wagmiStore)
-      const current = parsed?.state?.current
-      const connections = parsed?.state?.connections?.value || parsed?.state?.connections
-      if (current && connections) return true
-    }
-    if (localStorage.getItem('wagmi.recentConnectorId')) return true
-    return false
+    return localStorage.getItem(STORAGE_AUTH_KEY) === 'true'
   } catch {
     return false
   }
@@ -71,79 +62,23 @@ function getSavedCategory(): Category {
 }
 
 function getInitialScreen(): Screen {
+  // Always start on landing page until Privy authenticates the session
   const joinCode = getJoinCodeFromUrl()
-  const isAuth = hasStoredAuth()
-
-  // 1. If an invite link ?join=CODE was opened:
   if (joinCode) {
-    if (!isAuth) {
-      // Unauthenticated user: MUST authenticate first on landing page
-      try {
-        sessionStorage.setItem(STORAGE_PENDING_JOIN_KEY, joinCode)
-      } catch {
-        // ignore
-      }
-      return { name: 'landing' }
-    }
-    // Already authenticated: proceed to join room
-    return { name: 'join', category: 'General Knowledge', prefillCode: joinCode }
-  }
-
-  // 2. If authenticated, determine screen synchronously from URL hash or storage
-  if (isAuth) {
-    const hash = window.location.hash
-
-    if (hash.startsWith('#/game/')) {
-      const code = hash.replace('#/game/', '').trim().toUpperCase()
-      if (code) {
-        return { name: 'game', roomCode: code, category: getSavedCategory() }
-      }
-    }
-    if (hash === '#/create') {
-      return { name: 'create', category: getSavedCategory() }
-    }
-    if (hash === '#/join') {
-      return { name: 'join', category: getSavedCategory() }
-    }
-    if (hash === '#/results') {
-      try {
-        const raw = sessionStorage.getItem(STORAGE_SCREEN_KEY) || localStorage.getItem(STORAGE_SCREEN_KEY)
-        if (raw) {
-          const parsed = JSON.parse(raw) as Screen
-          if (parsed.name === 'results') return parsed
-        }
-      } catch {
-        // ignore
-      }
-      return { name: 'lobby' }
-    }
-    if (hash === '#/lobby') {
-      return { name: 'lobby' }
-    }
-
-    // Fallback to storage
     try {
-      const raw = sessionStorage.getItem(STORAGE_SCREEN_KEY) || localStorage.getItem(STORAGE_SCREEN_KEY)
-      if (raw) {
-        const saved = JSON.parse(raw) as Screen
-        if (saved && typeof saved === 'object' && 'name' in saved && saved.name !== 'landing') {
-          return saved
-        }
-      }
+      sessionStorage.setItem(STORAGE_PENDING_JOIN_KEY, joinCode)
     } catch {
-      // fallback
+      // ignore
     }
-    return { name: 'lobby' }
   }
-
-  // 3. Not authenticated -> landing page
   return { name: 'landing' }
 }
 
 export default function App() {
   const { address } = useAccount()
-  const { authenticated, user, logout } = usePrivy()
+  const { authenticated, ready, user, logout } = usePrivy()
   const [screen, setScreen] = useState<Screen>(getInitialScreen)
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const wasConnectedRef = useRef(false)
 
   // Derive active wallet address from Privy user or wagmi
@@ -160,38 +95,87 @@ export default function App() {
     return 'wallet' as const
   })()
 
-  // Track connected status in localStorage and transition from landing to lobby/join
+  // Helper to resolve and navigate to target game screen upon authenticated session
+  const restoreGameScreen = () => {
+    const pendingJoin =
+      sessionStorage.getItem(STORAGE_PENDING_JOIN_KEY) || getJoinCodeFromUrl()
+    if (pendingJoin) {
+      sessionStorage.removeItem(STORAGE_PENDING_JOIN_KEY)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('join')
+      window.history.replaceState({}, '', url.pathname + '#/join')
+      setScreen({ name: 'join', category: 'General Knowledge', prefillCode: pendingJoin })
+      return
+    }
+
+    const hash = window.location.hash
+    if (hash.startsWith('#/game/')) {
+      const code = hash.replace('#/game/', '').trim().toUpperCase()
+      if (code) {
+        setScreen({ name: 'game', roomCode: code, category: getSavedCategory() })
+        return
+      }
+    }
+    if (hash === '#/create') {
+      setScreen({ name: 'create', category: getSavedCategory() })
+      return
+    }
+    if (hash === '#/join') {
+      setScreen({ name: 'join', category: getSavedCategory() })
+      return
+    }
+    if (hash === '#/results') {
+      try {
+        const raw = sessionStorage.getItem(STORAGE_SCREEN_KEY) || localStorage.getItem(STORAGE_SCREEN_KEY)
+        if (raw) {
+          const parsed = JSON.parse(raw) as Screen
+          if (parsed.name === 'results') {
+            setScreen(parsed)
+            return
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    setScreen({ name: 'lobby' })
+  }
+
+  // Strictly sync screen state when Privy authentication completes
   useEffect(() => {
-    if (authenticated) {
+    if (ready && authenticated) {
       wasConnectedRef.current = true
       try {
         localStorage.setItem(STORAGE_AUTH_KEY, 'true')
       } catch {
         // ignore
       }
-      if (screen.name === 'landing') {
-        handleConnected()
+      if (!hasUserProfile()) {
+        setShowOnboarding(true)
+      } else if (screen.name === 'landing') {
+        restoreGameScreen()
       }
-    }
-  }, [authenticated, screen.name])
-
-  // If user explicitly disconnects / logs out, clear state and return to landing
-  useEffect(() => {
-    if (!authenticated && wasConnectedRef.current) {
-      wasConnectedRef.current = false
-      try {
-        localStorage.removeItem(STORAGE_AUTH_KEY)
-        localStorage.removeItem(STORAGE_SCREEN_KEY)
-        sessionStorage.removeItem(STORAGE_SCREEN_KEY)
-        if (window.location.hash) {
-          window.history.replaceState(null, '', window.location.pathname)
+    } else if (ready && !authenticated) {
+      if (wasConnectedRef.current) {
+        wasConnectedRef.current = false
+        try {
+          localStorage.removeItem(STORAGE_AUTH_KEY)
+          localStorage.removeItem(STORAGE_SCREEN_KEY)
+          sessionStorage.removeItem(STORAGE_SCREEN_KEY)
+          sessionStorage.removeItem(STORAGE_PENDING_JOIN_KEY)
+          localStorage.removeItem('wagmi.recentConnectorId')
+          localStorage.removeItem('wagmi.store')
+          if (window.location.hash) {
+            window.history.replaceState(null, '', window.location.pathname)
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
+        setScreen({ name: 'landing' })
       }
-      setScreen({ name: 'landing' })
     }
-  }, [authenticated])
+  }, [ready, authenticated, screen.name])
 
   // Synchronize URL hash and storage whenever screen changes
   useEffect(() => {
@@ -236,7 +220,7 @@ export default function App() {
   // Synchronize document background color and mobile theme-color with active screen
   useEffect(() => {
     const isLanding = screen.name === 'landing'
-    const bg = isLanding ? '#5b21b6' : '#f9f9fc'
+    const bg = isLanding ? '#5b21b6' : '#fafafa'
     const themeColor = isLanding ? '#6d28d9' : '#ffffff'
 
     document.documentElement.style.backgroundColor = bg
@@ -247,50 +231,27 @@ export default function App() {
     }
   }, [screen.name])
 
-  const [showOnboarding, setShowOnboarding] = useState(false)
-
   // Handler called when user connects wallet or signs in via Privy
   const handleConnected = () => {
     try {
       localStorage.setItem(STORAGE_AUTH_KEY, 'true')
-      if (!hasUserProfile()) {
-        setShowOnboarding(true)
-        return
-      }
-      const pendingJoin =
-        sessionStorage.getItem(STORAGE_PENDING_JOIN_KEY) || getJoinCodeFromUrl()
-      if (pendingJoin) {
-        sessionStorage.removeItem(STORAGE_PENDING_JOIN_KEY)
-        const url = new URL(window.location.href)
-        url.searchParams.delete('join')
-        window.history.replaceState({}, '', url.pathname + '#/join')
-        setScreen({ name: 'join', category: 'General Knowledge', prefillCode: pendingJoin })
-        return
-      }
     } catch {
       // ignore
     }
-
-    setScreen(prev => (prev.name !== 'landing' ? prev : { name: 'lobby' }))
+    if (!hasUserProfile()) {
+      setShowOnboarding(true)
+      return
+    }
+    restoreGameScreen()
   }
 
   const handleOnboardingComplete = () => {
     setShowOnboarding(false)
-    const pendingJoin =
-      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(STORAGE_PENDING_JOIN_KEY)) ||
-      getJoinCodeFromUrl()
-    if (pendingJoin) {
-      sessionStorage.removeItem(STORAGE_PENDING_JOIN_KEY)
-      const url = new URL(window.location.href)
-      url.searchParams.delete('join')
-      window.history.replaceState({}, '', url.pathname + '#/join')
-      setScreen({ name: 'join', category: 'General Knowledge', prefillCode: pendingJoin })
-      return
-    }
-    setScreen({ name: 'lobby' })
+    restoreGameScreen()
   }
 
   const handleDisconnect = async () => {
+    wasConnectedRef.current = false
     try {
       await logout()
     } catch {
@@ -300,6 +261,9 @@ export default function App() {
       localStorage.removeItem(STORAGE_AUTH_KEY)
       localStorage.removeItem(STORAGE_SCREEN_KEY)
       sessionStorage.removeItem(STORAGE_SCREEN_KEY)
+      sessionStorage.removeItem(STORAGE_PENDING_JOIN_KEY)
+      localStorage.removeItem('wagmi.recentConnectorId')
+      localStorage.removeItem('wagmi.store')
       if (window.location.hash) {
         window.history.replaceState(null, '', window.location.pathname)
       }
@@ -309,68 +273,16 @@ export default function App() {
     setScreen({ name: 'landing' })
   }
 
-  // Auth guard: If user is definitely not connected and has no saved session:
-  // Strictly prevent accessing protected screens (no bypass).
-  const isAuth = authenticated || hasStoredAuth()
-
-  if (!isAuth && screen.name !== 'landing') {
+  // Auth & Onboarding guard:
+  // If not authenticated via Privy (or Privy is still initializing), or currently on landing screen, or user has not completed profile onboarding:
+  // Render LandingPage in the background and present OnboardingModal.
+  // The game Lobby is never rendered until sign in with wallet is 100% verified and profile setup is complete.
+  if (!ready || !authenticated || screen.name === 'landing' || !hasUserProfile()) {
     return (
       <>
         <LandingPage onConnected={handleConnected} />
         <OnboardingModal
-          open={showOnboarding}
-          address={activeAddress}
-          provider={provider}
-          onComplete={handleOnboardingComplete}
-        />
-      </>
-    )
-  }
-
-  if (screen.name === 'landing') {
-    if (authenticated || hasStoredAuth()) {
-      const pendingJoin =
-        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(STORAGE_PENDING_JOIN_KEY)) ||
-        getJoinCodeFromUrl()
-      if (pendingJoin) {
-        return (
-          <>
-            <JoinRoom
-              initialCategory="General Knowledge"
-              prefillCode={pendingJoin}
-              onBack={() => setScreen({ name: 'lobby' })}
-              onJoined={(roomCode, category) => setScreen({ name: 'game', roomCode, category })}
-            />
-            <OnboardingModal
-              open={showOnboarding}
-              address={activeAddress}
-              provider={provider}
-              onComplete={handleOnboardingComplete}
-            />
-          </>
-        )
-      }
-      return (
-        <>
-          <Lobby
-            onCreateRoom={(category) => setScreen({ name: 'create', category })}
-            onJoinRoom={(category) => setScreen({ name: 'join', category })}
-            onDisconnect={handleDisconnect}
-          />
-          <OnboardingModal
-            open={showOnboarding}
-            address={activeAddress}
-            provider={provider}
-            onComplete={handleOnboardingComplete}
-          />
-        </>
-      )
-    }
-    return (
-      <>
-        <LandingPage onConnected={handleConnected} />
-        <OnboardingModal
-          open={showOnboarding}
+          open={showOnboarding && authenticated}
           address={activeAddress}
           provider={provider}
           onComplete={handleOnboardingComplete}
@@ -381,19 +293,11 @@ export default function App() {
 
   if (screen.name === 'lobby') {
     return (
-      <>
-        <Lobby
-          onCreateRoom={(category) => setScreen({ name: 'create', category })}
-          onJoinRoom={(category) => setScreen({ name: 'join', category })}
-          onDisconnect={handleDisconnect}
-        />
-        <OnboardingModal
-          open={showOnboarding}
-          address={activeAddress}
-          provider={provider}
-          onComplete={handleOnboardingComplete}
-        />
-      </>
+      <Lobby
+        onCreateRoom={(category) => setScreen({ name: 'create', category })}
+        onJoinRoom={(category) => setScreen({ name: 'join', category })}
+        onDisconnect={handleDisconnect}
+      />
     )
   }
 
