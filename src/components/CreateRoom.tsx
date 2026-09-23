@@ -125,10 +125,14 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
       <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-8 pt-4 sm:max-w-lg sm:px-6 sm:py-6">
         <div className="mb-5 sm:mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-full transition-opacity hover:opacity-70" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid var(--border)' }}>
-              <ArrowLeft size={16} style={{ color: 'var(--ink)' }} />
+            <button
+              onClick={onBack}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 hover:bg-white backdrop-blur-md shadow-xs border border-[var(--border)] transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer"
+              title="Go back"
+            >
+              <ArrowLeft size={16} className="stroke-[2.25]" style={{ color: 'var(--ink)' }} />
             </button>
-            <h1 className="display text-xl sm:text-2xl font-bold" style={{ color: 'var(--ink)', letterSpacing: '-0.03em' }}>Create Room</h1>
+            <h1 className="display text-xl sm:text-2xl font-semibold" style={{ color: 'var(--ink)', letterSpacing: '-0.03em' }}>create room</h1>
           </div>
         </div>
 
@@ -142,8 +146,8 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
           {/* Room code */}
           <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>Room Code</p>
-              <span className="text-xs" style={{ color: 'var(--subtle)' }}>{roomCode.length}/8</span>
+              <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>Room Code</p>
+              <span className="text-xs font-medium" style={{ color: 'var(--subtle)' }}>{roomCode.length}/8</span>
             </div>
             <div className="flex items-center justify-between gap-2 px-1 py-1.5">
               <input
@@ -184,7 +188,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
 
           {/* Mode */}
           <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
-            <p className="mb-3 text-xs font-semibold uppercase" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>Prize Mode</p>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>Prize Mode</p>
             <div className="grid grid-cols-2 gap-2">
               {(['buyin', 'sponsored'] as Mode[]).map(m => (
                 <button
@@ -210,8 +214,8 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
 
           {/* Amount */}
           <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
-            <p className="mb-2 text-xs font-semibold uppercase" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
-              {mode === 'buyin' ? 'Buy-in per Player' : 'Prize Pool'}
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
+              {mode === 'buyin' ? 'Buy-in per player' : 'Prize pool'}
             </p>
             <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={glass.inner}>
               <TokenUSDC variant="branded" size={20} />
@@ -236,7 +240,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
 
           {/* Max players */}
           <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
-            <p className="mb-3 text-xs font-semibold uppercase" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>Max Players</p>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>Max Players</p>
             <div className="flex items-center justify-between rounded-2xl px-4 py-3" style={glass.inner}>
               <button
                 onClick={() => { const n = Math.max(1, maxPlayers - 1); setMaxPlayers(n); setMaxPlayersInput(String(n)) }}

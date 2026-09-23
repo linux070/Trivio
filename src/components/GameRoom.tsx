@@ -181,8 +181,12 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
         </div>
         <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-8 pt-4 sm:max-w-lg sm:px-6 sm:py-6">
           <div className="mb-5 sm:mb-6 flex items-center gap-3">
-            <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-full transition-opacity hover:opacity-70" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid var(--border)' }}>
-              <ArrowLeft size={16} style={{ color: 'var(--ink)' }} />
+            <button
+              onClick={onBack}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 hover:bg-white backdrop-blur-md shadow-xs border border-[var(--border)] transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer"
+              title="Go back"
+            >
+              <ArrowLeft size={16} className="stroke-[2.25]" style={{ color: 'var(--ink)' }} />
             </button>
             <div>
               <h1 className="display text-xl sm:text-2xl font-bold" style={{ color: 'var(--ink)', letterSpacing: '-0.03em' }}>
@@ -440,8 +444,12 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
         </div>
         <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-8 pt-4 sm:max-w-lg sm:px-6 sm:py-6">
           <div className="mb-5 sm:mb-6 flex items-center gap-3">
-            <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-full transition-opacity hover:opacity-70" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid var(--border)' }}>
-              <ArrowLeft size={16} style={{ color: 'var(--ink)' }} />
+            <button
+              onClick={onBack}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 hover:bg-white backdrop-blur-md shadow-xs border border-[var(--border)] transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer"
+              title="Go back"
+            >
+              <ArrowLeft size={16} className="stroke-[2.25]" style={{ color: 'var(--ink)' }} />
             </button>
             <h1 className="display text-xl sm:text-2xl font-bold" style={{ color: 'var(--ink)', letterSpacing: '-0.03em' }}>Game Over</h1>
           </div>

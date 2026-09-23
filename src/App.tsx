@@ -30,14 +30,14 @@ type Screen =
   | { name: 'results'; winnerAddress: string; prizeAmount: string; txHash?: string }
 
 /** Read ?join=CODE and ?cat=CATEGORY from the URL */
-export function getJoinParamsFromUrl(): { code: string; category?: Category } | null {
+export function getJoinParamsFromUrl(): { roomCode: string; category?: Category } | null {
   try {
     const p = new URLSearchParams(window.location.search)
     const code = p.get('join')?.trim().toUpperCase()
     if (!code) return null
     const rawCat = p.get('cat') || p.get('category')
     const category = isValidCategory(rawCat) ? rawCat : undefined
-    return { code, category }
+    return { roomCode: code, category }
   } catch {
     return null
   }
@@ -72,14 +72,74 @@ function getSavedCategory(): Category {
 }
 
 function getInitialScreen(): Screen {
-  // Always start on landing page until Privy authenticates the session
   const joinParams = getJoinParamsFromUrl()
   if (joinParams) {
-    setPendingJoin(joinParams.code, joinParams.category)
+    setPendingJoin(joinParams.roomCode, joinParams.category)
     if (joinParams.category) {
-      saveRoomCategory(joinParams.code, joinParams.category)
+      saveRoomCategory(joinParams.roomCode, joinParams.category)
     }
   }
+
+  // Check if we have an authenticated user with a profile
+  const isAuth = typeof window !== 'undefined' && localStorage.getItem(STORAGE_AUTH_KEY) === 'true'
+  const hasProfile = typeof window !== 'undefined' && hasUserProfile()
+
+  if (typeof window !== 'undefined') {
+    const isLanding = !(isAuth && hasProfile)
+    const bg = isLanding ? '#5b21b6' : '#fafafa'
+    document.documentElement.style.backgroundColor = bg
+    if (document.body) document.body.style.backgroundColor = bg
+    const themeMeta = document.getElementById('theme-color-meta')
+    if (themeMeta) themeMeta.setAttribute('content', isLanding ? '#6d28d9' : '#ffffff')
+  }
+
+  if (isAuth && hasProfile) {
+    if (joinParams) {
+      const cat = joinParams.category || getRoomCategory(joinParams.roomCode) || 'General Knowledge'
+      return { name: 'join', category: cat, prefillCode: joinParams.roomCode }
+    }
+
+    const hash = typeof window !== 'undefined' ? window.location.hash : ''
+    if (hash.startsWith('#/game/')) {
+      const code = hash.replace('#/game/', '').trim().toUpperCase()
+      if (code) {
+        const cat = getRoomCategory(code) || getSavedCategory()
+        return { name: 'game', roomCode: code, category: cat }
+      }
+    }
+    if (hash === '#/create') {
+      return { name: 'create', category: getSavedCategory() }
+    }
+    if (hash === '#/join') {
+      return { name: 'join', category: getSavedCategory() }
+    }
+    if (hash === '#/results') {
+      try {
+        const raw = sessionStorage.getItem(STORAGE_SCREEN_KEY) || localStorage.getItem(STORAGE_SCREEN_KEY)
+        if (raw) {
+          const parsed = JSON.parse(raw) as Screen
+          if (parsed.name === 'results') return parsed
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    try {
+      const raw = sessionStorage.getItem(STORAGE_SCREEN_KEY) || localStorage.getItem(STORAGE_SCREEN_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as Screen
+        if (parsed?.name && parsed.name !== 'landing') {
+          return parsed
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return { name: 'lobby', initialCategory: getSavedCategory() }
+  }
+
   return { name: 'landing' }
 }
 
@@ -108,14 +168,14 @@ export default function App() {
   const restoreGameScreen = () => {
     const pendingJoin = consumePendingJoin() || getJoinParamsFromUrl()
     if (pendingJoin) {
-      const cat = pendingJoin.category || getRoomCategory(pendingJoin.code) || 'General Knowledge'
-      saveRoomCategory(pendingJoin.code, cat)
+      const cat = pendingJoin.category || getRoomCategory(pendingJoin.roomCode) || 'General Knowledge'
+      saveRoomCategory(pendingJoin.roomCode, cat)
       const url = new URL(window.location.href)
       url.searchParams.delete('join')
       url.searchParams.delete('cat')
       url.searchParams.delete('category')
       window.history.replaceState({}, '', url.pathname + '#/join')
-      setScreen({ name: 'join', category: cat, prefillCode: pendingJoin.code })
+      setScreen({ name: 'join', category: cat, prefillCode: pendingJoin.roomCode })
       return
     }
 
@@ -151,7 +211,20 @@ export default function App() {
       }
     }
 
-    setScreen({ name: 'lobby' })
+    try {
+      const raw = sessionStorage.getItem(STORAGE_SCREEN_KEY) || localStorage.getItem(STORAGE_SCREEN_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as Screen
+        if (parsed?.name && parsed.name !== 'landing') {
+          setScreen(parsed)
+          return
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    setScreen({ name: 'lobby', initialCategory: getSavedCategory() })
   }
 
   // Strictly sync screen state when Privy authentication completes
@@ -193,14 +266,14 @@ export default function App() {
     if (ready && authenticated && hasUserProfile() && screen.name !== 'landing') {
       const joinParams = getJoinParamsFromUrl()
       if (joinParams) {
-        const cat = joinParams.category || getRoomCategory(joinParams.code) || 'General Knowledge'
-        saveRoomCategory(joinParams.code, cat)
+        const cat = joinParams.category || getRoomCategory(joinParams.roomCode) || 'General Knowledge'
+        saveRoomCategory(joinParams.roomCode, cat)
         const url = new URL(window.location.href)
         url.searchParams.delete('join')
         url.searchParams.delete('cat')
         url.searchParams.delete('category')
         window.history.replaceState({}, '', url.pathname + '#/join')
-        setScreen({ name: 'join', category: cat, prefillCode: joinParams.code })
+        setScreen({ name: 'join', category: cat, prefillCode: joinParams.roomCode })
       }
     }
   }, [ready, authenticated, screen.name])
@@ -303,8 +376,13 @@ export default function App() {
     setScreen({ name: 'landing' })
   }
 
+  // Check if we have an active stored user session
+  const isStoredAuth = typeof window !== 'undefined' && localStorage.getItem(STORAGE_AUTH_KEY) === 'true' && hasUserProfile()
+
   // Auth & Onboarding guard:
-  if (!ready || !authenticated || screen.name === 'landing' || !hasUserProfile()) {
+  // If the user has a stored authenticated session and a valid screen (e.g. lobby/create/join/game),
+  // do NOT flash LandingPage while Privy is asynchronously initializing (!ready).
+  if (screen.name === 'landing' || (!isStoredAuth && (!ready || !authenticated || !hasUserProfile()))) {
     return (
       <>
         <LandingPage onConnected={handleConnected} />

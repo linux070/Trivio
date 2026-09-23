@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Users, Check, ArrowRight, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Users, Check } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import {
@@ -146,10 +146,14 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
 
       <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-8 pt-4 sm:max-w-lg sm:px-6 sm:py-6">
         <div className="mb-5 sm:mb-6 flex items-center gap-3">
-          <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-full transition-opacity hover:opacity-70" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid var(--border)' }}>
-            <ArrowLeft size={16} style={{ color: 'var(--ink)' }} />
+          <button
+            onClick={onBack}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 hover:bg-white backdrop-blur-md shadow-xs border border-[var(--border)] transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer"
+            title="Go back"
+          >
+            <ArrowLeft size={16} className="stroke-[2.25]" style={{ color: 'var(--ink)' }} />
           </button>
-          <h1 className="display text-xl sm:text-2xl font-bold" style={{ color: 'var(--ink)', letterSpacing: '-0.03em' }}>Join a Room</h1>
+          <h1 className="display text-xl sm:text-2xl font-semibold" style={{ color: 'var(--ink)', letterSpacing: '-0.03em' }}>join room</h1>
         </div>
 
         {!contractReady && (
@@ -249,21 +253,16 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
 
                   {/* If user is already in the room */}
                   {isAlreadyJoined && (
-                    <div className="mt-3.5 flex items-center justify-between rounded-2xl bg-purple-50/70 p-3 sm:p-3.5 border border-purple-200/60 shadow-xs">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-purple-100 text-purple-700 border border-purple-200/50">
-                          <ShieldCheck size={16} className="stroke-[2.5]" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-gray-900">
-                            {isHost ? 'You are hosting this room' : 'Already Joined'}
-                          </p>
-                          <p className="text-[11px] text-gray-500 font-medium truncate">
-                            {isHost ? 'Resume anytime to manage your game' : 'You are an active player in this room'}
-                          </p>
-                        </div>
+                    <div className="mt-3.5 flex items-center justify-between rounded-2xl px-4 py-3 bg-gray-50/80 border border-gray-200/80 shadow-2xs">
+                      <div className="min-w-0 pr-3">
+                        <p className="text-xs font-semibold text-gray-900 leading-tight">
+                          {isHost ? 'You are hosting this room' : 'You have joined this room'}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-gray-500 font-medium truncate">
+                          {isHost ? 'Resume anytime to manage your game' : 'Game in progress · Return anytime to continue'}
+                        </p>
                       </div>
-                      <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-purple-700 bg-white border border-purple-200/80 px-2.5 py-0.5 rounded-full shadow-2xs">
+                      <span className="shrink-0 rounded-full bg-white border border-gray-200/90 px-2.5 py-0.5 text-[10px] font-semibold text-gray-700 shadow-2xs">
                         {isHost ? 'Host' : 'Player'}
                       </span>
                     </div>
@@ -285,11 +284,10 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                   {isAlreadyJoined && (
                     <button
                       onClick={handleJoin}
-                      className="mt-3.5 flex w-full items-center justify-center gap-2 rounded-2xl py-4 text-sm font-bold shadow-md transition-all hover:brightness-105 active:scale-[0.99]"
+                      className="mt-3.5 flex w-full items-center justify-center rounded-2xl py-4 text-sm font-semibold shadow-md transition-all hover:brightness-105 active:scale-[0.99] cursor-pointer"
                       style={{ background: 'var(--accent)', color: 'white' }}
                     >
-                      <span>Continue to Game</span>
-                      <ArrowRight size={16} />
+                      Continue to Game
                     </button>
                   )}
 

@@ -300,10 +300,10 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
       {/* Profile Chip Button */}
       <button
         onClick={() => setOpen(prev => !prev)}
-        className="group flex items-center gap-2 rounded-full border border-gray-200/90 bg-white/90 pl-1.5 pr-2.5 py-1 text-xs font-semibold text-gray-900 shadow-xs backdrop-blur-md transition-all hover:border-gray-300 hover:bg-white hover:shadow-sm active:scale-95"
+        className="group flex items-center gap-2 sm:gap-2.5 rounded-full border border-gray-200/90 bg-white/90 pl-1.5 sm:pl-2 pr-2.5 sm:pr-3.5 py-1 sm:py-1.5 text-xs sm:text-sm font-semibold text-gray-900 shadow-xs backdrop-blur-md transition-all hover:border-gray-300 hover:bg-white hover:shadow-sm active:scale-95 cursor-pointer"
         style={{ letterSpacing: '-0.01em' }}
       >
-        <div className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-purple-50 overflow-hidden ring-1 ring-black/5">
+        <div className="relative flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-full bg-purple-50 overflow-hidden ring-1 ring-black/5">
           {profile?.avatarUrl && !avatarImgError ? (
             <img
               src={profile.avatarUrl}
@@ -312,19 +312,18 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
               onError={() => setAvatarImgError(true)}
             />
           ) : (
-            <span className="flex h-full w-full items-center justify-center bg-purple-100 text-purple-700 font-bold text-[10px]">
+            <span className="flex h-full w-full items-center justify-center bg-purple-100 text-purple-700 font-bold text-[10px] sm:text-xs">
               {displayName.replace(/^@/, '').slice(0, 1).toUpperCase()}
             </span>
           )}
         </div>
 
-        <span className="font-semibold text-[11px] sm:text-xs text-gray-900 max-w-[120px] truncate tracking-tight">
+        <span className="font-semibold text-[11px] sm:text-sm text-gray-900 max-w-[120px] sm:max-w-[160px] truncate tracking-tight">
           {displayName}
         </span>
 
         <ChevronDown
-          size={12}
-          className={`text-gray-400 transition-transform duration-200 ease-out group-hover:text-gray-600 ${open ? 'rotate-180 text-gray-700' : ''}`}
+          className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 transition-transform duration-200 ease-out group-hover:text-gray-600 ${open ? 'rotate-180 text-gray-700' : ''}`}
         />
       </button>
 
@@ -343,7 +342,7 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                 setNetworkDropdownOpen(false)
                 setIsEditingName(false)
               }}
-              className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 sm:hidden"
+              className="fixed inset-0 bg-black/40 backdrop-blur-xs z-[90] sm:hidden"
             />
 
             <motion.div
@@ -351,7 +350,7 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-white shadow-2xl border-t border-gray-100 overflow-hidden max-h-[92dvh] overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:static sm:inset-auto sm:absolute sm:right-0 sm:top-full sm:mt-2 sm:w-[330px] sm:max-w-[330px] sm:rounded-2xl sm:border sm:border-gray-100/90 sm:shadow-2xl sm:max-h-none sm:overflow-visible sm:pb-0"
+              className="fixed inset-x-0 bottom-0 z-[100] rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl border-t sm:border border-gray-100 overflow-hidden max-h-[92dvh] overflow-y-auto pb-[max(5.5rem,calc(env(safe-area-inset-bottom)+4.5rem))] sm:static sm:inset-auto sm:absolute sm:right-0 sm:top-full sm:mt-2 sm:w-[330px] sm:max-w-[330px] sm:shadow-2xl sm:max-h-none sm:pb-0"
               style={{
                 boxShadow: '0 20px 48px -12px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.04)',
               }}
@@ -361,221 +360,221 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                 <div className="w-10 h-1 rounded-full bg-gray-300" />
               </div>
 
-              <div className="relative h-20 bg-gradient-to-r from-violet-700 via-purple-600 to-indigo-700" />
+              <div className="relative h-20 bg-gradient-to-r from-violet-700 via-purple-600 to-indigo-700 rounded-none sm:rounded-t-3xl" />
 
-            <div className="relative px-4 pt-0 pb-3.5">
-              <div className="flex items-end justify-between -mt-8 mb-2.5">
-                <div className="relative group/avatar">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Click to upload custom photo"
-                    className="relative h-[68px] w-[68px] rounded-2xl bg-white p-0.5 shadow-md ring-2 ring-white/90 overflow-hidden transition-all hover:scale-[1.03] active:scale-95 cursor-pointer text-left block"
-                  >
-                    {profile?.avatarUrl && !avatarImgError ? (
-                      <img
-                        src={profile.avatarUrl}
-                        alt=""
-                        className="h-full w-full rounded-[14px] object-cover bg-gray-50 transition-transform duration-300 group-hover/avatar:scale-105"
-                        onError={() => setAvatarImgError(true)}
-                      />
-                    ) : (
-                      <div className="h-full w-full rounded-[14px] bg-purple-100 flex items-center justify-center font-bold text-xl text-purple-700">
-                        {displayName.replace(/^@/, '').slice(0, 1).toUpperCase()}
+              <div className="relative px-4 pt-0 pb-3.5">
+                <div className="flex items-end justify-between -mt-8 mb-2.5">
+                  <div className="relative group/avatar">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      title="Click to upload custom photo"
+                      className="relative h-[68px] w-[68px] rounded-2xl bg-white p-0.5 shadow-md ring-2 ring-white/90 overflow-hidden transition-all hover:scale-[1.03] active:scale-95 cursor-pointer text-left block"
+                    >
+                      {profile?.avatarUrl && !avatarImgError ? (
+                        <img
+                          src={profile.avatarUrl}
+                          alt=""
+                          className="h-full w-full rounded-[14px] object-cover bg-gray-50 transition-transform duration-300 group-hover/avatar:scale-105"
+                          onError={() => setAvatarImgError(true)}
+                        />
+                      ) : (
+                        <div className="h-full w-full rounded-[14px] bg-purple-100 flex items-center justify-center font-bold text-xl text-purple-700">
+                          {displayName.replace(/^@/, '').slice(0, 1).toUpperCase()}
+                        </div>
+                      )}
+
+                      <div className="absolute inset-0 bg-black/45 backdrop-blur-[1px] opacity-0 group-hover/avatar:opacity-100 transition-opacity rounded-[14px] flex flex-col items-center justify-center text-white gap-0.5 pointer-events-none">
+                        <Camera size={14} className="stroke-[2.5]" />
+                        <span className="text-[9px] font-bold tracking-tight">Upload</span>
                       </div>
-                    )}
+                    </button>
 
-                    <div className="absolute inset-0 bg-black/45 backdrop-blur-[1px] opacity-0 group-hover/avatar:opacity-100 transition-opacity rounded-[14px] flex flex-col items-center justify-center text-white gap-0.5 pointer-events-none">
-                      <Camera size={14} className="stroke-[2.5]" />
-                      <span className="text-[9px] font-bold tracking-tight">Upload</span>
-                    </div>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={handleRandomizeAvatar}
+                      title="Roll random avatar"
+                      className="absolute -bottom-1 -right-1 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-white text-gray-700 hover:text-purple-600 hover:bg-purple-50 shadow-sm border border-gray-200/90 transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                    >
+                      <Dices
+                        size={12}
+                        className={`transition-transform duration-500 ease-out ${isRollingAvatar ? 'rotate-180 text-purple-600' : 'group-hover/avatar:rotate-45'}`}
+                      />
+                    </button>
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={handleRandomizeAvatar}
-                    title="Roll random avatar"
-                    className="absolute -bottom-1 -right-1 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-white text-gray-700 hover:text-purple-600 hover:bg-purple-50 shadow-sm border border-gray-200/90 transition-all hover:scale-110 active:scale-95 cursor-pointer"
-                  >
-                    <Dices
-                      size={12}
-                      className={`transition-transform duration-500 ease-out ${isRollingAvatar ? 'rotate-180 text-purple-600' : 'group-hover/avatar:rotate-45'}`}
-                    />
-                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png, image/jpeg, image/webp, image/gif"
+                    onChange={handleAvatarFileUpload}
+                    className="hidden"
+                  />
+
+                  <div className="relative mb-1" ref={networkRef}>
+                    <button
+                      type="button"
+                      onClick={() => setNetworkDropdownOpen(prev => !prev)}
+                      className="group/net inline-flex items-center gap-1.5 rounded-full border border-gray-200/90 bg-gray-50/90 hover:bg-white hover:border-gray-300 pl-3 pr-2.5 py-1 text-xs font-semibold text-gray-800 shadow-2xs backdrop-blur-md transition-all active:scale-95"
+                    >
+                      <span>{selectedNetwork === 'testnet' ? 'Testnet' : 'Mainnet'}</span>
+                      <ChevronDown
+                        size={12}
+                        className={`text-gray-400 transition-transform duration-200 group-hover/net:text-gray-700 ${networkDropdownOpen ? 'rotate-180 text-gray-900' : ''}`}
+                      />
+                    </button>
+
+                    <AnimatePresence>
+                      {networkDropdownOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: 4 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: 4 }}
+                          transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
+                          className="absolute right-0 top-full mt-1.5 w-28 rounded-xl bg-white p-1 shadow-xl border border-gray-100 z-50 overflow-hidden"
+                          style={{
+                            boxShadow: '0 16px 36px -8px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.04)',
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleNetworkChange('testnet')}
+                            className={`flex w-full items-center rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all ${selectedNetwork === 'testnet'
+                              ? 'bg-purple-50 text-purple-700'
+                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
+                          >
+                            <span>Testnet</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleNetworkChange('mainnet')}
+                            className={`flex w-full items-center rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all mt-0.5 ${selectedNetwork === 'mainnet'
+                              ? 'bg-purple-50 text-purple-700'
+                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
+                          >
+                            <span>Mainnet</span>
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
 
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/png, image/jpeg, image/webp, image/gif"
-                  onChange={handleAvatarFileUpload}
-                  className="hidden"
-                />
-
-                <div className="relative mb-1" ref={networkRef}>
-                  <button
-                    type="button"
-                    onClick={() => setNetworkDropdownOpen(prev => !prev)}
-                    className="group/net inline-flex items-center gap-1.5 rounded-full border border-gray-200/90 bg-gray-50/90 hover:bg-white hover:border-gray-300 pl-3 pr-2.5 py-1 text-xs font-semibold text-gray-800 shadow-2xs backdrop-blur-md transition-all active:scale-95"
-                  >
-                    <span>{selectedNetwork === 'testnet' ? 'Testnet' : 'Mainnet'}</span>
-                    <ChevronDown
-                      size={12}
-                      className={`text-gray-400 transition-transform duration-200 group-hover/net:text-gray-700 ${networkDropdownOpen ? 'rotate-180 text-gray-900' : ''}`}
-                    />
-                  </button>
-
-                  <AnimatePresence>
-                    {networkDropdownOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.95, y: 4 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95, y: 4 }}
-                        transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
-                        className="absolute right-0 top-full mt-1.5 w-28 rounded-xl bg-white p-1 shadow-xl border border-gray-100 z-50 overflow-hidden"
-                        style={{
-                          boxShadow: '0 16px 36px -8px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.04)',
-                        }}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => handleNetworkChange('testnet')}
-                          className={`flex w-full items-center rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all ${selectedNetwork === 'testnet'
-                            ? 'bg-purple-50 text-purple-700'
-                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
-                        >
-                          <span>Testnet</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleNetworkChange('mainnet')}
-                          className={`flex w-full items-center rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all mt-0.5 ${selectedNetwork === 'mainnet'
-                            ? 'bg-purple-50 text-purple-700'
-                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
-                        >
-                          <span>Mainnet</span>
-                        </button>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </div>
-
-              <div className="mt-1">
-                {isEditingName ? (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault()
-                      handleSaveName()
-                    }}
-                    className="flex items-center gap-1 pb-0.5 border-b border-purple-300/80 focus-within:border-purple-500/70 transition-colors"
-                  >
-                    <span className="text-gray-400 font-medium text-sm select-none">@</span>
-                    <input
-                      ref={nameInputRef}
-                      type="text"
-                      value={nameInput}
-                      onChange={(e) => setNameInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape') handleCancelEditName()
+                <div className="mt-1">
+                  {isEditingName ? (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        handleSaveName()
                       }}
-                      placeholder="username"
-                      maxLength={20}
-                      className="w-full min-w-0 bg-transparent text-sm font-medium text-gray-800 outline-none placeholder:text-gray-400 p-0"
-                    />
-                    <div className="flex items-center gap-0.5 shrink-0 ml-1">
-                      <button
-                        type="submit"
-                        title="Save (Enter)"
-                        className="flex h-5 w-5 items-center justify-center rounded text-purple-600 hover:text-purple-800 hover:bg-purple-50 active:scale-90 transition-all cursor-pointer"
-                      >
-                        <Check size={14} className="stroke-[2.5]" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCancelEditName}
-                        title="Cancel (Esc)"
-                        className="flex h-5 w-5 items-center justify-center rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 active:scale-90 transition-all cursor-pointer"
-                      >
-                        <X size={14} className="stroke-[2]" />
-                      </button>
-                    </div>
-                  </form>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleStartEditName}
-                    className="group/name flex items-center gap-1.5 text-left cursor-pointer rounded-lg -ml-1 px-1 py-0.5"
-                    title="Click to edit username"
-                  >
-                    <h3 className="text-sm font-medium text-gray-800">
-                      {profile?.username ? `@${profile.username}` : 'Anonymous Player'}
-                    </h3>
-                    <ShieldCheck size={13} className="text-purple-600 shrink-0" />
-                    <Pencil size={10} className="text-gray-300 group-hover/name:text-gray-500 transition-colors ml-0.5" />
-                  </button>
-                )}
-              </div>
-
-              <div className="mt-1 flex items-center">
-                <button
-                  type="button"
-                  onClick={handleCopy}
-                  className="group/addr inline-flex items-center gap-1.5 rounded-full bg-gray-100/80 hover:bg-gray-200/70 px-2.5 py-1 text-[11px] font-mono font-medium text-gray-600 hover:text-gray-900 transition-colors cursor-pointer"
-                  title="Click to copy address"
-                >
-                  <span>{shortAddr || '0x0000...0000'}</span>
-                  {copied ? (
-                    <Check size={11} className="text-emerald-600 stroke-[2.5]" />
+                      className="flex items-center gap-1 pb-0.5 border-b border-purple-300/80 focus-within:border-purple-500/70 transition-colors"
+                    >
+                      <span className="text-gray-400 font-medium text-sm select-none">@</span>
+                      <input
+                        ref={nameInputRef}
+                        type="text"
+                        value={nameInput}
+                        onChange={(e) => setNameInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') handleCancelEditName()
+                        }}
+                        placeholder="username"
+                        maxLength={20}
+                        className="w-full min-w-0 bg-transparent text-sm font-medium text-gray-800 outline-none placeholder:text-gray-400 p-0"
+                      />
+                      <div className="flex items-center gap-0.5 shrink-0 ml-1">
+                        <button
+                          type="submit"
+                          title="Save (Enter)"
+                          className="flex h-5 w-5 items-center justify-center rounded text-purple-600 hover:text-purple-800 hover:bg-purple-50 active:scale-90 transition-all cursor-pointer"
+                        >
+                          <Check size={14} className="stroke-[2.5]" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelEditName}
+                          title="Cancel (Esc)"
+                          className="flex h-5 w-5 items-center justify-center rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 active:scale-90 transition-all cursor-pointer"
+                        >
+                          <X size={14} className="stroke-[2]" />
+                        </button>
+                      </div>
+                    </form>
                   ) : (
-                    <Copy size={11} className="text-gray-400 group-hover/addr:text-gray-700" />
+                    <button
+                      type="button"
+                      onClick={handleStartEditName}
+                      className="group/name flex items-center gap-1.5 text-left cursor-pointer rounded-lg -ml-1 px-1 py-0.5"
+                      title="Click to edit username"
+                    >
+                      <h3 className="text-sm font-medium text-gray-800">
+                        {profile?.username ? `@${profile.username}` : 'Anonymous Player'}
+                      </h3>
+                      <ShieldCheck size={13} className="text-purple-600 shrink-0" />
+                      <Pencil size={10} className="text-gray-300 group-hover/name:text-gray-500 transition-colors ml-0.5" />
+                    </button>
                   )}
-                </button>
-              </div>
-
-              <div className="mt-3 rounded-2xl bg-gradient-to-br from-purple-500/[0.04] via-violet-500/[0.06] to-indigo-500/[0.03] p-3.5 border border-purple-100/80 flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-500/10 text-blue-600">
-                      <TokenUSDC variant="branded" size={13} />
-                    </div>
-                    <span className="text-xs font-semibold text-gray-500">USDC Balance</span>
-                  </div>
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl font-extrabold text-gray-950 tracking-tight tabular-nums">
-                      ${balanceHuman}
-                    </span>
-                    <span className="text-xs font-bold text-gray-400">USDC</span>
-                  </div>
                 </div>
 
-                {selectedNetwork === 'testnet' && (
-                  <a
-                    href="https://faucet.circle.com/"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full bg-purple-100/90 hover:bg-purple-200 px-3 py-1 text-[11px] font-bold text-purple-700 transition-colors shadow-2xs"
-                    title="Get free Circle USDC"
+                <div className="mt-1 flex items-center">
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    className="group/addr inline-flex items-center gap-1.5 rounded-full bg-gray-100/80 hover:bg-gray-200/70 px-2.5 py-1 text-[11px] font-mono font-medium text-gray-600 hover:text-gray-900 transition-colors cursor-pointer"
+                    title="Click to copy address"
                   >
-                    Faucet
-                  </a>
-                )}
-              </div>
+                    <span>{shortAddr || '0x0000...0000'}</span>
+                    {copied ? (
+                      <Check size={11} className="text-emerald-600 stroke-[2.5]" />
+                    ) : (
+                      <Copy size={11} className="text-gray-400 group-hover/addr:text-gray-700" />
+                    )}
+                  </button>
+                </div>
 
-              <div className="mt-3.5">
-                <button
-                  type="button"
-                  onClick={handleDisconnectClick}
-                  className="w-full flex items-center justify-center gap-2 rounded-2xl bg-rose-50/90 hover:bg-rose-100 text-rose-600 py-2.5 text-xs font-bold transition-all active:scale-[0.99] border border-rose-100/60 cursor-pointer"
-                >
-                  <LogOut size={13} className="text-rose-500" />
-                  <span>Disconnect</span>
-                </button>
+                <div className="mt-3 rounded-2xl bg-gradient-to-br from-purple-500/[0.04] via-violet-500/[0.06] to-indigo-500/[0.03] p-3.5 border border-purple-100/80 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-500/10 text-blue-600">
+                        <TokenUSDC variant="branded" size={13} />
+                      </div>
+                      <span className="text-xs font-semibold text-gray-500">USDC Balance</span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-extrabold text-gray-950 tracking-tight tabular-nums">
+                        ${balanceHuman}
+                      </span>
+                      <span className="text-xs font-bold text-gray-400">USDC</span>
+                    </div>
+                  </div>
+
+                  {selectedNetwork === 'testnet' && (
+                    <a
+                      href="https://faucet.circle.com/"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full bg-purple-100/90 hover:bg-purple-200 px-3 py-1 text-[11px] font-bold text-purple-700 transition-colors shadow-2xs"
+                      title="Get free Circle USDC"
+                    >
+                      Faucet
+                    </a>
+                  )}
+                </div>
+
+                <div className="mt-3.5">
+                  <button
+                    type="button"
+                    onClick={handleDisconnectClick}
+                    className="group/dc w-full flex items-center justify-center gap-2 rounded-2xl bg-gray-50/90 hover:bg-gray-100 text-gray-600 hover:text-gray-900 py-2.5 text-xs font-semibold transition-all active:scale-[0.98] border border-gray-200/75 hover:border-gray-300 shadow-2xs cursor-pointer"
+                  >
+                    <LogOut size={13} className="text-gray-400 group-hover/dc:text-gray-700 transition-colors" />
+                    <span>Disconnect</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          </motion.div>
-        </>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
     </div>
@@ -591,7 +590,17 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
   }, [])
 
   const handleToggleCategory = (cat: Category) => {
-    setSelected(prev => (prev === cat ? null : cat))
+    setSelected(prev => {
+      const next = prev === cat ? null : cat
+      try {
+        const stored = { name: 'lobby', initialCategory: next }
+        sessionStorage.setItem('trivio_current_screen', JSON.stringify(stored))
+        localStorage.setItem('trivio_current_screen', JSON.stringify(stored))
+      } catch {
+        // ignore
+      }
+      return next
+    })
   }
 
   const effectiveCategory = selected || 'General Knowledge'
@@ -606,13 +615,12 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
 
       {/* ── Top Navbar ── */}
       <header className="sticky top-0 z-40 w-full bg-transparent px-3.5 sm:px-6 md:px-8 py-3.5 sm:py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <h1
-            className="trivio-title shrink-0 select-none cursor-pointer"
-            style={{ fontSize: 'clamp(20px, 5vw, 28px)', color: '#1e0a3c', letterSpacing: '0.04em' }}
-          >
-            trivio
-          </h1>
+        <div className="flex items-center">
+          <img
+            src="/trivio-logo.png"
+            alt="trivio"
+            className="h-[105px] sm:h-[125px] w-auto select-none object-contain mix-blend-multiply -my-8 sm:-my-10 -ml-3 sm:-ml-4 cursor-pointer hover:opacity-90 transition-opacity"
+          />
         </div>
 
         <div className="flex items-center gap-2">
@@ -692,11 +700,10 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                   <button
                     key={label}
                     onClick={() => handleToggleCategory(label)}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs active:scale-95 cursor-pointer select-none ${
-                      active
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs active:scale-95 cursor-pointer select-none ${active
                         ? 'text-white font-semibold shadow-xs border border-transparent'
                         : 'bg-gray-100 hover:bg-gray-200/80 text-gray-800 border border-gray-200/60 font-medium'
-                    }`}
+                      }`}
                     style={active ? { background: 'var(--accent)' } : undefined}
                   >
                     <span className="text-sm leading-none">{emoji}</span>
