@@ -39,7 +39,7 @@ export const DEFAULT_AVATAR_SEEDS = [
  */
 export function getDiceBearAvatarUrl(style: string = 'bottts-neutral', seed: string = 'trivio'): string {
   const cleanSeed = encodeURIComponent(seed.trim().toLowerCase())
-  return `https://api.dicebear.com/9.x/${style}/svg?seed=${cleanSeed}&radius=50&backgroundColor=ede9fe,f5f3ff,e0e7ff,fce7f3,dbeafe,fef3c7`
+  return `https://api.dicebear.com/9.x/${style}/svg?seed=${cleanSeed}`
 }
 
 /**

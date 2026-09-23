@@ -2,7 +2,17 @@ import { useState, useEffect, useRef } from 'react'
 import { useAccount } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import type { Category } from '@/lib/questions'
+import { ALL_CATEGORIES } from '@/lib/questions'
 import { hasUserProfile } from '@/lib/userProfile'
+import {
+  saveRoomCategory,
+  getRoomCategory,
+  saveActiveGame,
+  clearActiveGame,
+  setPendingJoin,
+  consumePendingJoin,
+  isValidCategory,
+} from '@/lib/roomStorage'
 import LandingPage from '@/components/LandingPage'
 import Lobby from '@/components/Lobby'
 import CreateRoom from '@/components/CreateRoom'
@@ -13,47 +23,47 @@ import OnboardingModal from '@/components/OnboardingModal'
 
 type Screen =
   | { name: 'landing' }
-  | { name: 'lobby' }
+  | { name: 'lobby'; initialCategory?: Category | null }
   | { name: 'create'; category: Category }
   | { name: 'join'; category: Category; prefillCode?: string }
   | { name: 'game'; roomCode: string; category: Category }
   | { name: 'results'; winnerAddress: string; prizeAmount: string; txHash?: string }
 
-/** Read ?join=CODE from the URL once on mount */
-function getJoinCodeFromUrl(): string | null {
+/** Read ?join=CODE and ?cat=CATEGORY from the URL */
+export function getJoinParamsFromUrl(): { code: string; category?: Category } | null {
   try {
     const p = new URLSearchParams(window.location.search)
-    const code = p.get('join')
-    return code ? code.trim().toUpperCase() : null
+    const code = p.get('join')?.trim().toUpperCase()
+    if (!code) return null
+    const rawCat = p.get('cat') || p.get('category')
+    const category = isValidCategory(rawCat) ? rawCat : undefined
+    return { code, category }
   } catch {
     return null
   }
 }
 
-/** Build a shareable join URL for a room code */
-export function buildJoinUrl(code: string): string {
+/** Build a shareable join URL for a room code with its host-assigned category */
+export function buildJoinUrl(code: string, category?: Category): string {
   const base = window.location.origin + window.location.pathname
-  return `${base}?join=${encodeURIComponent(code.toUpperCase())}`
+  const p = new URLSearchParams()
+  p.set('join', code.trim().toUpperCase())
+  const resolvedCat = category || getRoomCategory(code)
+  if (resolvedCat) {
+    p.set('cat', resolvedCat)
+  }
+  return `${base}?${p.toString()}`
 }
 
 const STORAGE_SCREEN_KEY = 'trivio_current_screen'
 const STORAGE_AUTH_KEY = 'trivio_authenticated'
-const STORAGE_PENDING_JOIN_KEY = 'trivio_pending_join'
-
-function hasStoredAuth(): boolean {
-  try {
-    return localStorage.getItem(STORAGE_AUTH_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
 
 function getSavedCategory(): Category {
   try {
     const raw = sessionStorage.getItem(STORAGE_SCREEN_KEY) || localStorage.getItem(STORAGE_SCREEN_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (parsed?.category) return parsed.category as Category
+      if (isValidCategory(parsed?.category)) return parsed.category
     }
   } catch {
     // fallback
@@ -63,12 +73,11 @@ function getSavedCategory(): Category {
 
 function getInitialScreen(): Screen {
   // Always start on landing page until Privy authenticates the session
-  const joinCode = getJoinCodeFromUrl()
-  if (joinCode) {
-    try {
-      sessionStorage.setItem(STORAGE_PENDING_JOIN_KEY, joinCode)
-    } catch {
-      // ignore
+  const joinParams = getJoinParamsFromUrl()
+  if (joinParams) {
+    setPendingJoin(joinParams.code, joinParams.category)
+    if (joinParams.category) {
+      saveRoomCategory(joinParams.code, joinParams.category)
     }
   }
   return { name: 'landing' }
@@ -97,14 +106,16 @@ export default function App() {
 
   // Helper to resolve and navigate to target game screen upon authenticated session
   const restoreGameScreen = () => {
-    const pendingJoin =
-      sessionStorage.getItem(STORAGE_PENDING_JOIN_KEY) || getJoinCodeFromUrl()
+    const pendingJoin = consumePendingJoin() || getJoinParamsFromUrl()
     if (pendingJoin) {
-      sessionStorage.removeItem(STORAGE_PENDING_JOIN_KEY)
+      const cat = pendingJoin.category || getRoomCategory(pendingJoin.code) || 'General Knowledge'
+      saveRoomCategory(pendingJoin.code, cat)
       const url = new URL(window.location.href)
       url.searchParams.delete('join')
+      url.searchParams.delete('cat')
+      url.searchParams.delete('category')
       window.history.replaceState({}, '', url.pathname + '#/join')
-      setScreen({ name: 'join', category: 'General Knowledge', prefillCode: pendingJoin })
+      setScreen({ name: 'join', category: cat, prefillCode: pendingJoin.code })
       return
     }
 
@@ -112,7 +123,8 @@ export default function App() {
     if (hash.startsWith('#/game/')) {
       const code = hash.replace('#/game/', '').trim().toUpperCase()
       if (code) {
-        setScreen({ name: 'game', roomCode: code, category: getSavedCategory() })
+        const cat = getRoomCategory(code) || getSavedCategory()
+        setScreen({ name: 'game', roomCode: code, category: cat })
         return
       }
     }
@@ -163,7 +175,6 @@ export default function App() {
           localStorage.removeItem(STORAGE_AUTH_KEY)
           localStorage.removeItem(STORAGE_SCREEN_KEY)
           sessionStorage.removeItem(STORAGE_SCREEN_KEY)
-          sessionStorage.removeItem(STORAGE_PENDING_JOIN_KEY)
           localStorage.removeItem('wagmi.recentConnectorId')
           localStorage.removeItem('wagmi.store')
           if (window.location.hash) {
@@ -173,6 +184,23 @@ export default function App() {
           // ignore
         }
         setScreen({ name: 'landing' })
+      }
+    }
+  }, [ready, authenticated, screen.name])
+
+  // Watch for inbound join links while session is already active
+  useEffect(() => {
+    if (ready && authenticated && hasUserProfile() && screen.name !== 'landing') {
+      const joinParams = getJoinParamsFromUrl()
+      if (joinParams) {
+        const cat = joinParams.category || getRoomCategory(joinParams.code) || 'General Knowledge'
+        saveRoomCategory(joinParams.code, cat)
+        const url = new URL(window.location.href)
+        url.searchParams.delete('join')
+        url.searchParams.delete('cat')
+        url.searchParams.delete('category')
+        window.history.replaceState({}, '', url.pathname + '#/join')
+        setScreen({ name: 'join', category: cat, prefillCode: joinParams.code })
       }
     }
   }, [ready, authenticated, screen.name])
@@ -206,12 +234,14 @@ export default function App() {
     }
   }, [screen])
 
-  // Clean ?join= from URL once consumed in JoinRoom
+  // Clean ?join= and ?cat= from URL once consumed in JoinRoom
   useEffect(() => {
     if (screen.name === 'join' && 'prefillCode' in screen && screen.prefillCode) {
       const url = new URL(window.location.href)
-      if (url.searchParams.has('join')) {
+      if (url.searchParams.has('join') || url.searchParams.has('cat') || url.searchParams.has('category')) {
         url.searchParams.delete('join')
+        url.searchParams.delete('cat')
+        url.searchParams.delete('category')
         window.history.replaceState({}, '', url.pathname + window.location.hash)
       }
     }
@@ -261,7 +291,7 @@ export default function App() {
       localStorage.removeItem(STORAGE_AUTH_KEY)
       localStorage.removeItem(STORAGE_SCREEN_KEY)
       sessionStorage.removeItem(STORAGE_SCREEN_KEY)
-      sessionStorage.removeItem(STORAGE_PENDING_JOIN_KEY)
+      clearActiveGame()
       localStorage.removeItem('wagmi.recentConnectorId')
       localStorage.removeItem('wagmi.store')
       if (window.location.hash) {
@@ -274,9 +304,6 @@ export default function App() {
   }
 
   // Auth & Onboarding guard:
-  // If not authenticated via Privy (or Privy is still initializing), or currently on landing screen, or user has not completed profile onboarding:
-  // Render LandingPage in the background and present OnboardingModal.
-  // The game Lobby is never rendered until sign in with wallet is 100% verified and profile setup is complete.
   if (!ready || !authenticated || screen.name === 'landing' || !hasUserProfile()) {
     return (
       <>
@@ -294,8 +321,13 @@ export default function App() {
   if (screen.name === 'lobby') {
     return (
       <Lobby
+        initialCategory={screen.initialCategory}
         onCreateRoom={(category) => setScreen({ name: 'create', category })}
         onJoinRoom={(category) => setScreen({ name: 'join', category })}
+        onContinueGame={(roomCode, category) => {
+          saveActiveGame(roomCode, category)
+          setScreen({ name: 'game', roomCode, category })
+        }}
         onDisconnect={handleDisconnect}
       />
     )
@@ -305,10 +337,11 @@ export default function App() {
     return (
       <CreateRoom
         initialCategory={screen.category}
-        onBack={() => setScreen({ name: 'lobby' })}
-        onRoomCreated={(code, category) =>
+        onBack={() => setScreen({ name: 'lobby', initialCategory: screen.category })}
+        onRoomCreated={(code, category) => {
+          saveActiveGame(code, category, true)
           setScreen({ name: 'game', roomCode: code, category })
-        }
+        }}
       />
     )
   }
@@ -318,10 +351,11 @@ export default function App() {
       <JoinRoom
         initialCategory={screen.category}
         prefillCode={screen.prefillCode}
-        onBack={() => setScreen({ name: 'lobby' })}
-        onJoined={(code, category) =>
+        onBack={() => setScreen({ name: 'lobby', initialCategory: screen.category })}
+        onJoined={(code, category) => {
+          saveActiveGame(code, category, false)
           setScreen({ name: 'game', roomCode: code, category })
-        }
+        }}
       />
     )
   }
@@ -332,9 +366,10 @@ export default function App() {
         roomCode={screen.roomCode}
         category={screen.category}
         onBack={() => setScreen({ name: 'lobby' })}
-        onGameEnd={(winnerAddress, prizeAmount, txHash) =>
+        onGameEnd={(winnerAddress, prizeAmount, txHash) => {
+          clearActiveGame()
           setScreen({ name: 'results', winnerAddress, prizeAmount, txHash })
-        }
+        }}
       />
     )
   }
@@ -346,7 +381,10 @@ export default function App() {
         prizeAmount={screen.prizeAmount}
         txHash={screen.txHash}
         myAddress={activeAddress}
-        onPlayAgain={() => setScreen({ name: 'lobby' })}
+        onPlayAgain={() => {
+          clearActiveGame()
+          setScreen({ name: 'lobby' })
+        }}
       />
     )
   }

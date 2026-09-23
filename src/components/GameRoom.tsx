@@ -8,6 +8,7 @@ import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import { useStartGame, useDeclareWinner, useRoomInfo, formatUSDCRaw } from '@/hooks/useTriviaContract'
 import { getQuestions, type Category, type TriviaQuestion } from '@/lib/questions'
+import { getRoomCategory, saveActiveGame, clearActiveGame } from '@/lib/roomStorage'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 
 const QUESTION_TIME = 15
@@ -43,6 +44,8 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const privyWalletAddress = user?.wallet?.address as `0x${string}` | undefined
   const activeAddress = wagmiAddress || privyWalletAddress || ''
 
+  const resolvedCategory = category || getRoomCategory(roomCode) || 'General Knowledge'
+
   const [phase, setPhase] = useState<GamePhase>('lobby')
   const [questions, setQuestions] = useState<TriviaQuestion[]>([])
   const [qIndex, setQIndex] = useState(0)
@@ -65,6 +68,11 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     activeAddress && host && host.toLowerCase() === activeAddress.toLowerCase()
   )
 
+  // Keep active game persisted for smooth resume/rejoin
+  useEffect(() => {
+    saveActiveGame(roomCode, resolvedCategory, isHost)
+  }, [roomCode, resolvedCategory, isHost])
+
   const { startGame, isPending: startPending, isConfirming: startConfirming, isSuccess: gameStarted } = useStartGame()
   const { declareWinner, isPending: declarePending, isConfirming: declareConfirming, isSuccess: declared, hash: declareHash } = useDeclareWinner()
 
@@ -75,7 +83,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     const isGameActive = gameStarted || status === 1
     if (isGameActive && phase === 'lobby') {
       toast.success('Game started!')
-      const qs = getQuestions(category, 10, roomCode)
+      const qs = getQuestions(resolvedCategory, 10, roomCode)
       startTransition(() => {
         setQuestions(qs)
         setQIndex(0)
@@ -87,7 +95,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       })
       answerStartRef.current = Date.now()
     }
-  }, [gameStarted, status, phase, category, roomCode])
+  }, [gameStarted, status, phase, resolvedCategory, roomCode])
 
   // Timer for questions
   useEffect(() => {
@@ -108,8 +116,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   // Winner payout synchronization (for host who triggered payout or guest receiving finished status)
   useEffect(() => {
     if (declared && activeAddress) {
+      clearActiveGame()
       onGameEnd(activeAddress, prizeHuman, declareHash)
     } else if (status === 2 && winner && winner !== '0x0000000000000000000000000000000000000000' && phase === 'finished') {
+      clearActiveGame()
       onGameEnd(winner, prizeHuman)
     }
   }, [declared, activeAddress, prizeHuman, declareHash, status, winner, phase, onGameEnd])
@@ -179,7 +189,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                 Room <span style={{ color: 'var(--accent)' }}>{roomCode}</span>
               </h1>
               <p className="text-xs" style={{ color: 'var(--subtle)' }}>
-                {category} · {isHost ? 'You are the Host' : 'Waiting for host to start'}
+                {resolvedCategory} · {isHost ? 'You are the Host' : 'Waiting for host to start'}
               </p>
             </div>
           </div>
@@ -188,10 +198,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
             <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-3">
               <div className="rounded-2xl p-3 text-center relative" style={glass.inner}>
                 <div className="flex items-center justify-center gap-1.5 mb-0.5">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
+                  <Users size={13} style={{ color: 'var(--subtle)' }} />
                   <p className="text-xs" style={{ color: 'var(--subtle)' }}>Players</p>
                 </div>
                 <p className="display text-2xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
@@ -207,7 +214,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
               </div>
             </div>
 
-            {/* ── Modern Invite Players Box (Clean Slate Grey Theme) ── */}
+            {/* ── Modern Invite Players Box (Slim, Clean Theme) ── */}
             <div
               className="mb-4 overflow-hidden rounded-2xl p-3.5 transition-all"
               style={{
@@ -217,13 +224,15 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
               }}
             >
               {/* Header row */}
-              <div className="mb-2.5 flex items-center gap-1.5">
-                <span className="flex h-5 w-5 items-center justify-center rounded-md bg-slate-200 text-slate-700">
-                  <Link2 size={12} />
-                </span>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800">
-                  Invite Players
-                </span>
+              <div className="mb-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-md bg-slate-200 text-slate-700">
+                    <Link2 size={12} />
+                  </span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800">
+                    Invite Players
+                  </span>
+                </div>
               </div>
 
               {/* Integrated modern input container */}
@@ -236,21 +245,17 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                 }}
               >
                 <span className="flex-1 min-w-0 truncate font-mono text-xs text-slate-600 select-all">
-                  {buildJoinUrl(roomCode)}
+                  {buildJoinUrl(roomCode, resolvedCategory)}
                 </span>
 
                 <button
                   onClick={() => {
-                    void navigator.clipboard.writeText(buildJoinUrl(roomCode))
+                    void navigator.clipboard.writeText(buildJoinUrl(roomCode, resolvedCategory))
                     setCopiedLink(true)
                     setTimeout(() => setCopiedLink(false), 2000)
                     toast.success('Invite link copied!')
                   }}
-                  className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all duration-200 active:scale-95 ${
-                    copiedLink
-                      ? 'bg-emerald-600 hover:bg-emerald-500'
-                      : 'bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6]'
-                  }`}
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-all duration-150 active:scale-95 bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6]"
                 >
                   {copiedLink ? <Check size={13} className="stroke-[2.5]" /> : <Copy size={13} />}
                   <span>{copiedLink ? 'Copied!' : 'Copy Link'}</span>
@@ -293,7 +298,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
             {!TRIVIA_GAME_ADDRESS && (
               <button
                 onClick={() => {
-                  const qs = getQuestions(category, 10, roomCode)
+                  const qs = getQuestions(resolvedCategory, 10, roomCode)
                   setQuestions(qs)
                   setQIndex(0)
                   setTimeLeft(QUESTION_TIME)
@@ -328,7 +333,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
           <div className="mb-4 sm:mb-5">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-medium" style={{ color: 'var(--subtle)' }}>
-                Q{qIndex + 1} of {questions.length} · <span className="font-semibold">{category}</span>
+                Q{qIndex + 1} of {questions.length} · <span className="font-semibold">{resolvedCategory}</span>
               </p>
               <div className="flex items-center gap-1.5">
                 <Clock size={13} style={{ color: timeFraction < 0.3 ? 'var(--danger)' : 'var(--subtle)' }} />
@@ -486,7 +491,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
           {!TRIVIA_GAME_ADDRESS && (
             <button
-              onClick={() => onGameEnd(activeAddress || '0x0000000000000000000000000000000000000000', prizeHuman)}
+              onClick={() => {
+                clearActiveGame()
+                onGameEnd(activeAddress || '0x0000000000000000000000000000000000000000', prizeHuman)
+              }}
               className="w-full rounded-2xl py-4 text-sm font-semibold transition-opacity hover:opacity-80"
               style={{ background: 'var(--accent)', color: 'white' }}
             >

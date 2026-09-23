@@ -16,6 +16,7 @@ import {
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import type { Category } from '@/lib/questions'
 import { parseUSDC } from '@/hooks/useTriviaContract'
+import { saveRoomCategory, saveActiveGame } from '@/lib/roomStorage'
 
 const glass = {
   card: {
@@ -83,6 +84,8 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
   useEffect(() => {
     if (created) {
       toast.success(`Room ${roomCode} created!`)
+      saveRoomCategory(roomCode, category)
+      saveActiveGame(roomCode, category, true)
       onRoomCreated(roomCode, category)
     }
   }, [created, roomCode, category, onRoomCreated])
@@ -120,11 +123,13 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
       </div>
 
       <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-8 pt-4 sm:max-w-lg sm:px-6 sm:py-6">
-        <div className="mb-5 sm:mb-6 flex items-center gap-3">
-          <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-full transition-opacity hover:opacity-70" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid var(--border)' }}>
-            <ArrowLeft size={16} style={{ color: 'var(--ink)' }} />
-          </button>
-          <h1 className="display text-xl sm:text-2xl font-bold" style={{ color: 'var(--ink)', letterSpacing: '-0.03em' }}>Create Room</h1>
+        <div className="mb-5 sm:mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-full transition-opacity hover:opacity-70" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid var(--border)' }}>
+              <ArrowLeft size={16} style={{ color: 'var(--ink)' }} />
+            </button>
+            <h1 className="display text-xl sm:text-2xl font-bold" style={{ color: 'var(--ink)', letterSpacing: '-0.03em' }}>Create Room</h1>
+          </div>
         </div>
 
         {!contractReady && (

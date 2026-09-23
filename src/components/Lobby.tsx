@@ -16,6 +16,8 @@ import {
   Sparkles,
   Dices,
   X,
+  Play,
+  ArrowRight,
 } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
@@ -29,6 +31,7 @@ import {
 import { useUsdcBalance, formatUSDCRaw } from '@/hooks/useTriviaContract'
 import { ARC_TESTNET_CHAIN_ID, ARC_MAINNET_CHAIN_ID } from '@/config'
 import type { Category } from '@/lib/questions'
+import { getActiveGame, clearActiveGame, type ActiveGameSession } from '@/lib/roomStorage'
 
 const CATEGORIES: { label: Category; emoji: string }[] = [
   { label: 'General Knowledge', emoji: '🧠' },
@@ -40,8 +43,10 @@ const CATEGORIES: { label: Category; emoji: string }[] = [
 ]
 
 interface LobbyProps {
+  initialCategory?: Category | null
   onCreateRoom: (category: Category) => void
   onJoinRoom: (category: Category) => void
+  onContinueGame?: (roomCode: string, category: Category) => void
   onDisconnect?: () => void
 }
 
@@ -68,8 +73,29 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [profile, setProfile] = useState<UserProfile | null>(() => getUserProfile())
+  const [avatarImgError, setAvatarImgError] = useState(false)
   const privyWalletAddress = user?.wallet?.address as `0x${string}` | undefined
   const activeAddress = wagmiAddress || privyWalletAddress || '0x0000000000000000000000000000000000000000'
+
+  useEffect(() => {
+    setAvatarImgError(false)
+  }, [profile?.avatarUrl])
+
+  useEffect(() => {
+    const p = getUserProfile()
+    if (p) {
+      if (!p.avatarUrl) {
+        const fixed: UserProfile = {
+          ...p,
+          avatarUrl: getDiceBearAvatarUrl(p.avatarStyle || 'bottts-neutral', p.avatarSeed || p.username),
+        }
+        saveUserProfile(fixed)
+        setProfile(fixed)
+      } else {
+        setProfile(p)
+      }
+    }
+  }, [activeAddress])
 
   const activeChainId = selectedNetwork === 'mainnet' ? ARC_MAINNET_CHAIN_ID : ARC_TESTNET_CHAIN_ID
   const { data: rawBalance } = useUsdcBalance(activeAddress as `0x${string}`, activeChainId)
@@ -211,16 +237,17 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
   }
 
   const handleRandomizeAvatar = (e: React.MouseEvent) => {
+    e.preventDefault()
     e.stopPropagation()
     setIsRollingAvatar(true)
     setTimeout(() => setIsRollingAvatar(false), 500)
 
     const randomStyle = DICEBEAR_STYLES[Math.floor(Math.random() * DICEBEAR_STYLES.length)].id
-    const randomSeed = `${profile?.username || 'player'}_${Math.floor(Math.random() * 100000)}`
+    const randomSeed = `p_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`
     const newAvatarUrl = getDiceBearAvatarUrl(randomStyle, randomSeed)
 
     const updated: UserProfile = {
-      username: profile?.username || 'player',
+      username: profile?.username || (displayName.replace(/^@/, '') || 'player'),
       avatarUrl: newAvatarUrl,
       avatarSeed: randomSeed,
       avatarStyle: randomStyle,
@@ -228,6 +255,7 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
     }
     saveUserProfile(updated)
     setProfile(updated)
+    setAvatarImgError(false)
     toast.success('Avatar rolled!')
   }
 
@@ -236,7 +264,6 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
     setNetworkDropdownOpen(false)
     const targetChainId = network === 'mainnet' ? ARC_MAINNET_CHAIN_ID : ARC_TESTNET_CHAIN_ID
 
-    // 1. Switch in Wagmi connector (MetaMask, Rabby, Injected, etc.)
     try {
       if (switchChainAsync) {
         await switchChainAsync({ chainId: targetChainId })
@@ -247,7 +274,6 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
       console.warn('Wagmi switchChain error:', err)
     }
 
-    // 2. Switch in Privy wallet provider if available
     try {
       const activeWallet = wallets?.find(w => w.address?.toLowerCase() === activeAddress?.toLowerCase()) || wallets?.[0]
       if (activeWallet && activeWallet.switchChain) {
@@ -269,10 +295,6 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
     : ''
   const displayName = profile?.username ? `@${profile.username}` : (shortAddr || 'player')
 
-  const explorerUrl = selectedNetwork === 'mainnet'
-    ? `https://explorer.arc.io/address/${activeAddress}`
-    : `https://explorer.testnet.arc.io/address/${activeAddress}`
-
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Profile Chip Button */}
@@ -281,17 +303,17 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
         className="group flex items-center gap-2 rounded-full border border-gray-200/90 bg-white/90 pl-1.5 pr-2.5 py-1 text-xs font-semibold text-gray-900 shadow-xs backdrop-blur-md transition-all hover:border-gray-300 hover:bg-white hover:shadow-sm active:scale-95"
         style={{ letterSpacing: '-0.01em' }}
       >
-        {/* Avatar with status indicator */}
-        <div className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-100 overflow-hidden ring-1 ring-black/5">
-          {profile?.avatarUrl ? (
+        <div className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-purple-50 overflow-hidden ring-1 ring-black/5">
+          {profile?.avatarUrl && !avatarImgError ? (
             <img
               src={profile.avatarUrl}
               alt={profile.username}
               className="h-full w-full object-cover"
+              onError={() => setAvatarImgError(true)}
             />
           ) : (
-            <span className="flex h-full w-full items-center justify-center bg-purple-50 text-purple-600 font-bold text-[10px]">
-              {displayName.slice(0, 1).toUpperCase()}
+            <span className="flex h-full w-full items-center justify-center bg-purple-100 text-purple-700 font-bold text-[10px]">
+              {displayName.replace(/^@/, '').slice(0, 1).toUpperCase()}
             </span>
           )}
         </div>
@@ -302,12 +324,11 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
 
         <ChevronDown
           size={12}
-          className={`text-gray-400 transition-transform duration-200 ease-out group-hover:text-gray-600 ${open ? 'rotate-180 text-gray-700' : ''
-            }`}
+          className={`text-gray-400 transition-transform duration-200 ease-out group-hover:text-gray-600 ${open ? 'rotate-180 text-gray-700' : ''}`}
         />
       </button>
 
-      {/* Profile Popover (Modern Web3 Modal / Card) */}
+      {/* Profile Popover */}
       <AnimatePresence>
         {open && (
           <motion.div
@@ -315,19 +336,15 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute right-0 top-full mt-2 w-[310px] sm:w-[330px] rounded-2xl bg-white shadow-2xl border border-gray-100/90 overflow-hidden z-50"
+            className="absolute right-0 top-full mt-2 w-[calc(100vw-28px)] max-w-[320px] sm:max-w-[330px] rounded-2xl bg-white shadow-2xl border border-gray-100/90 overflow-hidden z-50"
             style={{
               boxShadow: '0 20px 48px -12px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.04)',
             }}
           >
-            {/* Header Cover Banner */}
             <div className="relative h-20 bg-gradient-to-r from-violet-700 via-purple-600 to-indigo-700" />
 
-            {/* Profile Identity */}
             <div className="relative px-4 pt-0 pb-3.5">
-              {/* Top Row: Interactive Avatar & Network Switcher */}
               <div className="flex items-end justify-between -mt-8 mb-2.5">
-                {/* Avatar with click-to-upload & sleek shuffle badge */}
                 <div className="relative group/avatar">
                   <button
                     type="button"
@@ -335,41 +352,38 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                     title="Click to upload custom photo"
                     className="relative h-[68px] w-[68px] rounded-2xl bg-white p-0.5 shadow-md ring-2 ring-white/90 overflow-hidden transition-all hover:scale-[1.03] active:scale-95 cursor-pointer text-left block"
                   >
-                    {profile?.avatarUrl ? (
+                    {profile?.avatarUrl && !avatarImgError ? (
                       <img
                         src={profile.avatarUrl}
                         alt=""
                         className="h-full w-full rounded-[14px] object-cover bg-gray-50 transition-transform duration-300 group-hover/avatar:scale-105"
+                        onError={() => setAvatarImgError(true)}
                       />
                     ) : (
-                      <div className="h-full w-full rounded-[14px] bg-purple-50 flex items-center justify-center font-bold text-purple-700">
-                        {displayName.slice(0, 1).toUpperCase()}
+                      <div className="h-full w-full rounded-[14px] bg-purple-100 flex items-center justify-center font-bold text-xl text-purple-700">
+                        {displayName.replace(/^@/, '').slice(0, 1).toUpperCase()}
                       </div>
                     )}
 
-                    {/* Elegant dark frosted hover overlay */}
-                    <div className="absolute inset-0 bg-black/45 backdrop-blur-[1px] opacity-0 group-hover/avatar:opacity-100 transition-opacity rounded-[14px] flex flex-col items-center justify-center text-white gap-0.5">
+                    <div className="absolute inset-0 bg-black/45 backdrop-blur-[1px] opacity-0 group-hover/avatar:opacity-100 transition-opacity rounded-[14px] flex flex-col items-center justify-center text-white gap-0.5 pointer-events-none">
                       <Camera size={14} className="stroke-[2.5]" />
                       <span className="text-[9px] font-bold tracking-tight">Upload</span>
                     </div>
                   </button>
 
-                  {/* Sleek Shuffle / Dice Micro Button */}
                   <button
                     type="button"
                     onClick={handleRandomizeAvatar}
                     title="Roll random avatar"
-                    className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-white text-gray-700 hover:text-purple-600 hover:bg-purple-50 shadow-sm border border-gray-200/90 transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                    className="absolute -bottom-1 -right-1 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-white text-gray-700 hover:text-purple-600 hover:bg-purple-50 shadow-sm border border-gray-200/90 transition-all hover:scale-110 active:scale-95 cursor-pointer"
                   >
                     <Dices
                       size={12}
-                      className={`transition-transform duration-500 ease-out ${isRollingAvatar ? 'rotate-180 text-purple-600' : 'group-hover/avatar:rotate-45'
-                        }`}
+                      className={`transition-transform duration-500 ease-out ${isRollingAvatar ? 'rotate-180 text-purple-600' : 'group-hover/avatar:rotate-45'}`}
                     />
                   </button>
                 </div>
 
-                {/* Hidden file input */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -378,7 +392,6 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                   className="hidden"
                 />
 
-                {/* Modern Minimal Network Selector */}
                 <div className="relative mb-1" ref={networkRef}>
                   <button
                     type="button"
@@ -388,12 +401,10 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                     <span>{selectedNetwork === 'testnet' ? 'Testnet' : 'Mainnet'}</span>
                     <ChevronDown
                       size={12}
-                      className={`text-gray-400 transition-transform duration-200 group-hover/net:text-gray-700 ${networkDropdownOpen ? 'rotate-180 text-gray-900' : ''
-                        }`}
+                      className={`text-gray-400 transition-transform duration-200 group-hover/net:text-gray-700 ${networkDropdownOpen ? 'rotate-180 text-gray-900' : ''}`}
                     />
                   </button>
 
-                  {/* Modern Network Dropdown Menu */}
                   <AnimatePresence>
                     {networkDropdownOpen && (
                       <motion.div
@@ -411,8 +422,7 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                           onClick={() => handleNetworkChange('testnet')}
                           className={`flex w-full items-center rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all ${selectedNetwork === 'testnet'
                             ? 'bg-purple-50 text-purple-700'
-                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                            }`}
+                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
                         >
                           <span>Testnet</span>
                         </button>
@@ -422,8 +432,7 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                           onClick={() => handleNetworkChange('mainnet')}
                           className={`flex w-full items-center rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all mt-0.5 ${selectedNetwork === 'mainnet'
                             ? 'bg-purple-50 text-purple-700'
-                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                            }`}
+                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
                         >
                           <span>Mainnet</span>
                         </button>
@@ -433,7 +442,6 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                 </div>
               </div>
 
-              {/* Username with Minimalist Underline Inline Editing */}
               <div className="mt-1">
                 {isEditingName ? (
                   <form
@@ -490,7 +498,6 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                 )}
               </div>
 
-              {/* Clean Interactive Address Pill */}
               <div className="mt-1 flex items-center">
                 <button
                   type="button"
@@ -507,7 +514,6 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                 </button>
               </div>
 
-              {/* USDC Balance Card with Circle Faucet Link */}
               <div className="mt-3 rounded-2xl bg-gradient-to-br from-purple-500/[0.04] via-violet-500/[0.06] to-indigo-500/[0.03] p-3.5 border border-purple-100/80 flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-1.5 mb-1">
@@ -537,7 +543,6 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                 )}
               </div>
 
-              {/* Sleek Full-Width Disconnect Button */}
               <div className="mt-3.5">
                 <button
                   type="button"
@@ -556,10 +561,19 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
   )
 }
 
+export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onContinueGame, onDisconnect }: LobbyProps) {
+  const [selected, setSelected] = useState<Category | null>(() => initialCategory ?? null)
+  const [activeSession, setActiveSession] = useState<ActiveGameSession | null>(() => getActiveGame())
 
+  useEffect(() => {
+    setActiveSession(getActiveGame())
+  }, [])
 
-export default function Lobby({ onCreateRoom, onJoinRoom, onDisconnect }: LobbyProps) {
-  const [selected, setSelected] = useState<Category>('General Knowledge')
+  const handleToggleCategory = (cat: Category) => {
+    setSelected(prev => (prev === cat ? null : cat))
+  }
+
+  const effectiveCategory = selected || 'General Knowledge'
 
   return (
     <div className="relative flex min-h-screen min-h-[100dvh] w-full flex-col justify-between overflow-x-hidden bg-[#fafafa]">
@@ -569,65 +583,103 @@ export default function Lobby({ onCreateRoom, onJoinRoom, onDisconnect }: LobbyP
         <div style={{ position: 'absolute', bottom: '-5%', right: '-6%', width: 450, height: 450, borderRadius: '50%', background: 'radial-gradient(circle, rgba(124,58,237,0.05) 0%, transparent 70%)', filter: 'blur(65px)' }} />
       </div>
 
-      {/* ── Top Navbar (Transparent Header) ── */}
-      <header className="sticky top-0 z-40 w-full bg-transparent px-4 sm:px-8 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      {/* ── Top Navbar ── */}
+      <header className="sticky top-0 z-40 w-full bg-transparent px-3.5 sm:px-6 md:px-8 py-3 sm:py-4 flex items-center justify-between">
+        <div className="flex items-center gap-2 sm:gap-3">
           <h1
             className="trivio-title shrink-0 select-none cursor-pointer"
-            style={{ fontSize: 'clamp(22px, 5vw, 28px)', color: '#1e0a3c', letterSpacing: '0.04em' }}
+            style={{ fontSize: 'clamp(20px, 5vw, 28px)', color: '#1e0a3c', letterSpacing: '0.04em' }}
           >
             trivio
           </h1>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <WalletProfile onDisconnect={onDisconnect} />
         </div>
       </header>
 
       {/* ── Main Game Hub Content ── */}
-      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 py-8 sm:py-12 w-full max-w-lg mx-auto my-auto">
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-3.5 sm:px-6 py-4 sm:py-8 w-full max-w-lg mx-auto my-auto">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className="w-full space-y-6"
+          className="w-full space-y-3.5 sm:space-y-4"
         >
-          {/* ── Category picker section ── */}
-          <section className="rounded-3xl bg-white p-5 sm:p-6 border border-gray-100/90 shadow-sm">
-            <div className="mb-3.5 flex items-center justify-between">
-              <p
-                className="text-xs font-bold uppercase tracking-wider text-gray-900"
-                style={{ letterSpacing: '0.08em' }}
-              >
-                Pick a category
-              </p>
-              <span className="text-[11px] font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
-                {selected}
-              </span>
-            </div>
+          {/* ── Active Session Recovery Banner ── */}
+          {activeSession && onContinueGame && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="flex items-center justify-between rounded-2xl bg-white p-3 sm:p-4 border border-gray-200/80 shadow-xs transition-all"
+            >
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600 border border-purple-100/80">
+                  <Dices size={17} className="text-purple-600" />
+                </div>
 
-            <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-mono text-xs sm:text-sm font-bold text-gray-900 tracking-tight">
+                      {activeSession.roomCode}
+                    </span>
+                    <span className="text-[11px] sm:text-xs font-medium text-gray-500 truncate">
+                      · {activeSession.category}
+                    </span>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-gray-500 truncate mt-0.5">
+                    {activeSession.isHost
+                      ? 'Waiting for players · Return to manage your game'
+                      : 'Game in progress · Return anytime to continue'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-2.5">
+                <button
+                  onClick={() => onContinueGame(activeSession.roomCode, activeSession.category)}
+                  className="rounded-full px-3.5 sm:px-4 py-1.5 sm:py-2 text-xs font-bold text-white transition-all shadow-xs active:scale-95 cursor-pointer hover:brightness-105"
+                  style={{ background: 'var(--accent)' }}
+                >
+                  Resume
+                </button>
+                <button
+                  onClick={() => {
+                    clearActiveGame()
+                    setActiveSession(null)
+                  }}
+                  className="p-1 sm:p-1.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+                  title="Dismiss"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── Category Pill Selector ── */}
+          <section className="rounded-2xl sm:rounded-3xl bg-white p-3.5 sm:p-5 border border-gray-200/80 shadow-xs space-y-2 sm:space-y-2.5">
+            <h2 className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-gray-500 pl-0.5">
+              Categories
+            </h2>
+            <div className="flex flex-wrap gap-1.5 sm:gap-2">
               {CATEGORIES.map(({ label, emoji }) => {
                 const active = selected === label
                 return (
                   <button
                     key={label}
-                    onClick={() => setSelected(label)}
-                    className={`group relative flex flex-col items-center justify-center min-h-[72px] sm:min-h-[82px] gap-1.5 rounded-2xl p-2 text-center transition-all duration-200 active:scale-95 ${active
-                      ? 'bg-purple-50/80 border-2 border-purple-600 shadow-xs ring-2 ring-purple-600/15'
-                      : 'bg-gray-50/80 border-2 border-transparent hover:bg-gray-100/80 hover:border-gray-200'
-                      }`}
+                    onClick={() => handleToggleCategory(label)}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs active:scale-95 cursor-pointer select-none ${
+                      active
+                        ? 'text-white font-semibold shadow-xs border border-transparent'
+                        : 'bg-gray-100 hover:bg-gray-200/80 text-gray-800 border border-gray-200/60 font-medium'
+                    }`}
+                    style={active ? { background: 'var(--accent)' } : undefined}
                   >
-                    <span className="text-xl sm:text-2xl leading-none transition-transform duration-200 group-hover:scale-110">
-                      {emoji}
-                    </span>
-                    <span
-                      className={`text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 transition-colors ${active ? 'text-purple-950' : 'text-gray-800'
-                        }`}
-                    >
-                      {label}
-                    </span>
+                    <span className="text-sm leading-none">{emoji}</span>
+                    <span>{label}</span>
                   </button>
                 )
               })}
@@ -635,43 +687,49 @@ export default function Lobby({ onCreateRoom, onJoinRoom, onDisconnect }: LobbyP
           </section>
 
           {/* ── Action cards (Create & Join) ── */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-3.5">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5">
             {/* Create Room */}
             <button
-              onClick={() => onCreateRoom(selected)}
-              className="group flex flex-col items-center justify-center gap-2 rounded-3xl p-4 sm:py-5 text-center transition-all duration-200 hover:brightness-105 active:scale-95 shadow-md"
+              onClick={() => {
+                if (!selected) {
+                  toast.error('Please select a category first')
+                  return
+                }
+                onCreateRoom(selected)
+              }}
+              className="group flex flex-col items-center justify-center gap-1.5 sm:gap-2 rounded-2xl sm:rounded-3xl p-3.5 sm:py-5 text-center transition-all duration-200 hover:brightness-105 active:scale-95 shadow-md"
               style={{
                 background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
                 boxShadow: '0 8px 24px -4px rgba(124, 58, 237, 0.28)',
               }}
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/20 text-white backdrop-blur-md transition-transform duration-200 group-hover:scale-110">
-                <Plus size={20} className="stroke-[2.5]" />
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl sm:rounded-2xl bg-white/20 text-white backdrop-blur-md transition-transform duration-200 group-hover:scale-110">
+                <Plus size={18} className="stroke-[2.5]" />
               </div>
               <div>
-                <p className="text-sm sm:text-base font-extrabold text-white tracking-tight">Create Room</p>
-                <p className="text-[11px] text-white/80 font-medium">Host a game</p>
+                <p className="text-xs sm:text-base font-extrabold text-white tracking-tight">Create Room</p>
+                <p className="text-[10px] sm:text-[11px] text-white/80 font-medium">Host a game</p>
               </div>
             </button>
 
             {/* Join Room */}
             <button
-              onClick={() => onJoinRoom(selected)}
-              className="group flex flex-col items-center justify-center gap-2 rounded-3xl p-4 sm:py-5 text-center transition-all duration-200 bg-white hover:bg-violet-50/50 active:scale-95 border-2 border-purple-100 hover:border-purple-300 shadow-sm"
+              onClick={() => onJoinRoom(selected || 'General Knowledge')}
+              className="group flex flex-col items-center justify-center gap-1.5 sm:gap-2 rounded-2xl sm:rounded-3xl p-3.5 sm:py-5 text-center transition-all duration-200 bg-white hover:bg-violet-50/50 active:scale-95 border-2 border-purple-100 hover:border-purple-300 shadow-sm"
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-purple-50 text-purple-700 transition-transform duration-200 group-hover:scale-110">
-                <LogIn size={20} className="stroke-[2.5]" />
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl sm:rounded-2xl bg-purple-50 text-purple-700 transition-transform duration-200 group-hover:scale-110">
+                <LogIn size={18} className="stroke-[2.5]" />
               </div>
               <div>
-                <p className="text-sm sm:text-base font-extrabold text-gray-900 tracking-tight">Join Room</p>
-                <p className="text-[11px] text-gray-500 font-medium">Enter a code</p>
+                <p className="text-xs sm:text-base font-extrabold text-gray-900 tracking-tight">Join Room</p>
+                <p className="text-[10px] sm:text-[11px] text-gray-500 font-medium">Enter a code</p>
               </div>
             </button>
           </div>
 
           {/* ── Footer onchain info badge ── */}
-          <div className="flex items-center justify-center gap-2 text-center text-xs font-medium text-gray-500 pt-1">
-            <TokenUSDC variant="branded" size={14} />
+          <div className="flex items-center justify-center gap-1.5 sm:gap-2 text-center text-[11px] sm:text-xs font-medium text-gray-500 pt-1 px-2">
+            <TokenUSDC variant="branded" size={13} />
             <span>Prizes paid in USDC on Arc Testnet · instant, zero gas fee</span>
           </div>
         </motion.div>

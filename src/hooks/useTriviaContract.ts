@@ -67,6 +67,16 @@ const TRIVIA_ABI = [
     inputs: [{ name: 'roomId', type: 'bytes32' }],
     outputs: [{ name: '', type: 'bool' }],
   },
+  {
+    name: 'isPlayer',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'roomId', type: 'bytes32' },
+      { name: 'player', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
 ] as const
 
 // ── Helper: room code → bytes32 ───────────────────────────────────────────────
@@ -93,6 +103,20 @@ export function useRoomInfo(code: string | null, pollInterval: number = 1500) {
     query: {
       enabled: Boolean(TRIVIA_GAME_ADDRESS) && Boolean(roomId),
       refetchInterval: pollInterval,
+    },
+  })
+}
+
+export function useIsPlayer(code: string | null, playerAddress: `0x${string}` | undefined) {
+  const roomId = code && code.trim().length >= 4 ? roomCodeToBytes32(code) : undefined
+  return useReadContract({
+    address: TRIVIA_GAME_ADDRESS ?? undefined,
+    abi: TRIVIA_ABI,
+    functionName: 'isPlayer',
+    args: roomId && playerAddress ? [roomId, playerAddress] : undefined,
+    chainId: ARC_TESTNET_CHAIN_ID,
+    query: {
+      enabled: Boolean(TRIVIA_GAME_ADDRESS) && Boolean(roomId) && Boolean(playerAddress),
     },
   })
 }

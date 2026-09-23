@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Users } from 'lucide-react'
+import { ArrowLeft, Users, Check, ArrowRight, ShieldCheck } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import {
   useRoomInfo,
+  useIsPlayer,
   useJoinRoom,
   useApproveUsdc,
   useUsdcAllowance,
@@ -16,6 +17,7 @@ import {
 } from '@/hooks/useTriviaContract'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import type { Category } from '@/lib/questions'
+import { getRoomCategory, saveRoomCategory } from '@/lib/roomStorage'
 
 const ROOM_STATUS = ['Open', 'In Progress', 'Finished', 'Cancelled']
 
@@ -48,13 +50,32 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   const privyWalletAddress = user?.wallet?.address as `0x${string}` | undefined
   const activeAddress = address || privyWalletAddress || undefined
 
-  const [input, setInput] = useState(prefillCode ?? '')
-  const [checkedCode, setCheckedCode] = useState<string | null>(prefillCode ?? null)
+  const [input, setInput] = useState(prefillCode ? prefillCode.trim().toUpperCase() : '')
+  const [checkedCode, setCheckedCode] = useState<string | null>(prefillCode ? prefillCode.trim().toUpperCase() : null)
+
+  // Keep input and checkedCode synchronized whenever prefillCode prop updates
+  useEffect(() => {
+    if (prefillCode) {
+      const code = prefillCode.trim().toUpperCase()
+      setInput(code)
+      setCheckedCode(code)
+    }
+  }, [prefillCode])
+
+  const resolvedCategory = checkedCode
+    ? getRoomCategory(checkedCode) || initialCategory
+    : initialCategory
 
   const { data: roomInfo, isLoading: roomLoading, error: roomError } = useRoomInfo(checkedCode)
+  const { data: isPlayerOnchain } = useIsPlayer(checkedCode, activeAddress)
 
   type RoomTuple = readonly [`0x${string}`, bigint, bigint, number, number, number, `0x${string}`]
-  const [_host, buyIn, prizePool, maxPlayers, playerCount, status] = (roomInfo as RoomTuple) ?? []
+  const [host, buyIn, prizePool, maxPlayers, playerCount, status] = (roomInfo as RoomTuple) ?? []
+
+  const isHost = Boolean(
+    host && activeAddress && host.toLowerCase() === activeAddress.toLowerCase()
+  )
+  const isAlreadyJoined = Boolean(isPlayerOnchain || isHost)
 
   const buyInHuman = buyIn !== undefined ? formatUSDCRaw(buyIn) : null
   const prizePoolHuman = prizePool !== undefined ? formatUSDCRaw(prizePool) : null
@@ -67,7 +88,11 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
     TRIVIA_GAME_ADDRESS ?? undefined
   )
 
-  const requiresApproval = buyIn !== undefined && buyIn > 0n && ((rawAllowance as bigint ?? 0n) < buyIn)
+  const requiresApproval =
+    !isAlreadyJoined &&
+    buyIn !== undefined &&
+    buyIn > 0n &&
+    ((rawAllowance as bigint ?? 0n) < buyIn)
 
   const { approve, isPending: approvePending, isConfirming: approveConfirming, isSuccess: approved } = useApproveUsdc()
   const { joinRoom, isPending: joinPending, isConfirming: joinConfirming, isSuccess: joined } = useJoinRoom()
@@ -79,9 +104,10 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   useEffect(() => {
     if (joined && checkedCode) {
       toast.success(`Joined room ${checkedCode}!`)
-      onJoined(checkedCode, initialCategory)
+      saveRoomCategory(checkedCode, resolvedCategory)
+      onJoined(checkedCode, resolvedCategory)
     }
-  }, [joined, checkedCode, initialCategory, onJoined])
+  }, [joined, checkedCode, resolvedCategory, onJoined])
 
   const isWrongChain = chainId !== ARC_TESTNET_CHAIN_ID
   const isRoomOpen = status === 0
@@ -100,6 +126,11 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   const handleJoin = () => {
     if (isWrongChain) { switchChain({ chainId: ARC_TESTNET_CHAIN_ID }); return }
     if (!checkedCode) return
+    if (isAlreadyJoined) {
+      saveRoomCategory(checkedCode, resolvedCategory)
+      onJoined(checkedCode, resolvedCategory)
+      return
+    }
     joinRoom(checkedCode)
   }
 
@@ -172,6 +203,13 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5" style={glass.inner}>
+                      <span className="text-xs" style={{ color: 'var(--muted)' }}>Category</span>
+                      <span className="rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-bold text-purple-700">
+                        {resolvedCategory}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5" style={glass.inner}>
                       <span className="text-xs" style={{ color: 'var(--muted)' }}>Status</span>
                       <span
                         className="rounded-full px-2.5 py-0.5 text-xs font-semibold"
@@ -203,25 +241,60 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                     </div>
                   </div>
 
-                  {balanceHuman !== null && (
+                  {balanceHuman !== null && !isAlreadyJoined && (
                     <p className="mt-2 text-xs" style={{ color: 'var(--subtle)' }}>
                       Your balance: <span className="font-semibold tabular-nums">{balanceHuman} USDC</span>
                     </p>
                   )}
 
-                  {!isRoomOpen && (
+                  {/* If user is already in the room */}
+                  {isAlreadyJoined && (
+                    <div className="mt-3.5 flex items-center justify-between rounded-2xl bg-purple-50/70 p-3 sm:p-3.5 border border-purple-200/60 shadow-xs">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-purple-100 text-purple-700 border border-purple-200/50">
+                          <ShieldCheck size={16} className="stroke-[2.5]" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-gray-900">
+                            {isHost ? 'You are hosting this room' : 'Already Joined'}
+                          </p>
+                          <p className="text-[11px] text-gray-500 font-medium truncate">
+                            {isHost ? 'Resume anytime to manage your game' : 'You are an active player in this room'}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-purple-700 bg-white border border-purple-200/80 px-2.5 py-0.5 rounded-full shadow-2xs">
+                        {isHost ? 'Host' : 'Player'}
+                      </span>
+                    </div>
+                  )}
+
+                  {!isRoomOpen && !isAlreadyJoined && (
                     <p className="mt-3 rounded-xl px-3.5 py-2.5 text-xs" style={{ background: 'rgba(186,43,76,0.07)', color: 'var(--danger)', border: '1px solid rgba(186,43,76,0.15)' }}>
-                      This room is no longer accepting players.
+                      This room is no longer accepting new players.
                     </p>
                   )}
 
-                  {isWrongChain && isRoomOpen && (
+                  {isWrongChain && (isRoomOpen || isAlreadyJoined) && (
                     <p className="mt-3 rounded-xl px-3.5 py-2.5 text-xs" style={{ background: 'rgba(186,43,76,0.07)', color: 'var(--danger)', border: '1px solid rgba(186,43,76,0.15)' }}>
-                      Switch to Arc Testnet to join.
+                      Switch to Arc Testnet to continue.
                     </p>
                   )}
 
-                  {isRoomOpen && !isWrongChain && requiresApproval && (
+                  {/* Rejoin / Continue Button for players already joined */}
+                  {isAlreadyJoined && (
+                    <button
+                      onClick={handleJoin}
+                      className="mt-3.5 flex w-full items-center justify-center gap-2 rounded-2xl py-4 text-sm font-bold shadow-md transition-all hover:brightness-105 active:scale-[0.99]"
+                      style={{ background: 'var(--accent)', color: 'white' }}
+                    >
+                      <span>Continue to Game</span>
+                      <ArrowRight size={16} />
+                    </button>
+                  )}
+
+                  {/* Approval and Join buttons for new participants */}
+                  {!isAlreadyJoined && isRoomOpen && !isWrongChain && requiresApproval && (
                     <button
                       onClick={handleApprove}
                       disabled={approvePending || approveConfirming}
@@ -232,13 +305,13 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                     </button>
                   )}
 
-                  {(joinPending || joinConfirming) && (
+                  {!isAlreadyJoined && (joinPending || joinConfirming) && (
                     <p className="mt-2 text-center text-sm" style={{ color: 'var(--muted)' }}>
                       {joinPending ? 'Confirm in wallet...' : 'Joining...'}
                     </p>
                   )}
 
-                  {isRoomOpen && (
+                  {!isAlreadyJoined && isRoomOpen && (
                     <button
                       onClick={isWrongChain ? () => switchChain({ chainId: ARC_TESTNET_CHAIN_ID }) : handleJoin}
                       disabled={joinPending || joinConfirming || (requiresApproval && !approved)}
