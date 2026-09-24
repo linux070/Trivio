@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
-import { ArrowLeft, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Copy, Check, Clock } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import {
@@ -16,7 +16,7 @@ import {
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { type Category, CATEGORY_GROUPS } from '@/lib/questions'
 import { parseUSDC } from '@/hooks/useTriviaContract'
-import { saveRoomCategory, saveActiveGame } from '@/lib/roomStorage'
+import { saveRoomCategory, saveRoomDuration, saveActiveGame } from '@/lib/roomStorage'
 
 const glass = {
   card: {
@@ -48,8 +48,14 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
   const privyWalletAddress = user?.wallet?.address as `0x${string}` | undefined
   const activeAddress = address || privyWalletAddress || undefined
 
+  const selectedSubInfo = CATEGORY_GROUPS.flatMap(g => g.subcategories).find(s => s.id === initialCategory)
+
   const [mode, setMode] = useState<Mode>('buyin')
   const [category] = useState<Category>(initialCategory)
+  const [roundDuration, setRoundDuration] = useState<number>(() => {
+    const parsed = parseInt(selectedSubInfo?.roundDuration ?? '', 10)
+    return !isNaN(parsed) && parsed >= 5 ? parsed : 15
+  })
   const [maxPlayers, setMaxPlayers] = useState(4)
   const [maxPlayersInput, setMaxPlayersInput] = useState('4')
   const [buyIn, setBuyIn] = useState('1')
@@ -85,10 +91,11 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
     if (created) {
       toast.success(`Room ${roomCode} created!`)
       saveRoomCategory(roomCode, category)
+      saveRoomDuration(roomCode, roundDuration)
       saveActiveGame(roomCode, category, true)
       onRoomCreated(roomCode, category)
     }
-  }, [created, roomCode, category, onRoomCreated])
+  }, [created, roomCode, category, roundDuration, onRoomCreated])
 
   const isWrongChain = chainId !== ARC_TESTNET_CHAIN_ID
 
@@ -111,7 +118,6 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
   }
 
   const contractReady = Boolean(TRIVIA_GAME_ADDRESS)
-  const selectedSubInfo = CATEGORY_GROUPS.flatMap(g => g.subcategories).find(s => s.id === category)
 
   return (
     <div
@@ -147,18 +153,11 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
         )}
 
         <div className="space-y-3.5 sm:space-y-4">
-          {/* Game Mode / Category Card */}
+          {/* 1. Game Mode / Category Card */}
           <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
-                Game Mode
-              </p>
-              {selectedSubInfo?.badge && (
-                <span className="text-[10px] font-bold text-purple-700 bg-purple-100/90 px-2 py-0.5 rounded-full">
-                  {selectedSubInfo.badge}
-                </span>
-              )}
-            </div>
+            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
+              Game Mode
+            </p>
             <div className="mt-2.5 flex items-center justify-between rounded-2xl px-3.5 py-3" style={glass.inner}>
               <div className="flex items-center gap-2.5 min-w-0">
                 <span className="text-2xl shrink-0">{selectedSubInfo?.emoji ?? '🎮'}</span>
@@ -167,15 +166,13 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
                   <p className="text-[11px] text-gray-500 truncate">{selectedSubInfo?.tagline ?? 'Multiplayer Trivia'}</p>
                 </div>
               </div>
-              {selectedSubInfo?.roundDuration && (
-                <span className="text-[11px] font-medium text-gray-500 shrink-0 ml-2 bg-white/70 px-2 py-1 rounded-lg border border-gray-200/50">
-                  {selectedSubInfo.roundDuration}
-                </span>
-              )}
+              <span className="text-xs font-semibold text-slate-800 shrink-0 ml-2 bg-white/95 px-3 py-1 rounded-xl border border-slate-200/90 shadow-2xs">
+                {selectedSubInfo?.badge || 'Classic'}
+              </span>
             </div>
           </div>
 
-          {/* Room code */}
+          {/* 2. Room Code */}
           <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>Room Code</p>
@@ -218,7 +215,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
             )}
           </div>
 
-          {/* Mode */}
+          {/* 3. Prize Mode */}
           <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
             <p className="mb-3 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>Prize Mode</p>
             <div className="grid grid-cols-2 gap-2">
@@ -244,7 +241,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
             </p>
           </div>
 
-          {/* Amount */}
+          {/* 4. Buy-in / Amount */}
           <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
               {mode === 'buyin' ? 'Buy-in per player' : 'Prize pool'}
@@ -267,6 +264,73 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
                 Balance: <span className="font-semibold tabular-nums">{balanceHuman} USDC</span>
               </p>
             )}
+          </div>
+
+          {/* 5. Round Timer / Duration */}
+          <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
+            <div className="mb-2.5 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
+                Round Timer
+              </p>
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 shrink-0 bg-white/95 px-3 py-1 rounded-xl border border-slate-200/90 shadow-2xs">
+                <Clock size={13} className="text-slate-600 stroke-[2.25]" />
+                <span>{roundDuration}s per round</span>
+              </span>
+            </div>
+
+            {/* Quick Presets */}
+            <div className="grid grid-cols-4 gap-2 mb-3">
+              {[10, 15, 20, 30].map(sec => (
+                <button
+                  key={sec}
+                  type="button"
+                  onClick={() => setRoundDuration(sec)}
+                  className="rounded-xl py-2 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                  style={{
+                    background: roundDuration === sec ? 'var(--accent)' : 'rgba(255,255,255,0.7)',
+                    color: roundDuration === sec ? 'white' : 'var(--ink)',
+                    border: roundDuration === sec ? '1px solid transparent' : '1px solid var(--border)',
+                    boxShadow: roundDuration === sec ? '0 2px 8px rgba(124,58,237,0.25)' : 'none',
+                  }}
+                >
+                  {sec}s
+                </button>
+              ))}
+            </div>
+
+            {/* Stepper Controls */}
+            <div className="flex items-center justify-between rounded-2xl px-4 py-3" style={glass.inner}>
+              <button
+                type="button"
+                onClick={() => setRoundDuration(prev => Math.max(5, prev - 5))}
+                disabled={roundDuration <= 5}
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-xl font-bold transition-all hover:bg-black/5 disabled:opacity-30 cursor-pointer"
+                style={{ color: 'var(--ink)' }}
+              >
+                −
+              </button>
+              <div className="text-center">
+                <span
+                  className="display text-2xl sm:text-3xl font-bold tabular-nums"
+                  style={{ color: 'var(--ink)', fontFamily: "'Space Grotesk', sans-serif" }}
+                >
+                  {roundDuration}s
+                </span>
+                <p className="text-[11px]" style={{ color: 'var(--subtle)' }}>countdown per question</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRoundDuration(prev => Math.min(60, prev + 5))}
+                disabled={roundDuration >= 60}
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-xl font-bold transition-all hover:bg-black/5 disabled:opacity-30 cursor-pointer"
+                style={{ color: 'var(--ink)' }}
+              >
+                +
+              </button>
+            </div>
+            <p className="mt-2 text-xs" style={{ color: 'var(--subtle)' }}>
+              Set how much time players have to answer each trivia question.
+            </p>
           </div>
 
 

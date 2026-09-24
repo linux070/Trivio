@@ -2,6 +2,7 @@ import type { Category } from './questions'
 import { ALL_CATEGORIES } from './questions'
 
 const STORAGE_ROOM_CAT_PREFIX = 'trivio_room_cat_'
+const STORAGE_ROOM_DUR_PREFIX = 'trivio_room_dur_'
 const STORAGE_ACTIVE_GAME_KEY = 'trivio_active_game'
 const STORAGE_PENDING_JOIN_KEY = 'trivio_pending_join'
 
@@ -36,6 +37,38 @@ export function getRoomCategory(roomCode: string | null | undefined): Category |
     // ignore
   }
   return null
+}
+
+/** Save the host-assigned round duration (in seconds) for a room code */
+export function saveRoomDuration(roomCode: string, durationSeconds: number): void {
+  if (!roomCode) return
+  const code = roomCode.trim().toUpperCase()
+  try {
+    localStorage.setItem(`${STORAGE_ROOM_DUR_PREFIX}${code}`, String(durationSeconds))
+    sessionStorage.setItem(`${STORAGE_ROOM_DUR_PREFIX}${code}`, String(durationSeconds))
+  } catch {
+    // ignore
+  }
+}
+
+/** Retrieve the round duration (in seconds) for a room code */
+export function getRoomDuration(roomCode: string | null | undefined, defaultDuration = 15): number {
+  if (!roomCode) return defaultDuration
+  const code = roomCode.trim().toUpperCase()
+  try {
+    const saved =
+      sessionStorage.getItem(`${STORAGE_ROOM_DUR_PREFIX}${code}`) ||
+      localStorage.getItem(`${STORAGE_ROOM_DUR_PREFIX}${code}`)
+    if (saved) {
+      const parsed = parseInt(saved, 10)
+      if (!isNaN(parsed) && parsed >= 5 && parsed <= 120) {
+        return parsed
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return defaultDuration
 }
 
 export interface ActiveGameSession {

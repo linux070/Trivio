@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Clock, Zap, Trophy, RotateCcw, ArrowRight, CheckCircle2, XCircle } from 'lucide-react'
+import { X, Clock, Zap, Trophy, CheckCircle2, XCircle } from 'lucide-react'
 import { getQuestions, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
 
 interface SoloPracticeModalProps {
@@ -137,15 +137,12 @@ export default function SoloPracticeModal({
           {/* Header */}
           <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-50 text-violet-700 text-base">
-                <Zap size={16} className="fill-current text-violet-600" />
-              </span>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-[0_2px_10px_rgba(245,158,11,0.3)]">
+                <Zap size={20} className="fill-current" />
+              </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
-                  <span>Solo Practice</span>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.2 rounded-full">
-                    Free
-                  </span>
+                <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                  Solo Practice
                 </h3>
                 <p className="text-[11px] text-slate-500 font-medium">
                   {subInfo?.emoji} {subInfo?.name ?? category} · 5 speed questions
@@ -252,9 +249,8 @@ export default function SoloPracticeModal({
               <div className="grid grid-cols-2 gap-2 pt-2">
                 <button
                   onClick={restartPractice}
-                  className="flex items-center justify-center gap-2 rounded-xl py-3 px-4 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200/80 transition-all active:scale-95 cursor-pointer"
+                  className="flex items-center justify-center rounded-xl py-3 px-4 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200/80 transition-all active:scale-95 cursor-pointer"
                 >
-                  <RotateCcw size={14} />
                   <span>Try Again</span>
                 </button>
 
@@ -263,10 +259,9 @@ export default function SoloPracticeModal({
                     onClose()
                     onPlayMultiplayer(category)
                   }}
-                  className="flex items-center justify-center gap-2 rounded-xl py-3 px-4 text-xs font-bold text-white bg-violet-600 hover:bg-violet-700 shadow-md transition-all active:scale-95 cursor-pointer"
+                  className="flex items-center justify-center rounded-xl py-3 px-4 text-xs font-bold text-white bg-violet-600 hover:bg-violet-700 shadow-md transition-all active:scale-95 cursor-pointer"
                 >
                   <span>Play for USDC</span>
-                  <ArrowRight size={14} />
                 </button>
               </div>
             </div>

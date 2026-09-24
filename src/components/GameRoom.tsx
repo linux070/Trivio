@@ -8,10 +8,8 @@ import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import { useStartGame, useDeclareWinner, useRoomInfo, formatUSDCRaw } from '@/hooks/useTriviaContract'
 import { getQuestions, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
-import { getRoomCategory, saveActiveGame, clearActiveGame } from '@/lib/roomStorage'
+import { getRoomCategory, getRoomDuration, saveActiveGame, clearActiveGame } from '@/lib/roomStorage'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
-
-const QUESTION_TIME = 15
 
 const glass = {
   card: {
@@ -45,11 +43,12 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const activeAddress = wagmiAddress || privyWalletAddress || ''
 
   const resolvedCategory = category || getRoomCategory(roomCode) || 'General Knowledge'
+  const roomDuration = getRoomDuration(roomCode, 15)
 
   const [phase, setPhase] = useState<GamePhase>('lobby')
   const [questions, setQuestions] = useState<TriviaQuestion[]>([])
   const [qIndex, setQIndex] = useState(0)
-  const [timeLeft, setTimeLeft] = useState(QUESTION_TIME)
+  const [timeLeft, setTimeLeft] = useState(roomDuration)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [answered, setAnswered] = useState(false)
   const [score, setScore] = useState(0)
@@ -87,7 +86,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       startTransition(() => {
         setQuestions(qs)
         setQIndex(0)
-        setTimeLeft(QUESTION_TIME)
+        setTimeLeft(roomDuration)
         setAnswered(false)
         setSelectedIndex(null)
         setScore(0)
@@ -95,7 +94,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       })
       answerStartRef.current = Date.now()
     }
-  }, [gameStarted, status, phase, resolvedCategory, roomCode])
+  }, [gameStarted, status, phase, resolvedCategory, roomCode, roomDuration])
 
   // Timer for questions
   useEffect(() => {
@@ -130,7 +129,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       setPhase('finished')
     } else {
       setQIndex(next)
-      setTimeLeft(QUESTION_TIME)
+      setTimeLeft(roomDuration)
       setAnswered(false)
       setSelectedIndex(null)
       setLastCorrect(null)
@@ -331,7 +330,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
   // ─── Playing phase ────────────────────────────────────────────────────────────
   if (phase === 'playing' && currentQ) {
-    const timeFraction = timeLeft / QUESTION_TIME
+    const timeFraction = timeLeft / roomDuration
     return (
       <div className="relative min-h-screen min-h-[100dvh] w-full overflow-x-hidden" style={{ background: 'linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%)' }}>
         <div className="pointer-events-none fixed inset-0 overflow-hidden">
