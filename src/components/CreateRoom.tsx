@@ -14,7 +14,7 @@ import {
   formatUSDCRaw,
 } from '@/hooks/useTriviaContract'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
-import type { Category } from '@/lib/questions'
+import { type Category, CATEGORY_GROUPS } from '@/lib/questions'
 import { parseUSDC } from '@/hooks/useTriviaContract'
 import { saveRoomCategory, saveActiveGame } from '@/lib/roomStorage'
 
@@ -111,6 +111,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
   }
 
   const contractReady = Boolean(TRIVIA_GAME_ADDRESS)
+  const selectedSubInfo = CATEGORY_GROUPS.flatMap(g => g.subcategories).find(s => s.id === category)
 
   return (
     <div
@@ -122,7 +123,10 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
         <div style={{ position: 'absolute', bottom: '12%', left: '6%', width: 240, height: 240, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,205,131,0.16) 0%, transparent 70%)', filter: 'blur(60px)' }} />
       </div>
 
-      <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-8 pt-4 sm:max-w-lg sm:px-6 sm:py-6">
+      <div
+        className="relative z-10 mx-auto w-full max-w-md px-3.5 pt-4 sm:max-w-xl md:max-w-2xl sm:px-6 sm:py-6"
+        style={{ paddingBottom: 'max(6.5rem, calc(env(safe-area-inset-bottom, 20px) + 5rem))' }}
+      >
         <div className="mb-5 sm:mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -143,6 +147,34 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
         )}
 
         <div className="space-y-3.5 sm:space-y-4">
+          {/* Game Mode / Category Card */}
+          <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
+                Game Mode
+              </p>
+              {selectedSubInfo?.badge && (
+                <span className="text-[10px] font-bold text-purple-700 bg-purple-100/90 px-2 py-0.5 rounded-full">
+                  {selectedSubInfo.badge}
+                </span>
+              )}
+            </div>
+            <div className="mt-2.5 flex items-center justify-between rounded-2xl px-3.5 py-3" style={glass.inner}>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-2xl shrink-0">{selectedSubInfo?.emoji ?? '🎮'}</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-gray-900 tracking-tight">{selectedSubInfo?.name ?? category}</p>
+                  <p className="text-[11px] text-gray-500 truncate">{selectedSubInfo?.tagline ?? 'Multiplayer Trivia'}</p>
+                </div>
+              </div>
+              {selectedSubInfo?.roundDuration && (
+                <span className="text-[11px] font-medium text-gray-500 shrink-0 ml-2 bg-white/70 px-2 py-1 rounded-lg border border-gray-200/50">
+                  {selectedSubInfo.roundDuration}
+                </span>
+              )}
+            </div>
+          </div>
+
           {/* Room code */}
           <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
             <div className="mb-2 flex items-center justify-between">
@@ -245,7 +277,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
               <button
                 onClick={() => { const n = Math.max(1, maxPlayers - 1); setMaxPlayers(n); setMaxPlayersInput(String(n)) }}
                 disabled={maxPlayers <= 1}
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-xl font-bold transition-all hover:bg-black/5 disabled:opacity-30"
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-xl font-bold transition-all hover:bg-black/5 disabled:opacity-30 cursor-pointer"
                 style={{ color: 'var(--ink)' }}
               >
                 −
@@ -256,14 +288,16 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
                   inputMode="numeric"
                   value={maxPlayersInput}
                   onChange={e => {
+                    const gameLimit = selectedSubInfo?.maxPlayers ?? 50
                     const raw = e.target.value.replace(/[^0-9]/g, '')
                     setMaxPlayersInput(raw)
                     const v = parseInt(raw, 10)
-                    if (!isNaN(v)) setMaxPlayers(Math.min(20, Math.max(1, v)))
+                    if (!isNaN(v)) setMaxPlayers(Math.min(gameLimit, Math.max(1, v)))
                   }}
                   onBlur={() => {
+                    const gameLimit = selectedSubInfo?.maxPlayers ?? 50
                     const v = parseInt(maxPlayersInput, 10)
-                    const clamped = isNaN(v) ? 1 : Math.min(20, Math.max(1, v))
+                    const clamped = isNaN(v) ? 1 : Math.min(gameLimit, Math.max(1, v))
                     setMaxPlayers(clamped)
                     setMaxPlayersInput(String(clamped))
                   }}
@@ -273,15 +307,22 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
                 <p className="text-xs" style={{ color: 'var(--subtle)' }}>players max</p>
               </div>
               <button
-                onClick={() => { const n = Math.min(20, maxPlayers + 1); setMaxPlayers(n); setMaxPlayersInput(String(n)) }}
-                disabled={maxPlayers >= 20}
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-xl font-bold transition-all hover:bg-black/5 disabled:opacity-30"
+                onClick={() => {
+                  const gameLimit = selectedSubInfo?.maxPlayers ?? 50
+                  const n = Math.min(gameLimit, maxPlayers + 1)
+                  setMaxPlayers(n)
+                  setMaxPlayersInput(String(n))
+                }}
+                disabled={maxPlayers >= (selectedSubInfo?.maxPlayers ?? 50)}
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-xl font-bold transition-all hover:bg-black/5 disabled:opacity-30 cursor-pointer"
                 style={{ color: 'var(--ink)' }}
               >
                 +
               </button>
             </div>
-            <p className="mt-2 text-xs" style={{ color: 'var(--subtle)' }}>Min 1 · Max 20 players per room</p>
+            <p className="mt-2 text-xs" style={{ color: 'var(--subtle)' }}>
+              Min 1 · Max {selectedSubInfo?.maxPlayers ?? 50} players for {selectedSubInfo?.name ?? 'this mode'}
+            </p>
           </div>
 
           {isWrongChain && (

@@ -16,7 +16,7 @@ import {
   parseUSDC,
 } from '@/hooks/useTriviaContract'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
-import type { Category } from '@/lib/questions'
+import { type Category, CATEGORY_GROUPS } from '@/lib/questions'
 import { getRoomCategory, saveRoomCategory } from '@/lib/roomStorage'
 
 const ROOM_STATUS = ['Open', 'In Progress', 'Finished', 'Cancelled']
@@ -144,7 +144,10 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
         <div style={{ position: 'absolute', bottom: '15%', right: '6%', width: 240, height: 240, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,205,131,0.16) 0%, transparent 70%)', filter: 'blur(60px)' }} />
       </div>
 
-      <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-8 pt-4 sm:max-w-lg sm:px-6 sm:py-6">
+      <div
+        className="relative z-10 mx-auto w-full max-w-md px-3.5 pt-4 sm:max-w-xl md:max-w-2xl sm:px-6 sm:py-6"
+        style={{ paddingBottom: 'max(6.5rem, calc(env(safe-area-inset-bottom, 20px) + 5rem))' }}
+      >
         <div className="mb-5 sm:mb-6 flex items-center gap-3">
           <button
             onClick={onBack}
@@ -207,9 +210,10 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5" style={glass.inner}>
-                      <span className="text-xs" style={{ color: 'var(--muted)' }}>Category</span>
-                      <span className="rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-bold text-purple-700">
-                        {resolvedCategory}
+                      <span className="text-xs" style={{ color: 'var(--muted)' }}>Game Mode</span>
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-bold text-purple-700 border border-purple-100">
+                        <span>{CATEGORY_GROUPS.flatMap(g => g.subcategories).find(s => s.id === resolvedCategory)?.emoji ?? '🎮'}</span>
+                        <span>{resolvedCategory}</span>
                       </span>
                     </div>
 

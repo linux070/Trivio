@@ -1,8 +1,10 @@
 import { useState, useEffect, startTransition } from 'react'
 import { usePrivy, useLogin } from '@privy-io/react-auth'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users, Zap, Trophy, X } from 'lucide-react'
+import { Users, Zap, Trophy, X, Sparkles, ArrowRight, ShieldCheck } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
+import { getDiceBearAvatarUrl } from '@/lib/userProfile'
+import { RECENT_WINNERS_FEED } from '@/lib/lobbyData'
 
 /* ── Typewriter hook ─────────────────────────────────────────────────────── */
 function useTypewriter(text: string, speed = 52, startDelay = 800) {
@@ -215,6 +217,59 @@ function HowToPlayModal({ open, onClose }: { open: boolean; onClose: () => void 
   )
 }
 
+/* ── Live Winners Marquee ─────────────────────────────────────────────────── */
+function LiveWinnersTicker({ onWinnerClick }: { onWinnerClick: () => void }) {
+  // Duplicate array for a seamless infinite loop where items follow each other
+  const continuousList = [...RECENT_WINNERS_FEED, ...RECENT_WINNERS_FEED]
+
+  return (
+    <div className="w-full max-w-full overflow-hidden select-none relative py-1">
+      {/* Subtle smooth edge gradient masks */}
+      <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 sm:w-20 z-10 bg-gradient-to-r from-[#6223c7] via-[#6223c7]/60 to-transparent" />
+      <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 sm:w-20 z-10 bg-gradient-to-l from-[#6223c7] via-[#6223c7]/60 to-transparent" />
+
+      {/* Single continuous line where items follow each other */}
+      <div className="animate-marquee flex items-center gap-2 sm:gap-3 py-0.5">
+        {continuousList.map((item, idx) => (
+          <button
+            key={`${item.id}-${idx}`}
+            onClick={onWinnerClick}
+            type="button"
+            className="group flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:px-3.5 py-1 sm:py-1.5 text-[11px] sm:text-xs text-white transition-all duration-200 hover:bg-white/25 hover:scale-105 active:scale-95 cursor-pointer shrink-0"
+            style={{
+              background: 'rgba(255, 255, 255, 0.12)',
+              backdropFilter: 'blur(14px)',
+              WebkitBackdropFilter: 'blur(14px)',
+              border: '1px solid rgba(255, 255, 255, 0.22)',
+              boxShadow: '0 4px 18px rgba(0, 0, 0, 0.08)',
+            }}
+          >
+            <img
+              src={getDiceBearAvatarUrl('bottts-neutral', item.avatarSeed)}
+              alt={item.username}
+              className="h-4 w-4 sm:h-5 sm:w-5 rounded-full bg-white/20 border border-white/40 shrink-0"
+            />
+            <span className="font-semibold text-white/90 tracking-tight">@{item.username}</span>
+            <span className="font-black text-white tracking-tight inline-flex items-center gap-0.5 sm:gap-1">
+              +${item.amount}
+            </span>
+            <span className="inline-flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-white/95 uppercase tracking-wide leading-none">
+              <TokenUSDC variant="branded" size={14} className="shrink-0" />
+              <span>USDC</span>
+            </span>
+            <span className="text-[10px] sm:text-[11px] text-white/70 font-medium truncate max-w-[110px] sm:max-w-none">
+              · {item.category}
+            </span>
+            <span className="text-[9px] sm:text-[10px] font-mono text-purple-200/90 ml-0.5">
+              {item.timeAgo}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /* ── LandingPage ──────────────────────────────────────────────────────────── */
 interface LandingPageProps {
   onConnected: () => void
@@ -247,27 +302,28 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
       <HowToPlayModal open={modalOpen} onClose={() => setModalOpen(false)} />
 
       <div
-        className="trivio-bg relative flex flex-1 min-h-screen min-h-[100dvh] w-full flex-col items-center justify-center overflow-x-hidden px-4 py-6 sm:px-5 sm:py-10"
+        className="trivio-bg relative flex flex-1 min-h-screen min-h-[100dvh] w-full flex-col items-center justify-center overflow-x-hidden px-3.5 sm:px-6"
         style={{
-          paddingTop: 'max(1.5rem, env(safe-area-inset-top, 1.5rem))',
-          paddingBottom: 'max(2rem, env(safe-area-inset-bottom, 2rem))',
+          paddingTop: 'max(1.75rem, env(safe-area-inset-top, 1.75rem))',
+          paddingBottom: 'max(5.5rem, calc(env(safe-area-inset-bottom, 20px) + 4.5rem))',
         }}
       >
         <FloatingShapes />
 
-        {/* ── Wordmark + Get Started ───────────────────────────────────────── */}
-        <div className="relative z-10 flex flex-col items-center justify-center w-full max-w-md my-auto">
+        {/* ── Main Hero Container ───────────────────────────────────────── */}
+        <div className="relative z-10 flex flex-col items-center justify-center w-full max-w-xl my-auto text-center">
+          {/* Wordmark Header */}
           <motion.div
             initial={{ opacity: 0, scale: 0.85, y: -10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="order-1 mb-2.5 sm:mb-3 text-center w-full"
+            className="mb-1 sm:mb-2 text-center w-full"
           >
             {/* TRIVIO wordmark */}
             <h1
               className="trivio-title select-none leading-none"
               style={{
-                fontSize: 'clamp(52px, 18vw, 108px)',
+                fontSize: 'clamp(52px, 17vw, 114px)',
                 color: '#ffffff',
                 textShadow: [
                   '0 3px 0 rgba(0,0,0,0.30)',
@@ -285,85 +341,58 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
 
             {/* Typewriter tagline */}
             <div
-              className="mt-1.5 sm:mt-2 flex items-center justify-center text-sm sm:text-base font-medium"
-              style={{ color: 'rgba(255,255,255,0.72)', minHeight: 26, letterSpacing: '0.02em' }}
+              className="mt-1 flex items-center justify-center text-xs sm:text-base font-semibold"
+              style={{ color: 'rgba(255,255,255,0.85)', minHeight: 22, letterSpacing: '0.02em' }}
             >
               <span>{displayed}</span>
               {!done && <span className="cursor-blink" />}
             </div>
           </motion.div>
 
-          {/* ── Social proof + USDC badge ─────────────────────────────────── */}
+          {/* ── Start Playing Call-To-Action & How to play ──────────────────── */}
           <motion.div
-            initial={{ opacity: 0, y: 8 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.38, duration: 0.4 }}
-            className="order-3 sm:order-2 mt-5 sm:mt-0 sm:mb-4 flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 px-2 text-center"
-          >
-            {/* Live player count */}
-            <div
-              className="flex items-center gap-1.5 rounded-full px-3 sm:px-3.5 py-1.5 text-[11px] sm:text-xs font-semibold"
-              style={{
-                background: 'rgba(255,255,255,0.12)',
-                border: '1px solid rgba(255,255,255,0.18)',
-                color: 'rgba(255,255,255,0.88)',
-                backdropFilter: 'blur(8px)',
-              }}
-            >
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75" style={{ background: '#4ade80' }} />
-                <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: '#22c55e' }} />
-              </span>
-              247 games played
-            </div>
-
-            {/* USDC callout */}
-            <div
-              className="flex items-center gap-1.5 rounded-full px-3 sm:px-3.5 py-1.5 text-[11px] sm:text-xs font-semibold"
-              style={{
-                background: 'rgba(255,255,255,0.12)',
-                border: '1px solid rgba(255,255,255,0.18)',
-                color: 'rgba(255,255,255,0.88)',
-                backdropFilter: 'blur(8px)',
-              }}
-            >
-              <TokenUSDC variant="branded" size={13} />
-              Win real USDC · No ETH needed
-            </div>
-          </motion.div>
-
-          {/* ── Start Playing button ────────────────────────────────────────── */}
-          <motion.div
-            initial={{ opacity: 0, y: 32 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.18, duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
-            className="order-2 sm:order-3 mt-4 sm:mt-7 flex flex-col items-center gap-3"
+            transition={{ delay: 0.24, duration: 0.52, ease: [0.22, 1, 0.36, 1] }}
+            className="mt-3 sm:mt-5 flex flex-col items-center gap-2 sm:gap-2.5 w-full mb-3 sm:mb-4"
           >
             <button
               onClick={handleGetStarted}
-              className="rounded-full bg-white px-8 py-2.5 sm:px-9 sm:py-3 text-xs sm:text-sm font-extrabold uppercase tracking-wider text-[#1e1b2e] shadow-lg transition-all duration-200 hover:scale-105 hover:bg-slate-50 hover:shadow-xl active:scale-95"
+              className="relative inline-flex items-center justify-center rounded-full bg-white px-8 py-3 sm:px-11 sm:py-3.5 text-xs sm:text-sm font-black uppercase tracking-wider text-[#1e1b2e] shadow-xl transition-all duration-200 hover:scale-105 hover:bg-slate-50 active:scale-95 cursor-pointer"
               style={{
-                boxShadow: '0 6px 22px rgba(0,0,0,0.20), 0 2px 5px rgba(0,0,0,0.10)',
+                boxShadow: '0 8px 30px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.12)',
                 letterSpacing: '0.07em',
               }}
             >
               GET STARTED
             </button>
 
-            {/* ── How to play pill ─────────────────────────────────────────── */}
+            {/* How to play pill */}
             <button
               onClick={() => setModalOpen(true)}
-              className="rounded-full px-5 py-1.5 text-xs sm:text-sm font-medium text-white/80 transition-all duration-200 hover:bg-black/40 hover:text-white hover:scale-105 active:scale-95"
+              className="rounded-full px-4 py-1 text-[11px] sm:text-xs font-medium text-white/80 transition-all duration-200 hover:bg-black/40 hover:text-white hover:scale-105 active:scale-95 cursor-pointer"
               style={{
-                background: 'rgba(0, 0, 0, 0.28)',
+                background: 'rgba(0, 0, 0, 0.25)',
                 backdropFilter: 'blur(8px)',
               }}
             >
               How to play?
             </button>
           </motion.div>
+
+          {/* ── Free-Flowing Live Winners Stream (Underneath Buttons, Non-simultaneous) ── */}
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.36, duration: 0.5 }}
+            className="w-full flex flex-col items-center mt-1"
+          >
+            <LiveWinnersTicker onWinnerClick={handleGetStarted} />
+          </motion.div>
         </div>
       </div>
     </>
   )
 }
+
+

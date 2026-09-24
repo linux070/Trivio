@@ -401,7 +401,7 @@ export default function App() {
       <Lobby
         initialCategory={screen.initialCategory}
         onCreateRoom={(category) => setScreen({ name: 'create', category })}
-        onJoinRoom={(category) => setScreen({ name: 'join', category })}
+        onJoinRoom={(category, prefillCode) => setScreen({ name: 'join', category, prefillCode })}
         onContinueGame={(roomCode, category) => {
           saveActiveGame(roomCode, category)
           setScreen({ name: 'game', roomCode, category })

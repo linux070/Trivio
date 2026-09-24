@@ -9,6 +9,7 @@ import {
   Copy,
   Check,
   ChevronDown,
+  ChevronUp,
   ExternalLink,
   Pencil,
   ShieldCheck,
@@ -17,7 +18,13 @@ import {
   Dices,
   X,
   Play,
-  ArrowRight,
+  Clock,
+  Users,
+  Layers,
+  Zap,
+  Trophy,
+  Flame,
+  Radio,
 } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
@@ -30,22 +37,19 @@ import {
 } from '@/lib/userProfile'
 import { useUsdcBalance, formatUSDCRaw } from '@/hooks/useTriviaContract'
 import { ARC_TESTNET_CHAIN_ID, ARC_MAINNET_CHAIN_ID } from '@/config'
-import type { Category } from '@/lib/questions'
+import {
+  type Category,
+  CATEGORY_GROUPS,
+  type CategoryGroup,
+  type SubCategoryInfo,
+} from '@/lib/questions'
 import { getActiveGame, clearActiveGame, type ActiveGameSession } from '@/lib/roomStorage'
-
-const CATEGORIES: { label: Category; emoji: string }[] = [
-  { label: 'General Knowledge', emoji: '🧠' },
-  { label: 'Crypto', emoji: '⚡' },
-  { label: 'Sports', emoji: '🏆' },
-  { label: 'Pop Culture', emoji: '🎬' },
-  { label: 'Science', emoji: '🔬' },
-  { label: 'History', emoji: '📜' },
-]
+import SoloPracticeModal from '@/components/SoloPracticeModal'
 
 interface LobbyProps {
   initialCategory?: Category | null
   onCreateRoom: (category: Category) => void
-  onJoinRoom: (category: Category) => void
+  onJoinRoom: (category: Category, prefillCode?: string) => void
   onContinueGame?: (roomCode: string, category: Category) => void
   onDisconnect?: () => void
 }
@@ -582,28 +586,48 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
 }
 
 export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onContinueGame, onDisconnect }: LobbyProps) {
-  const [selected, setSelected] = useState<Category | null>(() => initialCategory ?? null)
+  const [selected, setSelected] = useState<Category | null>(() => initialCategory ?? 'General Knowledge')
   const [activeSession, setActiveSession] = useState<ActiveGameSession | null>(() => getActiveGame())
+  const [practiceOpen, setPracticeOpen] = useState(false)
+
+  // Find the group that contains the initial/selected category
+  const [activeGroupId, setActiveGroupId] = useState<string>(() => {
+    if (initialCategory) {
+      const match = CATEGORY_GROUPS.find(g => g.subcategories.some(s => s.id === initialCategory))
+      if (match) return match.id
+    }
+    return 'crypto_markets'
+  })
 
   useEffect(() => {
     setActiveSession(getActiveGame())
   }, [])
 
-  const handleToggleCategory = (cat: Category) => {
-    setSelected(prev => {
-      const next = prev === cat ? null : cat
-      try {
-        const stored = { name: 'lobby', initialCategory: next }
-        sessionStorage.setItem('trivio_current_screen', JSON.stringify(stored))
-        localStorage.setItem('trivio_current_screen', JSON.stringify(stored))
-      } catch {
-        // ignore
+  const handleSelectGroup = (groupId: string) => {
+    setActiveGroupId(groupId)
+    const group = CATEGORY_GROUPS.find(g => g.id === groupId)
+    if (group && group.subcategories.length > 0) {
+      // If current selected category is not in this group, select the first one
+      const hasCurrent = group.subcategories.some(s => s.id === selected)
+      if (!hasCurrent) {
+        handleSelectCategory(group.subcategories[0].id)
       }
-      return next
-    })
+    }
   }
 
-  const effectiveCategory = selected || 'General Knowledge'
+  const handleSelectCategory = (cat: Category) => {
+    setSelected(cat)
+    try {
+      const stored = { name: 'lobby', initialCategory: cat }
+      sessionStorage.setItem('trivio_current_screen', JSON.stringify(stored))
+      localStorage.setItem('trivio_current_screen', JSON.stringify(stored))
+    } catch {
+      // ignore
+    }
+  }
+
+  const currentGroup = CATEGORY_GROUPS.find(g => g.id === activeGroupId) ?? CATEGORY_GROUPS[0]
+  const currentSubInfo = CATEGORY_GROUPS.flatMap(g => g.subcategories).find(s => s.id === selected)
 
   return (
     <div className="relative flex min-h-screen min-h-[100dvh] w-full flex-col overflow-x-hidden bg-[#fafafa]">
@@ -629,12 +653,17 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
       </header>
 
       {/* ── Main Game Hub Content ── */}
-      <main className="relative z-10 flex flex-1 flex-col items-center justify-start px-3.5 sm:px-6 pt-2 pb-8 sm:pt-6 sm:pb-10 w-full max-w-lg mx-auto">
+      <main
+        className="relative z-10 flex flex-1 flex-col items-center justify-start px-3.5 sm:px-6 pt-2 w-full max-w-lg sm:max-w-2xl md:max-w-3xl mx-auto"
+        style={{
+          paddingBottom: 'max(6.5rem, calc(env(safe-area-inset-bottom, 20px) + 5rem))',
+        }}
+      >
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="w-full space-y-3.5 sm:space-y-4"
+          className="w-full space-y-4"
         >
           {/* ── Active Session Recovery Banner ── */}
           {activeSession && onContinueGame && (
@@ -688,31 +717,135 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
             </motion.div>
           )}
 
-          {/* ── Category Pill Selector ── */}
-          <section className="rounded-2xl sm:rounded-3xl bg-white p-3.5 sm:p-5 border border-gray-200/80 shadow-xs space-y-2 sm:space-y-2.5">
-            <h2 className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-gray-500 pl-0.5">
-              Categories
-            </h2>
-            <div className="flex flex-wrap gap-1.5 sm:gap-2">
-              {CATEGORIES.map(({ label, emoji }) => {
-                const active = selected === label
+          {/* ── Modern 2-Tier Game Mode Selector (Web3 Native UI) ── */}
+          <section className="rounded-3xl bg-white p-3.5 sm:p-5 border border-slate-200/90 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.05)] space-y-3.5">
+            {/* Section Header */}
+            <div className="flex items-center justify-between gap-2 px-0.5">
+              <div className="min-w-0">
+                <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Game Mode
+                </h2>
+                <p className="text-xs text-slate-600 font-medium mt-0.5">
+                  Choose a genre, then select your game arena
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-bold bg-slate-100 text-slate-900 border border-slate-200/70 whitespace-nowrap shrink-0">
+                <Users size={12} className="text-slate-800 shrink-0" />
+                <span className="whitespace-nowrap">10–50 Players</span>
+              </span>
+            </div>
+
+            {/* ── Tier 1: Modern Segmented Track (Full titles, responsive) ── */}
+            <div className="p-1 bg-slate-100/90 rounded-2xl grid grid-cols-2 sm:grid-cols-4 gap-1 border border-slate-200/60">
+              {CATEGORY_GROUPS.map((group) => {
+                const isGroupActive = activeGroupId === group.id
                 return (
                   <button
-                    key={label}
-                    onClick={() => handleToggleCategory(label)}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs active:scale-95 cursor-pointer select-none ${active
-                        ? 'text-white font-semibold shadow-xs border border-transparent'
-                        : 'bg-gray-100 hover:bg-gray-200/80 text-gray-800 border border-gray-200/60 font-medium'
-                      }`}
-                    style={active ? { background: 'var(--accent)' } : undefined}
+                    key={group.id}
+                    type="button"
+                    onClick={() => handleSelectGroup(group.id)}
+                    className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-2 sm:px-3 text-xs transition-all duration-150 cursor-pointer select-none text-center ${
+                      isGroupActive
+                        ? 'bg-white text-slate-900 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] border border-slate-200/60 font-bold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/50 font-semibold'
+                    }`}
                   >
-                    <span className="text-sm leading-none">{emoji}</span>
-                    <span>{label}</span>
+                    <span className="text-sm shrink-0 leading-none">{group.emoji}</span>
+                    <span className="tracking-tight leading-tight text-[11px] sm:text-xs whitespace-normal sm:whitespace-nowrap">
+                      {group.name}
+                    </span>
                   </button>
                 )
               })}
             </div>
+
+            {/* ── Tier 2: Tactile Sub-Game Mode Cards (No Checkmarks) ── */}
+            <div className="space-y-2 pt-0.5">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={currentGroup.id}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
+                  className="space-y-2"
+                >
+                  {currentGroup.subcategories.map((sub) => {
+                    const isSubSelected = selected === sub.id
+
+                    return (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        onClick={() => handleSelectCategory(sub.id)}
+                        className={`group w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl text-left transition-all duration-150 cursor-pointer active:scale-[0.99] ${
+                          isSubSelected
+                            ? 'bg-violet-50/40 border-[1.5px] border-violet-600 shadow-[0_2px_8px_-2px_rgba(124,58,237,0.12)]'
+                            : 'bg-slate-50/60 hover:bg-white border border-slate-200/75 hover:border-slate-300 shadow-[0_1px_2px_rgba(0,0,0,0.02)]'
+                        }`}
+                      >
+                        {/* Mode Info */}
+                        <div className="flex items-start gap-3 min-w-0 pr-2">
+                          <span className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-white border border-slate-200/80 text-lg shadow-[0_1px_2px_rgba(0,0,0,0.04)] shrink-0 mt-0.5">
+                            {sub.emoji}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`text-xs sm:text-sm tracking-tight ${isSubSelected ? 'font-extrabold text-violet-950' : 'font-bold text-slate-900'}`}>
+                                {sub.name}
+                              </span>
+                              {sub.badge && (
+                                <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 border border-slate-200/70 px-1.5 py-0.2 rounded-md">
+                                  {sub.badge}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-1">
+                              {sub.tagline}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Right Specs in Solid High-Contrast Black/Dark text */}
+                        <div className="flex flex-col items-end text-[10px] font-medium font-mono shrink-0 ml-2">
+                          <span className="font-bold text-slate-900">
+                            {sub.roundDuration}
+                          </span>
+                          <span className="text-slate-800 font-medium">
+                            {sub.playerCapacity}
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </motion.div>
+              </AnimatePresence>
+            </div>
           </section>
+
+          {/* ── Feature 3: ⚡ Solo Practice Mode Banner ── */}
+          <div className="flex items-center justify-between p-3.5 sm:p-4 rounded-3xl bg-gradient-to-r from-amber-500/10 via-violet-500/5 to-slate-50 border border-amber-200/80 shadow-xs">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-[0_2px_10px_rgba(245,158,11,0.3)]">
+                <Zap size={20} className="fill-current" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs sm:text-sm font-black text-slate-900 tracking-tight">Solo Practice</span>
+                </div>
+                <p className="text-[11px] text-slate-600 font-medium mt-0.5 truncate">
+                  5 rapid questions · Test timer & answer speed risk-free
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setPracticeOpen(true)}
+              className="shrink-0 ml-3 inline-flex items-center justify-center rounded-xl px-3.5 sm:px-4 py-2 text-xs font-extrabold text-slate-900 bg-white hover:bg-slate-50 border border-slate-300/80 transition-all shadow-xs cursor-pointer active:scale-95"
+            >
+              <span>Practice</span>
+            </button>
+          </div>
 
           {/* ── Action cards (Create & Join) ── */}
           <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5">
@@ -725,7 +858,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                 }
                 onCreateRoom(selected)
               }}
-              className="group flex flex-col items-center justify-center gap-1.5 sm:gap-2 rounded-2xl sm:rounded-3xl p-3.5 sm:py-5 text-center transition-all duration-200 hover:brightness-105 active:scale-95 shadow-md"
+              className="group flex flex-col items-center justify-center gap-1.5 sm:gap-2 rounded-2xl sm:rounded-3xl p-3.5 sm:py-5 text-center transition-all duration-200 hover:brightness-105 active:scale-95 shadow-md cursor-pointer"
               style={{
                 background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
                 boxShadow: '0 8px 24px -4px rgba(124, 58, 237, 0.28)',
@@ -743,7 +876,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
             {/* Join Room */}
             <button
               onClick={() => onJoinRoom(selected || 'General Knowledge')}
-              className="group flex flex-col items-center justify-center gap-1.5 sm:gap-2 rounded-2xl sm:rounded-3xl p-3.5 sm:py-5 text-center transition-all duration-200 bg-white hover:bg-violet-50/50 active:scale-95 border-2 border-purple-100 hover:border-purple-300 shadow-sm"
+              className="group flex flex-col items-center justify-center gap-1.5 sm:gap-2 rounded-2xl sm:rounded-3xl p-3.5 sm:py-5 text-center transition-all duration-200 bg-white hover:bg-violet-50/50 active:scale-95 border-2 border-purple-100 hover:border-purple-300 shadow-sm cursor-pointer"
             >
               <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl sm:rounded-2xl bg-purple-50 text-purple-700 transition-transform duration-200 group-hover:scale-110">
                 <LogIn size={18} className="stroke-[2.5]" />
@@ -756,12 +889,23 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
           </div>
 
           {/* ── Footer onchain info badge ── */}
-          <div className="flex items-center justify-center gap-1.5 sm:gap-2 text-center text-[11px] sm:text-xs font-medium text-gray-500 pt-1 px-2">
+          <div className="flex items-center justify-center gap-1.5 sm:gap-2 text-center text-[11px] sm:text-xs font-semibold text-gray-500 pt-1 px-2">
             <TokenUSDC variant="branded" size={13} />
             <span>Prizes paid in USDC on Arc Testnet · instant, zero gas fee</span>
           </div>
         </motion.div>
       </main>
+
+      {/* ── Solo Practice Modal ── */}
+      <SoloPracticeModal
+        isOpen={practiceOpen}
+        category={selected || 'General Knowledge'}
+        onClose={() => setPracticeOpen(false)}
+        onPlayMultiplayer={(cat) => {
+          setPracticeOpen(false)
+          onCreateRoom(cat)
+        }}
+      />
     </div>
   )
 }

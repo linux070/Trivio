@@ -7,7 +7,7 @@ import { buildJoinUrl } from '@/App'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import { useStartGame, useDeclareWinner, useRoomInfo, formatUSDCRaw } from '@/hooks/useTriviaContract'
-import { getQuestions, type Category, type TriviaQuestion } from '@/lib/questions'
+import { getQuestions, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
 import { getRoomCategory, saveActiveGame, clearActiveGame } from '@/lib/roomStorage'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 
@@ -179,7 +179,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
           <div style={{ position: 'absolute', top: '5%', left: '3%', width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, rgba(133,177,237,0.18) 0%, transparent 70%)', filter: 'blur(65px)' }} />
           <div style={{ position: 'absolute', bottom: '10%', right: '5%', width: 260, height: 260, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,205,131,0.16) 0%, transparent 70%)', filter: 'blur(60px)' }} />
         </div>
-        <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-8 pt-4 sm:max-w-lg sm:px-6 sm:py-6">
+        <div
+          className="relative z-10 mx-auto w-full max-w-md px-3.5 pt-4 sm:max-w-xl md:max-w-2xl sm:px-6 sm:py-6"
+          style={{ paddingBottom: 'max(6.5rem, calc(env(safe-area-inset-bottom, 20px) + 5rem))' }}
+        >
           <div className="mb-5 sm:mb-6 flex items-center gap-3">
             <button
               onClick={onBack}
@@ -192,8 +195,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
               <h1 className="display text-xl sm:text-2xl font-bold" style={{ color: 'var(--ink)', letterSpacing: '-0.03em' }}>
                 Room <span style={{ color: 'var(--accent)' }}>{roomCode}</span>
               </h1>
-              <p className="text-xs" style={{ color: 'var(--subtle)' }}>
-                {resolvedCategory} · {isHost ? 'You are the Host' : 'Waiting for host to start'}
+              <p className="text-xs flex items-center gap-1.5 mt-0.5" style={{ color: 'var(--subtle)' }}>
+                <span>{CATEGORY_GROUPS.flatMap(g => g.subcategories).find(s => s.id === resolvedCategory)?.emoji ?? '🎮'}</span>
+                <span className="font-semibold text-gray-800">{resolvedCategory}</span>
+                <span>· {isHost ? 'You are the Host' : 'Waiting for host to start'}</span>
               </p>
             </div>
           </div>
@@ -332,7 +337,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
         <div className="pointer-events-none fixed inset-0 overflow-hidden">
           <div style={{ position: 'absolute', top: '3%', right: '3%', width: 280, height: 280, borderRadius: '50%', background: 'radial-gradient(circle, rgba(133,177,237,0.18) 0%, transparent 70%)', filter: 'blur(65px)' }} />
         </div>
-        <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-6 pt-4 sm:max-w-lg sm:px-6 sm:py-6">
+        <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-24 pt-4 sm:max-w-xl md:max-w-2xl sm:px-6 sm:py-6">
           {/* Progress bar */}
           <div className="mb-4 sm:mb-5">
             <div className="mb-2 flex items-center justify-between">
@@ -442,7 +447,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
           <div style={{ position: 'absolute', top: '5%', left: '3%', width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, rgba(133,177,237,0.18) 0%, transparent 70%)', filter: 'blur(65px)' }} />
           <div style={{ position: 'absolute', bottom: '10%', right: '5%', width: 260, height: 260, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,205,131,0.2) 0%, transparent 70%)', filter: 'blur(60px)' }} />
         </div>
-        <div className="relative z-10 mx-auto w-full max-w-md px-3.5 pb-8 pt-4 sm:max-w-lg sm:px-6 sm:py-6">
+        <div
+          className="relative z-10 mx-auto w-full max-w-md px-3.5 pt-4 sm:max-w-xl md:max-w-2xl sm:px-6 sm:py-6"
+          style={{ paddingBottom: 'max(6.5rem, calc(env(safe-area-inset-bottom, 20px) + 5rem))' }}
+        >
           <div className="mb-5 sm:mb-6 flex items-center gap-3">
             <button
               onClick={onBack}

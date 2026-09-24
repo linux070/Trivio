@@ -107,3 +107,61 @@ body {
   border-radius: 1px;
   animation: blink 1s step-end infinite;
 }
+
+/* ── Smooth Infinite Marquee & Organic Free-Flowing Drifts ── */
+@keyframes marquee {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes marquee-reverse {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0%); }
+}
+
+@keyframes marquee-drift-1 {
+  0% { transform: translateX(0%) translateY(0px); }
+  35% { transform: translateX(-17.5%) translateY(-3px); }
+  70% { transform: translateX(-35%) translateY(2px); }
+  100% { transform: translateX(-50%) translateY(0px); }
+}
+
+@keyframes marquee-drift-2 {
+  0% { transform: translateX(-50%) translateY(0px); }
+  35% { transform: translateX(-32.5%) translateY(3px); }
+  70% { transform: translateX(-15%) translateY(-2px); }
+  100% { transform: translateX(0%) translateY(0px); }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee 32s linear infinite;
+}
+
+.animate-marquee-reverse {
+  display: flex;
+  width: max-content;
+  animation: marquee-reverse 26s linear infinite;
+}
+
+.animate-drift-1 {
+  display: flex;
+  width: max-content;
+  animation: marquee-drift-1 34s ease-in-out infinite;
+}
+
+.animate-drift-2 {
+  display: flex;
+  width: max-content;
+  animation: marquee-drift-2 42s ease-in-out infinite;
+}
+
+.animate-marquee:hover,
+.animate-marquee-reverse:hover,
+.animate-drift-1:hover,
+.animate-drift-2:hover {
+  animation-play-state: paused;
+}
+
+

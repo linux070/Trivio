@@ -1,14 +1,192 @@
 export type Category =
   | 'General Knowledge'
   | 'Crypto'
+  | 'Word Blitz'
+  | 'Emoji Decoder'
+  | 'Logic & Math Arena'
+  | 'Candle Rush'
+  | 'Bomb Tag'
   | 'Sports'
   | 'Pop Culture'
   | 'Science'
   | 'History'
 
+export interface SubCategoryInfo {
+  id: Category
+  name: string
+  emoji: string
+  tagline: string
+  badge?: string
+  roundDuration?: string
+  playerCapacity: string
+  maxPlayers: number
+}
+
+export interface CategoryGroup {
+  id: string
+  name: string
+  emoji: string
+  tagline: string
+  badge?: string
+  subcategories: SubCategoryInfo[]
+}
+
+export const CATEGORY_GROUPS: CategoryGroup[] = [
+  {
+    id: 'crypto_markets',
+    name: 'Crypto & Markets',
+    emoji: '🪙',
+    tagline: 'Onchain trivia, market candles & web3 culture',
+    badge: 'Popular',
+    subcategories: [
+      {
+        id: 'Crypto',
+        name: 'Crypto & Web3',
+        emoji: '🪙',
+        tagline: 'Bitcoin, Ethereum, DeFi & Smart Contracts',
+        badge: 'High Stakes',
+        roundDuration: '10s rounds',
+        playerCapacity: 'Up to 50 players',
+        maxPlayers: 50,
+      },
+      {
+        id: 'Candle Rush',
+        name: 'Candle Rush',
+        emoji: '📈',
+        tagline: 'Fast chart patterns, price spikes & halving cycles',
+        badge: 'Fast-Paced',
+        roundDuration: '10s rounds',
+        playerCapacity: 'Up to 24 players',
+        maxPlayers: 24,
+      },
+    ],
+  },
+  {
+    id: 'puzzles_logic',
+    name: 'Puzzles & Brain Arena',
+    emoji: '🧩',
+    tagline: 'Word scrambles, math speed grids & emoji decoders',
+    badge: 'High IQ',
+    subcategories: [
+      {
+        id: 'Word Blitz',
+        name: 'Word Blitz',
+        emoji: '🔤',
+        tagline: 'Anagram royales, speed scrambles & vocabulary rushes',
+        badge: 'Wordle Style',
+        roundDuration: '12s rounds',
+        playerCapacity: 'Up to 16 players',
+        maxPlayers: 16,
+      },
+      {
+        id: 'Emoji Decoder',
+        name: 'Emoji Decoder',
+        emoji: '🧩',
+        tagline: 'Crack emoji clues for crypto slang, pop icons & movies',
+        badge: 'Visual Rush',
+        roundDuration: '10s rounds',
+        playerCapacity: 'Up to 20 players',
+        maxPlayers: 20,
+      },
+      {
+        id: 'Logic & Math Arena',
+        name: 'Logic & Math Arena',
+        emoji: '⚡',
+        tagline: 'Rapid mental arithmetic, sequences & probability',
+        badge: 'Pure Skill',
+        roundDuration: '15s rounds',
+        playerCapacity: 'Up to 12 players',
+        maxPlayers: 12,
+      },
+    ],
+  },
+  {
+    id: 'social_elimination',
+    name: 'Party & Sudden Death',
+    emoji: '💣',
+    tagline: 'High pressure elimination & social showdowns',
+    badge: 'Social Party',
+    subcategories: [
+      {
+        id: 'Bomb Tag',
+        name: 'Bomb Tag',
+        emoji: '💣',
+        tagline: 'Sudden death rapid trivia — answer fast or get blasted',
+        badge: 'Elimination',
+        roundDuration: '8s rounds',
+        playerCapacity: '2–8 players',
+        maxPlayers: 8,
+      },
+    ],
+  },
+  {
+    id: 'classic_knowledge',
+    name: 'Classic Knowledge',
+    emoji: '🧠',
+    tagline: 'Science, history, sports & global pop culture',
+    subcategories: [
+      {
+        id: 'General Knowledge',
+        name: 'General Knowledge',
+        emoji: '🧠',
+        tagline: 'World geography, records, nature & civilization',
+        badge: 'Classic',
+        roundDuration: '10s rounds',
+        playerCapacity: 'Up to 50 players',
+        maxPlayers: 50,
+      },
+      {
+        id: 'Science',
+        name: 'Science & Cosmos',
+        emoji: '🔬',
+        tagline: 'Physics, biology, space exploration & chemistry',
+        badge: 'Discovery',
+        roundDuration: '10s rounds',
+        playerCapacity: 'Up to 30 players',
+        maxPlayers: 30,
+      },
+      {
+        id: 'History',
+        name: 'World History',
+        emoji: '📜',
+        tagline: 'Empires, revolutions, historical figures & milestones',
+        badge: 'Lore',
+        roundDuration: '10s rounds',
+        playerCapacity: 'Up to 30 players',
+        maxPlayers: 30,
+      },
+      {
+        id: 'Pop Culture',
+        name: 'Pop Culture',
+        emoji: '🎬',
+        tagline: 'Blockbuster movies, hit music, gaming & streaming',
+        badge: 'Entertainment',
+        roundDuration: '10s rounds',
+        playerCapacity: 'Up to 40 players',
+        maxPlayers: 40,
+      },
+      {
+        id: 'Sports',
+        name: 'Sports & Olympics',
+        emoji: '🏆',
+        tagline: 'Football, basketball, championships & athletes',
+        badge: 'Champions',
+        roundDuration: '10s rounds',
+        playerCapacity: 'Up to 30 players',
+        maxPlayers: 30,
+      },
+    ],
+  },
+]
+
 export const ALL_CATEGORIES: Category[] = [
   'General Knowledge',
   'Crypto',
+  'Word Blitz',
+  'Emoji Decoder',
+  'Logic & Math Arena',
+  'Candle Rush',
+  'Bomb Tag',
   'Sports',
   'Pop Culture',
   'Science',
@@ -45,6 +223,66 @@ const QUESTION_BANK: Record<Category, TriviaQuestion[]> = {
     { question: 'What is the native token of Arc?', options: ['ARC', 'ETH', 'USDC', 'MATIC'], correctIndex: 2 },
     { question: 'What does "DeFi" stand for?', options: ['Decentralized Filing', 'Digital Finance', 'Decentralized Finance', 'Distributed Fintech'], correctIndex: 2 },
     { question: 'Which blockchain introduced smart contracts?', options: ['Bitcoin', 'Litecoin', 'Ripple', 'Ethereum'], correctIndex: 3 },
+  ],
+  'Word Blitz': [
+    { question: 'Unscramble the word: "C B L K C H N I A O"', options: ['BLOCKCHAIN', 'BITCOIN', 'CHAINLOCK', 'BLACKCHAIN'], correctIndex: 0 },
+    { question: 'Find the antonym of "EXPEDITE":', options: ['Accelerate', 'Delay', 'Hasten', 'Quicken'], correctIndex: 1 },
+    { question: 'Which word means "a state of noisy confusion"?', options: ['Tranquility', 'Bedlam', 'Silence', 'Serenity'], correctIndex: 1 },
+    { question: 'Unscramble the word: "E T R H E U M U"', options: ['ETHEREUM', 'EUROTHEM', 'METHEUR', 'ETHERIUM'], correctIndex: 0 },
+    { question: 'Complete the palindrome: "RAC_CAR"', options: ['E', 'O', 'A', 'I'], correctIndex: 0 },
+    { question: 'Which word is an anagram of "SILENT"?', options: ['LISTEN', 'INSECT', 'TINSEL', 'NEATLY'], correctIndex: 0 },
+    { question: 'Unscramble the word: "S O L A N A"', options: ['SOLANA', 'SALOON', 'ALONAS', 'SALONA'], correctIndex: 0 },
+    { question: 'What is a group of crows called?', options: ['Flock', 'Pack', 'Murder', 'Swarm'], correctIndex: 2 },
+    { question: 'Which word is spelled correctly?', options: ['Definately', 'Definitely', 'Defenetly', 'Definatly'], correctIndex: 1 },
+    { question: 'Which word means "having unlimited power"?', options: ['Omnipotent', 'Omniscient', 'Omnipresent', 'Omnivorous'], correctIndex: 0 },
+  ],
+  'Emoji Decoder': [
+    { question: 'Decode the movie: 🦁 👑', options: ['The Lion King', 'Madagascar', 'Jungle Book', 'Tarzan'], correctIndex: 0 },
+    { question: 'Decode the crypto term: 🐋 🌊 💰', options: ['Crypto Whale', 'Dolphin Hodler', 'Tidal Pool', 'Sea Swap'], correctIndex: 0 },
+    { question: 'Decode the movie: 🚢 🧊 💔', options: ['Titanic', 'Cast Away', 'Frozen', 'Poseidon'], correctIndex: 0 },
+    { question: 'Decode the country: 🗼 🥐 🥖 🍷', options: ['Italy', 'France', 'Spain', 'Germany'], correctIndex: 1 },
+    { question: 'Decode the song: 👁️ 🐅 🥊', options: ['Eye of the Tiger', 'Roar', 'Survivor', 'The Boxer'], correctIndex: 0 },
+    { question: 'Decode the movie: ⚡ 🧙‍♂️ 👓 🦉', options: ['Lord of the Rings', 'Percy Jackson', 'Harry Potter', 'Doctor Strange'], correctIndex: 2 },
+    { question: 'Decode the crypto slang: 💎 🙌', options: ['Diamond Hands', 'Paper Hands', 'Moon Bag', 'Rocket Hands'], correctIndex: 0 },
+    { question: 'Decode the brand: 🍎 📱 💻', options: ['Apple', 'Microsoft', 'Samsung', 'Google'], correctIndex: 0 },
+    { question: 'Decode the movie: 👻 🚫 🔫', options: ['Ghostbusters', 'Casper', 'Poltergeist', 'Beetlejuice'], correctIndex: 0 },
+    { question: 'Decode the crypto phrase: 🚀 🌕', options: ['To the Moon', 'Starship Launch', 'Space Mission', 'Lunar Rocket'], correctIndex: 0 },
+  ],
+  'Logic & Math Arena': [
+    { question: 'Solve: 12 × 12 - 44 = ?', options: ['100', '110', '120', '90'], correctIndex: 0 },
+    { question: 'What comes next in the sequence: 2, 4, 8, 16, 32, __?', options: ['48', '60', '64', '128'], correctIndex: 2 },
+    { question: 'If 5 cats catch 5 mice in 5 minutes, how many minutes do 100 cats take to catch 100 mice?', options: ['100', '50', '5', '1'], correctIndex: 2 },
+    { question: 'Solve: (8 + 8 ÷ 2) × 3 = ?', options: ['36', '24', '48', '18'], correctIndex: 0 },
+    { question: 'A bat and ball cost $1.10. The bat costs $1.00 more than the ball. How much is the ball?', options: ['$0.10', '$0.05', '$0.01', '$0.15'], correctIndex: 1 },
+    { question: 'What is the square root of 144?', options: ['11', '12', '13', '14'], correctIndex: 1 },
+    { question: 'Solve for X: 3X + 15 = 45', options: ['5', '10', '15', '20'], correctIndex: 1 },
+    { question: 'What is 15% of 200?', options: ['20', '25', '30', '35'], correctIndex: 2 },
+    { question: 'How many prime numbers are between 1 and 10?', options: ['3', '4', '5', '6'], correctIndex: 1 },
+    { question: 'If you flip a fair coin 3 times, what is the probability of getting all heads?', options: ['1/2', '1/4', '1/8', '1/16'], correctIndex: 2 },
+  ],
+  'Candle Rush': [
+    { question: 'What candlestick pattern typically indicates a strong bullish reversal after a downtrend?', options: ['Hammer', 'Shooting Star', 'Bearish Engulfing', 'Evening Star'], correctIndex: 0 },
+    { question: 'What happens to Bitcoin block mining rewards roughly every 4 years?', options: ['They double', 'They are cut in half (Halving)', 'They remain static', 'They drop to 0'], correctIndex: 1 },
+    { question: 'What indicator measures momentum on a 0-100 scale to detect overbought/oversold levels?', options: ['MACD', 'RSI (Relative Strength Index)', 'Bollinger Bands', 'Fibonacci Levels'], correctIndex: 1 },
+    { question: 'What was Bitcoin\'s approximate all-time high during the 2021 bull run cycle?', options: ['$48,000', '$69,000', '$92,000', '$35,000'], correctIndex: 1 },
+    { question: 'What term describes a sustained declining market filled with pessimistic sentiment?', options: ['Bull Market', 'Bear Market', 'Crab Market', 'Parabolic Run'], correctIndex: 1 },
+    { question: 'What does a green candlestick signify on a standard price chart?', options: ['Close price is higher than open price', 'Close price is lower than open price', 'Zero volume traded', 'Trading halted'], correctIndex: 0 },
+    { question: 'What rapid price surge occurs when heavily shorted assets force sellers to buy back?', options: ['Flash Crash', 'Short Squeeze', 'Rug Pull', 'Liquidity Drain'], correctIndex: 1 },
+    { question: 'In order books, what is the spread between the highest bid and lowest ask price called?', options: ['Slippage', 'Bid-Ask Spread', 'Arbitrage', 'Delta'], correctIndex: 1 },
+    { question: 'Which metric represents total USD value of all assets locked into a DeFi protocol?', options: ['FDV', 'TVL (Total Value Locked)', 'Market Cap', 'Circulating Supply'], correctIndex: 1 },
+    { question: 'Which chart pattern features three peaks with the highest in the middle, signaling a bearish turn?', options: ['Cup and Handle', 'Double Bottom', 'Head and Shoulders', 'Ascending Triangle'], correctIndex: 2 },
+  ],
+  'Bomb Tag': [
+    { question: '⚡ SUDDEN DEATH: How many seconds does a standard Trivio speed round give you?', options: ['5s', '10s', '30s', '60s'], correctIndex: 1 },
+    { question: '💣 DEFUSE: Which of these is a Layer-1 blockchain?', options: ['Arbitrum', 'Optimism', 'Ethereum', 'Base'], correctIndex: 2 },
+    { question: '🔥 HOT POTATO: What does EVM stand for in crypto?', options: ['Ethereum Virtual Machine', 'Ether Value Metric', 'Electronic Voting Module', 'Exchange Verification Method'], correctIndex: 0 },
+    { question: '⚡ SNAP DECISION: What is 7 × 8?', options: ['54', '56', '58', '64'], correctIndex: 1 },
+    { question: '💣 DEFUSE: What was the first cryptographic cryptocurrency ever created?', options: ['Litecoin', 'Namecoin', 'Bitcoin', 'Peercoin'], correctIndex: 2 },
+    { question: '🔥 PASS THE BOMB: Which continent has zero native reptiles or snakes?', options: ['Europe', 'Antarctica', 'Australia', 'South America'], correctIndex: 1 },
+    { question: '⚡ SNAP DECISION: Which gas makes up roughly 78% of Earth\'s atmosphere?', options: ['Oxygen', 'Carbon Dioxide', 'Nitrogen', 'Argon'], correctIndex: 2 },
+    { question: '💣 DEFUSE: In poker, which hand beats a standard Flush?', options: ['Two Pair', 'Straight', 'Full House', 'Three of a Kind'], correctIndex: 2 },
+    { question: '🔥 HOT POTATO: What year was the Bitcoin Genesis block mined?', options: ['2007', '2008', '2009', '2010'], correctIndex: 2 },
+    { question: '⚡ SUDDEN DEATH: How many sides does an Octagon have?', options: ['6', '7', '8', '10'], correctIndex: 2 },
   ],
   Sports: [
     { question: 'How many players are on a soccer team?', options: ['9', '10', '11', '12'], correctIndex: 2 },
