@@ -86,9 +86,22 @@ function getInitialScreen(): Screen {
 
   if (typeof window !== 'undefined') {
     const isLanding = !(isAuth && hasProfile)
-    const bg = isLanding ? '#5b21b6' : '#fafafa'
-    document.documentElement.style.backgroundColor = bg
-    if (document.body) document.body.style.backgroundColor = bg
+    const landingGradient = 'linear-gradient(160deg, #7c3aed 0%, #6d28d9 30%, #5b21b6 65%, #4c1d95 100%)'
+    if (isLanding) {
+      document.documentElement.style.background = landingGradient
+      document.documentElement.style.backgroundColor = '#5b21b6'
+      if (document.body) {
+        document.body.style.background = landingGradient
+        document.body.style.backgroundColor = '#5b21b6'
+      }
+    } else {
+      document.documentElement.style.background = '#fafafa'
+      document.documentElement.style.backgroundColor = '#fafafa'
+      if (document.body) {
+        document.body.style.background = '#fafafa'
+        document.body.style.backgroundColor = '#fafafa'
+      }
+    }
     const themeMeta = document.getElementById('theme-color-meta')
     if (themeMeta) themeMeta.setAttribute('content', isLanding ? '#6d28d9' : '#ffffff')
   }
@@ -323,11 +336,21 @@ export default function App() {
   // Synchronize document background color and mobile theme-color with active screen
   useEffect(() => {
     const isLanding = screen.name === 'landing'
-    const bg = isLanding ? '#5b21b6' : '#fafafa'
+    const landingGradient = 'linear-gradient(160deg, #7c3aed 0%, #6d28d9 30%, #5b21b6 65%, #4c1d95 100%)'
     const themeColor = isLanding ? '#6d28d9' : '#ffffff'
 
-    document.documentElement.style.backgroundColor = bg
-    document.body.style.backgroundColor = bg
+    if (isLanding) {
+      document.documentElement.style.background = landingGradient
+      document.documentElement.style.backgroundColor = '#5b21b6'
+      document.body.style.background = landingGradient
+      document.body.style.backgroundColor = '#5b21b6'
+    } else {
+      document.documentElement.style.background = '#fafafa'
+      document.documentElement.style.backgroundColor = '#fafafa'
+      document.body.style.background = '#fafafa'
+      document.body.style.backgroundColor = '#fafafa'
+    }
+
     const themeMeta = document.getElementById('theme-color-meta')
     if (themeMeta) {
       themeMeta.setAttribute('content', themeColor)

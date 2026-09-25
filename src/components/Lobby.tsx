@@ -34,9 +34,12 @@ import {
   saveUserProfile,
   getDiceBearAvatarUrl,
   DICEBEAR_STYLES,
+  isReservedUsername,
+  validateUsername,
   type UserProfile,
 } from '@/lib/userProfile'
 import { useUsdcBalance, formatUSDCRaw } from '@/hooks/useTriviaContract'
+import { useOnchainProfile, useSetOnchainProfile, useCheckUsernameAvailable } from '@/hooks/useTrivioProfileRegistry'
 import { ARC_TESTNET_CHAIN_ID, ARC_MAINNET_CHAIN_ID } from '@/config'
 import {
   type Category,
@@ -121,6 +124,58 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
   const { data: rawBalance } = useUsdcBalance(activeAddress as `0x${string}`, activeChainId)
   const balanceHuman = rawBalance !== undefined ? formatUSDCRaw(rawBalance) : '0.00'
 
+  const {
+    profile: onchainProfile,
+    hasProfile: hasOnchainProfile,
+    refetch: refetchOnchainProfile,
+  } = useOnchainProfile(activeAddress, activeChainId)
+
+  const {
+    setProfile: setOnchainProfile,
+    isPending: isSettingOnchain,
+    isConfirming: isConfirmingOnchain,
+    isSuccess: isOnchainSuccess,
+    hash: onchainTxHash,
+  } = useSetOnchainProfile()
+
+  const cleanNameInput = nameInput.trim().replace(/^@/, '')
+  const isNameInputReserved = isReservedUsername(cleanNameInput)
+  const { data: isNameInputAvailable } = useCheckUsernameAvailable(cleanNameInput, activeChainId)
+  const isNameInputTaken = Boolean(
+    !isNameInputReserved &&
+    cleanNameInput.length >= 2 &&
+    cleanNameInput.toLowerCase() !== profile?.username?.toLowerCase() &&
+    isNameInputAvailable === false
+  )
+
+  useEffect(() => {
+    if (hasOnchainProfile && onchainProfile) {
+      const p: UserProfile = {
+        username: onchainProfile.username,
+        avatarUrl: onchainProfile.avatarUrl || getDiceBearAvatarUrl(onchainProfile.avatarStyle || 'bottts-neutral', onchainProfile.avatarSeed || onchainProfile.username),
+        avatarSeed: onchainProfile.avatarSeed || onchainProfile.username,
+        avatarStyle: onchainProfile.avatarStyle || 'bottts-neutral',
+        createdAt: Number(onchainProfile.updatedAt) * 1000 || Date.now(),
+      }
+      saveUserProfile(p, activeAddress)
+      setProfile(p)
+    } else {
+      const local = getUserProfile(activeAddress)
+      if (local) {
+        setProfile(local)
+      }
+    }
+  }, [hasOnchainProfile, onchainProfile, activeAddress])
+
+  useEffect(() => {
+    if (isOnchainSuccess) {
+      refetchOnchainProfile()
+      toast.success('Profile registered on Arc Testnet!', {
+        description: onchainTxHash ? `Tx: ${onchainTxHash.slice(0, 10)}...` : undefined,
+      })
+    }
+  }, [isOnchainSuccess, onchainTxHash, refetchOnchainProfile])
+
   useEffect(() => {
     if (chainId === ARC_MAINNET_CHAIN_ID) {
       setSelectedNetwork('mainnet')
@@ -192,8 +247,13 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
       setIsEditingName(false)
       return
     }
-    if (cleaned.length < 2) {
-      toast.error('Username must be at least 2 characters')
+    const validation = validateUsername(cleaned)
+    if (!validation.valid) {
+      toast.error(validation.error || 'Invalid username')
+      return
+    }
+    if (isNameInputTaken) {
+      toast.error('Username already taken.')
       return
     }
     const updated: UserProfile = {
@@ -203,10 +263,24 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
       avatarStyle: profile?.avatarStyle || 'bottts-neutral',
       createdAt: profile?.createdAt || Date.now(),
     }
-    saveUserProfile(updated)
+    saveUserProfile(updated, activeAddress)
     setProfile(updated)
     setIsEditingName(false)
-    toast.success('Username updated!')
+    toast.info('Registering username on Arc blockchain...')
+
+    if (activeAddress && activeAddress !== '0x0000000000000000000000000000000000000000') {
+      try {
+        setOnchainProfile(
+          updated.username,
+          updated.avatarUrl,
+          updated.avatarSeed,
+          updated.avatarStyle,
+          activeChainId
+        )
+      } catch (err) {
+        console.warn('Failed to submit onchain profile:', err)
+      }
+    }
   }
 
   const handleCancelEditName = () => {
@@ -245,7 +319,7 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
             avatarStyle: 'custom',
             createdAt: profile?.createdAt || Date.now(),
           }
-          saveUserProfile(updated)
+          saveUserProfile(updated, activeAddress)
           setProfile(updated)
           toast.success('Avatar updated!')
         }
@@ -273,7 +347,7 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
       avatarStyle: randomStyle,
       createdAt: profile?.createdAt || Date.now(),
     }
-    saveUserProfile(updated)
+    saveUserProfile(updated, activeAddress)
     setProfile(updated)
     setAvatarImgError(false)
     toast.success('Avatar rolled!')
@@ -483,44 +557,61 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
 
                 <div className="mt-1">
                   {isEditingName ? (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault()
-                        handleSaveName()
-                      }}
-                      className="flex items-center gap-1 pb-0.5 border-b border-purple-300/80 focus-within:border-purple-500/70 transition-colors"
-                    >
-                      <span className="text-gray-400 font-medium text-sm select-none">@</span>
-                      <input
-                        ref={nameInputRef}
-                        type="text"
-                        value={nameInput}
-                        onChange={(e) => setNameInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Escape') handleCancelEditName()
+                    <div className="space-y-1">
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          handleSaveName()
                         }}
-                        placeholder="username"
-                        maxLength={20}
-                        className="w-full min-w-0 bg-transparent text-sm font-medium text-gray-800 outline-none placeholder:text-gray-400 p-0"
-                      />
-                      <div className="flex items-center gap-0.5 shrink-0 ml-1">
-                        <button
-                          type="submit"
-                          title="Save (Enter)"
-                          className="flex h-5 w-5 items-center justify-center rounded text-purple-600 hover:text-purple-800 hover:bg-purple-50 active:scale-90 transition-all cursor-pointer"
-                        >
-                          <Check size={14} className="stroke-[2.5]" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleCancelEditName}
-                          title="Cancel (Esc)"
-                          className="flex h-5 w-5 items-center justify-center rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 active:scale-90 transition-all cursor-pointer"
-                        >
-                          <X size={14} className="stroke-[2]" />
-                        </button>
-                      </div>
-                    </form>
+                        className={`flex items-center gap-1 pb-0.5 border-b ${
+                          isReservedUsername(nameInput)
+                            ? 'border-amber-400 focus-within:border-amber-500'
+                            : 'border-purple-300/80 focus-within:border-purple-500/70'
+                        } transition-colors`}
+                      >
+                        <span className="text-gray-400 font-medium text-sm select-none">@</span>
+                        <input
+                          ref={nameInputRef}
+                          type="text"
+                          value={nameInput}
+                          onChange={(e) => setNameInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') handleCancelEditName()
+                          }}
+                          placeholder="username"
+                          maxLength={20}
+                          className="w-full min-w-0 bg-transparent text-sm font-medium text-gray-800 outline-none placeholder:text-gray-400 p-0"
+                        />
+                        <div className="flex items-center gap-0.5 shrink-0 ml-1">
+                          <button
+                            type="submit"
+                            disabled={isNameInputReserved || isNameInputTaken}
+                            title="Save (Enter)"
+                            className="flex h-5 w-5 items-center justify-center rounded text-purple-600 hover:text-purple-800 hover:bg-purple-50 disabled:opacity-40 disabled:pointer-events-none active:scale-90 transition-all cursor-pointer"
+                          >
+                            <Check size={14} className="stroke-[2.5]" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEditName}
+                            title="Cancel (Esc)"
+                            className="flex h-5 w-5 items-center justify-center rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 active:scale-90 transition-all cursor-pointer"
+                          >
+                            <X size={14} className="stroke-[2]" />
+                          </button>
+                        </div>
+                      </form>
+                      {isNameInputReserved && (
+                        <span className="text-[10px] font-medium text-amber-600 block leading-tight">
+                          Username contains a reserved word.
+                        </span>
+                      )}
+                      {isNameInputTaken && (
+                        <span className="text-[10px] font-medium text-red-600 block leading-tight">
+                          Username already taken.
+                        </span>
+                      )}
+                    </div>
                   ) : (
                     <button
                       type="button"

@@ -50,13 +50,21 @@ const SHAPES = [
 
 function FloatingShapes() {
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+    <div
+      className="pointer-events-none absolute inset-0 overflow-hidden"
+      style={{
+        background:
+          'radial-gradient(circle at 90% 5%, rgba(192,132,252,0.22) 0%, transparent 45%), radial-gradient(circle at 10% 95%, rgba(139,92,246,0.20) 0%, transparent 45%), radial-gradient(ellipse at 50% 45%, rgba(255,255,255,0.06) 0%, transparent 60%)',
+        isolation: 'isolate',
+      }}
+    >
       {SHAPES.map(([type, x, y, size, rot], i) => {
         const s = size as number
         const style: React.CSSProperties = {
           left: `${x}%`, top: `${y}%`,
           width: s, height: s,
           transform: `rotate(${rot}deg)`,
+          WebkitTransform: `rotate(${rot}deg)`,
           position: 'absolute',
           opacity: 0.11,
           pointerEvents: 'none',
@@ -84,9 +92,6 @@ function FloatingShapes() {
         )
         return null
       })}
-      <div style={{ position: 'absolute', top: '-12%', right: '-8%', width: 420, height: 420, borderRadius: '50%', background: 'radial-gradient(circle, rgba(192,132,252,0.28) 0%, transparent 65%)', filter: 'blur(55px)' }} />
-      <div style={{ position: 'absolute', bottom: '-8%', left: '-8%', width: 380, height: 380, borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.22) 0%, transparent 65%)', filter: 'blur(52px)' }} />
-      <div style={{ position: 'absolute', top: '42%', left: '50%', transform: 'translateX(-50%)', width: 600, height: 300, borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(255,255,255,0.07) 0%, transparent 68%)', filter: 'blur(28px)' }} />
     </div>
   )
 }
@@ -223,11 +228,7 @@ function LiveWinnersTicker({ onWinnerClick }: { onWinnerClick: () => void }) {
   const continuousList = [...RECENT_WINNERS_FEED, ...RECENT_WINNERS_FEED]
 
   return (
-    <div className="w-full max-w-full overflow-hidden select-none relative py-1">
-      {/* Subtle smooth edge gradient masks */}
-      <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 sm:w-20 z-10 bg-gradient-to-r from-[#6223c7] via-[#6223c7]/60 to-transparent" />
-      <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 sm:w-20 z-10 bg-gradient-to-l from-[#6223c7] via-[#6223c7]/60 to-transparent" />
-
+    <div className="w-full max-w-full overflow-hidden select-none relative py-1 trivio-ticker-mask">
       {/* Single continuous line where items follow each other */}
       <div className="animate-marquee flex items-center gap-2 sm:gap-3 py-0.5">
         {continuousList.map((item, idx) => (
@@ -237,10 +238,8 @@ function LiveWinnersTicker({ onWinnerClick }: { onWinnerClick: () => void }) {
             type="button"
             className="group flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:px-3.5 py-1 sm:py-1.5 text-[11px] sm:text-xs text-white transition-all duration-200 hover:bg-white/25 hover:scale-105 active:scale-95 cursor-pointer shrink-0"
             style={{
-              background: 'rgba(255, 255, 255, 0.12)',
-              backdropFilter: 'blur(14px)',
-              WebkitBackdropFilter: 'blur(14px)',
-              border: '1px solid rgba(255, 255, 255, 0.22)',
+              background: 'rgba(255, 255, 255, 0.16)',
+              border: '1px solid rgba(255, 255, 255, 0.26)',
               boxShadow: '0 4px 18px rgba(0, 0, 0, 0.08)',
             }}
           >

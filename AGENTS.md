@@ -5,6 +5,7 @@
 
 | Contract | Chain | Address | Explorer |
 |---|---|---|---|
+| TrivioProfileRegistry | Arc Testnet | `0xd69522761493ce3fc74fc07ae99d5cbd6de5f480` | [View](https://explorer.testnet.arc.io/address/0xd69522761493ce3fc74fc07ae99d5cbd6de5f480) |
 | TriviaGame v2 | Arc Testnet | `0x11b30d080135bdb746adf2bdfb9754605fb9b171` | [View](https://explorer.testnet.arc.io/address/0x11b30d080135bdb746adf2bdfb9754605fb9b171) |
 | TriviaGame v1 (deprecated) | Arc Testnet | `0x68c0f6749a656f6effb7f702026c113cce7b0ed3` | [View](https://explorer.testnet.arc.io/address/0x68c0f6749a656f6effb7f702026c113cce7b0ed3) |
 

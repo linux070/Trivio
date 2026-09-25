@@ -7,8 +7,11 @@ import {
   saveUserProfile,
   getDefaultProfileSuggestions,
   DICEBEAR_STYLES,
+  isReservedUsername,
+  validateUsername,
   type UserProfile,
 } from '@/lib/userProfile'
+import { useCheckUsernameAvailable } from '@/hooks/useTrivioProfileRegistry'
 
 interface EditProfileModalProps {
   open: boolean
@@ -30,6 +33,16 @@ export default function EditProfileModal({
   const [avatarStyle, setAvatarStyle] = useState('bottts-neutral')
   const [isCustom, setIsCustom] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const cleanUsername = username.trim().replace(/^@/, '')
+  const isReserved = isReservedUsername(cleanUsername)
+  const { data: isAvailableOnchain } = useCheckUsernameAvailable(cleanUsername)
+  const isTaken = Boolean(
+    !isReserved &&
+    cleanUsername.length >= 2 &&
+    cleanUsername.toLowerCase() !== initialProfile?.username?.toLowerCase() &&
+    isAvailableOnchain === false
+  )
 
   useEffect(() => {
     if (open) {
@@ -122,6 +135,17 @@ export default function EditProfileModal({
   const handleSave = (e?: React.FormEvent) => {
     if (e) e.preventDefault()
     const cleanUsername = username.trim().replace(/^@/, '') || initialProfile?.username || defaults.username
+    const validation = validateUsername(cleanUsername)
+
+    if (!validation.valid) {
+      toast.error(validation.error || 'Invalid username')
+      return
+    }
+
+    if (isTaken) {
+      toast.error('Username already taken.')
+      return
+    }
 
     const updated: UserProfile = {
       username: cleanUsername,
@@ -247,11 +271,17 @@ export default function EditProfileModal({
               </div>
 
               {/* Username Input */}
-              <div>
-                <label htmlFor="edit-username-input" className="block text-xs font-semibold text-gray-700 mb-1">
+              <div className="space-y-1">
+                <label htmlFor="edit-username-input" className="block text-xs font-semibold text-gray-700">
                   Username
                 </label>
-                <div className="flex items-center rounded-xl border border-gray-200 bg-gray-50/70 px-3 py-2 focus-within:border-purple-600 focus-within:bg-white transition-all">
+                <div
+                  className={`flex items-center rounded-xl border px-3 py-2 transition-all ${
+                    isReservedUsername(username)
+                      ? 'border-amber-400 bg-amber-50/30 focus-within:border-amber-500'
+                      : 'border-gray-200 bg-gray-50/70 focus-within:border-purple-600 focus-within:bg-white'
+                  }`}
+                >
                   <span className="text-xs font-medium text-gray-400 mr-1 select-none">@</span>
                   <input
                     id="edit-username-input"
@@ -264,7 +294,20 @@ export default function EditProfileModal({
                     required
                   />
                 </div>
-                <div className="flex justify-between text-[10px] text-gray-400 mt-1 px-1">
+
+                {isReserved && (
+                  <span className="text-[10px] font-medium text-amber-600 block leading-tight">
+                    Username contains a reserved word.
+                  </span>
+                )}
+
+                {isTaken && (
+                  <span className="text-[10px] font-medium text-red-600 block leading-tight">
+                    Username already taken.
+                  </span>
+                )}
+
+                <div className="flex justify-between text-[10px] text-gray-400 pt-0.5 px-1">
                   <span>Letters, numbers, underscores</span>
                   <span>{username.length}/16</span>
                 </div>
@@ -281,7 +324,8 @@ export default function EditProfileModal({
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-xs font-bold text-white py-2.5 shadow-sm transition-all active:scale-98"
+                  disabled={isReserved || isTaken}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:pointer-events-none text-xs font-bold text-white py-2.5 shadow-sm transition-all active:scale-98 cursor-pointer"
                 >
                   <Check size={14} />
                   <span>Save</span>
