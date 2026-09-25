@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, startTransition } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2 } from 'lucide-react'
+import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2, Zap } from 'lucide-react'
 import { buildJoinUrl } from '@/App'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
@@ -105,7 +105,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
         setLastCorrect(false)
         setLastPts(null)
       })
-      const t = setTimeout(() => advanceQuestion(qIndex, questions), 2000)
+      const t = setTimeout(() => advanceQuestion(qIndex, questions), 2500)
       return () => clearTimeout(t)
     }
     const t = setTimeout(() => setTimeLeft(s => s - 1), 1000)
@@ -155,7 +155,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       setLastCorrect(false)
     }
 
-    setTimeout(() => advanceQuestion(qIndex, questions), 1800)
+    setTimeout(() => advanceQuestion(qIndex, questions), 2500)
   }
 
   const handleStartGame = () => {
@@ -290,7 +290,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                   className="w-full rounded-2xl py-4 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
                   style={{ background: 'var(--accent)', color: 'white' }}
                 >
-                  {isWrongChain ? 'Switch to Arc Testnet' : startPending || startConfirming ? 'Starting...' : 'Start Game'}
+                  {isWrongChain ? 'Switch to Arc' : startPending || startConfirming ? 'Starting...' : 'Start Game'}
                 </button>
               </>
             )}
@@ -382,56 +382,98 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
             </motion.div>
           </AnimatePresence>
 
-          {/* Options */}
+          {/* Options Grid */}
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             {currentQ.options.map((opt, i) => {
               const isSelected = selectedIndex === i
-              const isAnswerCorrect = i === currentQ.correctIndex
-              let bg = 'rgba(255,255,255,0.64)'
-              let border = '1px solid rgba(255,255,255,0.68)'
-              let textColor = 'var(--ink)'
-              if (answered) {
-                if (isAnswerCorrect) { bg = 'rgba(26,128,71,0.12)'; border = '1px solid rgba(26,128,71,0.35)'; textColor = 'var(--success)' }
-                else if (isSelected) { bg = 'rgba(186,43,76,0.1)'; border = '1px solid rgba(186,43,76,0.3)'; textColor = 'var(--danger)' }
-              }
               return (
-                <motion.button
+                <button
                   key={i}
-                  whileTap={!answered ? { scale: 0.98 } : {}}
+                  type="button"
                   onClick={() => handleAnswer(i)}
                   disabled={answered}
-                  className="w-full rounded-2xl px-5 py-4 text-left text-sm font-semibold transition-all hover:shadow-md disabled:cursor-default"
+                  className={`group relative flex items-center gap-3.5 w-full rounded-2xl p-4 text-left text-sm font-medium transition-all duration-150 ${
+                    !answered
+                      ? 'bg-white/80 hover:bg-white border border-slate-200/80 hover:border-slate-300 hover:shadow-sm cursor-pointer'
+                      : isSelected
+                      ? 'bg-white border-slate-900 ring-1 ring-slate-900/10 shadow-sm text-slate-900 font-semibold cursor-default'
+                      : 'bg-white/30 border border-slate-200/40 text-slate-400 opacity-40 cursor-default'
+                  }`}
                   style={{
-                    background: bg,
-                    backdropFilter: 'blur(24px) saturate(180%)',
-                    WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-                    border,
-                    boxShadow: '0 2px 12px rgba(18,45,69,0.06)',
-                    color: textColor,
+                    backdropFilter: 'blur(20px)',
+                    WebkitBackdropFilter: 'blur(20px)',
                   }}
                 >
-                  <span className="mr-3 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold" style={{ background: 'rgba(18,45,69,0.07)', color: 'var(--muted)' }}>
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg font-mono text-xs font-semibold transition-colors ${
+                      !answered
+                        ? 'bg-slate-100 text-slate-500 group-hover:bg-slate-200/80 group-hover:text-slate-800'
+                        : isSelected
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-slate-100/60 text-slate-400'
+                    }`}
+                  >
                     {String.fromCharCode(65 + i)}
                   </span>
-                  {opt}
-                </motion.button>
+                  <span className="flex-1 leading-snug truncate">{opt}</span>
+                </button>
               )
             })}
           </div>
 
+          {/* Ultra-Clean Modern Resolution Strip */}
           {answered && (
-            <motion.p
-              initial={{ opacity: 0, y: 8 }}
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-4 text-center text-sm font-semibold"
-              style={{ color: lastCorrect ? 'var(--success)' : 'var(--danger)' }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="mt-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 p-3 sm:p-3.5 backdrop-blur-xl shadow-xs"
             >
-              {lastCorrect
-                ? `+${lastPts ?? 0} pts — Correct!`
-                : selectedIndex === null
-                  ? 'Time is up!'
-                  : `Wrong — ${currentQ.options[currentQ.correctIndex]}`}
-            </motion.p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+                {/* Left: Clear Status Badge & Answer Reveal */}
+                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 min-w-0">
+                  {lastCorrect ? (
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white tracking-wide shrink-0 shadow-2xs">
+                      Correct
+                    </span>
+                  ) : selectedIndex === null ? (
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500 text-white tracking-wide shrink-0 shadow-2xs">
+                      Time's Up
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-600 text-white tracking-wide shrink-0 shadow-2xs">
+                      Wrong
+                    </span>
+                  )}
+
+                  {!lastCorrect && (
+                    <div className="flex items-center gap-1.5 text-xs text-slate-600 min-w-0">
+                      <span className="text-slate-500 font-medium shrink-0">Correct:</span>
+                      <span className="font-bold font-mono text-slate-900 bg-white border border-slate-200/90 px-2 py-0.5 rounded-md shadow-2xs">
+                        Option {String.fromCharCode(65 + currentQ.correctIndex)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: Score Delta (Matches exact added score) */}
+                {lastCorrect && lastPts !== null && (
+                  <div className="flex items-center gap-1 font-mono text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg self-end sm:self-center shrink-0 shadow-2xs">
+                    +{lastPts} pts
+                  </div>
+                )}
+              </div>
+
+              {/* Hairline countdown timer */}
+              <div className="mt-3 h-0.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-slate-900/40 rounded-full"
+                  initial={{ width: '100%' }}
+                  animate={{ width: '0%' }}
+                  transition={{ duration: 2.5, ease: 'linear' }}
+                />
+              </div>
+            </motion.div>
           )}
         </div>
       </div>

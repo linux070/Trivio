@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Clock, Zap, Trophy, CheckCircle2, XCircle } from 'lucide-react'
+import { X, Clock, Zap, Trophy } from 'lucide-react'
 import { getQuestions, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
 
 interface SoloPracticeModalProps {
@@ -25,6 +25,7 @@ export default function SoloPracticeModal({
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [answered, setAnswered] = useState(false)
   const [score, setScore] = useState(0)
+  const [lastPts, setLastPts] = useState<number | null>(null)
   const [correctCount, setCorrectCount] = useState(0)
   const [isFinished, setIsFinished] = useState(false)
 
@@ -43,6 +44,7 @@ export default function SoloPracticeModal({
       setSelectedIndex(null)
       setAnswered(false)
       setScore(0)
+      setLastPts(null)
       setCorrectCount(0)
       setIsFinished(false)
       answerStartRef.current = Date.now()
@@ -72,7 +74,8 @@ export default function SoloPracticeModal({
   const handleTimeOut = () => {
     setAnswered(true)
     setSelectedIndex(-1)
-    setTimeout(() => advanceQuestion(qIndex), 1500)
+    setLastPts(null)
+    setTimeout(() => advanceQuestion(qIndex), 2500)
   }
 
   const advanceQuestion = (currentIdx: number) => {
@@ -84,6 +87,7 @@ export default function SoloPracticeModal({
       setTimeLeft(PRACTICE_TIME)
       setSelectedIndex(null)
       setAnswered(false)
+      setLastPts(null)
       answerStartRef.current = Date.now()
     }
   }
@@ -100,10 +104,13 @@ export default function SoloPracticeModal({
     if (idx === q.correctIndex) {
       const pts = Math.max(20, 100 - Math.floor((elapsed / 1000) * 8))
       setScore(s => s + pts)
+      setLastPts(pts)
       setCorrectCount(c => c + 1)
+    } else {
+      setLastPts(null)
     }
 
-    setTimeout(() => advanceQuestion(qIndex), 1400)
+    setTimeout(() => advanceQuestion(qIndex), 2500)
   }
 
   const restartPractice = () => {
@@ -114,6 +121,7 @@ export default function SoloPracticeModal({
     setSelectedIndex(null)
     setAnswered(false)
     setScore(0)
+    setLastPts(null)
     setCorrectCount(0)
     setIsFinished(false)
     answerStartRef.current = Date.now()
@@ -193,43 +201,100 @@ export default function SoloPracticeModal({
                 </p>
               </div>
 
-              {/* Options */}
+              {/* Options Grid */}
               <div className="grid grid-cols-1 gap-2 pt-1">
                 {currentQ.options.map((opt, idx) => {
-                  let btnStyle = 'bg-white hover:bg-slate-50 border-slate-200/80 text-slate-800'
-                  let icon = null
-
-                  if (answered) {
-                    if (idx === currentQ.correctIndex) {
-                      btnStyle = 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold shadow-xs'
-                      icon = <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-                    } else if (idx === selectedIndex) {
-                      btnStyle = 'bg-rose-50 border-rose-500 text-rose-950 font-bold shadow-xs'
-                      icon = <XCircle size={16} className="text-rose-600 shrink-0" />
-                    } else {
-                      btnStyle = 'opacity-50 border-slate-200 bg-slate-50 text-slate-400'
-                    }
-                  }
-
+                  const isSelected = selectedIndex === idx
                   return (
                     <button
                       key={idx}
                       type="button"
                       disabled={answered}
                       onClick={() => handleAnswer(idx)}
-                      className={`flex items-center justify-between p-3 sm:p-3.5 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer disabled:cursor-default ${btnStyle}`}
+                      className={`group relative flex items-center gap-3 w-full p-3 sm:p-3.5 rounded-2xl text-left text-xs sm:text-sm font-medium transition-all duration-150 ${
+                        !answered
+                          ? 'bg-white hover:bg-slate-50/80 border border-slate-200/80 hover:border-slate-300 hover:shadow-xs cursor-pointer text-slate-800'
+                          : isSelected
+                          ? 'bg-white border-slate-900 ring-1 ring-slate-900/10 shadow-xs text-slate-900 font-semibold cursor-default'
+                          : 'bg-slate-50/50 border border-slate-200/40 text-slate-400 opacity-40 cursor-default'
+                      }`}
                     >
-                      <span>{opt}</span>
-                      {icon}
+                      <span
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg font-mono text-xs font-semibold transition-colors ${
+                          !answered
+                            ? 'bg-slate-100 text-slate-500 group-hover:bg-slate-200/80 group-hover:text-slate-800'
+                            : isSelected
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-slate-100/60 text-slate-400'
+                        }`}
+                      >
+                        {String.fromCharCode(65 + idx)}
+                      </span>
+                      <span className="flex-1 leading-snug truncate">{opt}</span>
                     </button>
                   )
                 })}
               </div>
 
+              {/* Ultra-Clean Modern Resolution Strip */}
+              {answered && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                  className="mt-2 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 p-3 sm:p-3.5 shadow-xs"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-2.5">
+                    {/* Left: Clear Status Badge & Answer Reveal */}
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                      {selectedIndex === currentQ.correctIndex ? (
+                        <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white tracking-wide shrink-0 shadow-2xs">
+                          Correct
+                        </span>
+                      ) : selectedIndex === -1 ? (
+                        <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500 text-white tracking-wide shrink-0 shadow-2xs">
+                          Time's Up
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-600 text-white tracking-wide shrink-0 shadow-2xs">
+                          Wrong
+                        </span>
+                      )}
+
+                      {selectedIndex !== currentQ.correctIndex && (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-600 min-w-0">
+                          <span className="text-slate-500 font-medium shrink-0">Correct:</span>
+                          <span className="font-bold font-mono text-slate-900 bg-white border border-slate-200/90 px-2 py-0.5 rounded-md shadow-2xs">
+                            Option {String.fromCharCode(65 + currentQ.correctIndex)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right: Exact Points Added */}
+                    {selectedIndex === currentQ.correctIndex && lastPts !== null && (
+                      <div className="flex items-center gap-1 font-mono text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 rounded-lg self-end sm:self-center shrink-0 shadow-2xs">
+                        +{lastPts} pts
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Hairline countdown timer */}
+                  <div className="mt-2.5 h-0.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full bg-slate-900/40 rounded-full"
+                      initial={{ width: '100%' }}
+                      animate={{ width: '0%' }}
+                      transition={{ duration: 2.5, ease: 'linear' }}
+                    />
+                  </div>
+                </motion.div>
+              )}
+
               {/* Score strip */}
-              <div className="flex items-center justify-between pt-2 text-xs font-medium text-slate-500 border-t border-slate-100">
-                <span>Score: <strong className="text-slate-900 font-mono font-bold">{score} pts</strong></span>
-                <span>Accuracy: <strong className="text-slate-900 font-mono font-bold">{correctCount}/{qIndex + (answered ? 1 : 0)}</strong></span>
+              <div className="flex items-center justify-between pt-2.5 text-xs font-medium text-slate-500 border-t border-slate-100">
+                <span>Score</span>
+                <span className="text-slate-900 font-mono font-bold text-sm">{score} pts</span>
               </div>
             </div>
           ) : (
@@ -242,7 +307,7 @@ export default function SoloPracticeModal({
               <div>
                 <h4 className="text-xl font-bold text-slate-900 tracking-tight">Practice Complete!</h4>
                 <p className="text-xs text-slate-500 mt-1 font-medium">
-                  You scored <strong className="text-slate-900 font-bold">{score} points</strong> ({correctCount} of {TOTAL_QUESTIONS} correct)
+                  You scored <strong className="text-slate-900 font-bold">{score} points</strong> ({correctCount} out of {TOTAL_QUESTIONS})
                 </p>
               </div>
 

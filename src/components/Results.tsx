@@ -162,7 +162,7 @@ export default function Results({
                 >
                   <div>
                     <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>View payout transaction</p>
-                    <p className="text-xs" style={{ color: 'var(--subtle)' }}>Arc Testnet Explorer</p>
+                    <p className="text-xs" style={{ color: 'var(--subtle)' }}>Arc Explorer</p>
                   </div>
                   <ExternalLink size={16} style={{ color: 'var(--muted)' }} />
                 </a>

@@ -24,7 +24,7 @@ import {
   Zap,
   Trophy,
   Flame,
-  Radio,
+  Activity,
   KeyRound,
 } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
@@ -43,6 +43,7 @@ import {
   CATEGORY_GROUPS,
   type CategoryGroup,
   type SubCategoryInfo,
+  prefetchCategoryQuestions,
 } from '@/lib/questions'
 import { getActiveGame, clearActiveGame, type ActiveGameSession } from '@/lib/roomStorage'
 import SoloPracticeModal from '@/components/SoloPracticeModal'
@@ -629,7 +630,8 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
 
   useEffect(() => {
     setActiveSession(getActiveGame())
-  }, [])
+    if (selected) prefetchCategoryQuestions(selected)
+  }, [selected])
 
   const handleSelectGroup = (groupId: string) => {
     setActiveGroupId(groupId)
@@ -645,6 +647,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
 
   const handleSelectCategory = (cat: Category) => {
     setSelected(cat)
+    prefetchCategoryQuestions(cat)
     try {
       const stored = { name: 'lobby', initialCategory: cat }
       sessionStorage.setItem('trivio_current_screen', JSON.stringify(stored))
@@ -926,16 +929,16 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
             {/* Header */}
             <div className="flex items-center justify-between gap-2 px-0.5">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-50 text-rose-600 border border-rose-100/80">
-                  <Radio size={16} className="animate-pulse" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-50 text-violet-600 border border-violet-100/80">
+                  <Activity size={16} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight">
                       Live Rooms
                     </h2>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 border border-rose-200/60 px-2 py-0.5 text-[10px] font-bold text-rose-600">
-                      <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-ping inline-block" />
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200/80 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                       {INITIAL_PUBLIC_ROOMS.length} Active
                     </span>
                   </div>
@@ -955,7 +958,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                 return (
                   <div
                     key={room.roomCode}
-                    className="group relative flex items-center justify-between p-2.5 sm:p-3.5 rounded-2xl bg-slate-50/70 hover:bg-white border border-slate-200/80 hover:border-violet-300 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-md transition-all duration-150 gap-2 sm:gap-4"
+                    className="group relative flex items-center justify-between p-2.5 sm:p-3.5 rounded-2xl bg-slate-50/70 hover:bg-white border border-slate-200/80 hover:border-slate-300 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-md transition-all duration-150 gap-2 sm:gap-4"
                   >
                     {/* Left: Info */}
                     <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
@@ -994,24 +997,24 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
 
                     {/* Right: Stats & Join Button */}
                     <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-                      {/* Player count pill (hidden on very narrow screens, visible on sm) */}
+                      {/* Player count pill */}
                       <div className="hidden xs:flex sm:flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-xl bg-white border border-slate-200/70 text-[10px] font-bold text-slate-700 shadow-2xs">
                         <Users size={11} className="text-slate-500" />
                         <span>{room.playerCount}/{room.maxPlayers}</span>
                       </div>
 
-                      {/* Prize Pool pill */}
-                      <div className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-xl bg-violet-50 border border-violet-200/70 text-[10px] font-black text-violet-900 shadow-2xs">
+                      {/* Prize Pool pill (styled matching the player count pill) */}
+                      <div className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-xl bg-white border border-slate-200/70 text-[10px] font-bold text-slate-700 shadow-2xs">
                         <TokenUSDC variant="branded" size={11} />
                         <span>${room.prizePool}</span>
                       </div>
 
-                      {/* Join Action */}
+                      {/* Join Action (styled cleanly with static appearance and tactile press) */}
                       <button
                         type="button"
                         disabled={isFull}
                         onClick={() => onJoinRoom(room.category, room.roomCode)}
-                        className="inline-flex items-center justify-center rounded-xl px-3 sm:px-3.5 py-1.5 sm:py-2 text-xs font-bold text-white bg-violet-600 hover:bg-violet-700 active:scale-95 shadow-xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                        className="inline-flex items-center justify-center rounded-xl px-3 sm:px-3.5 py-1.5 sm:py-2 text-xs font-extrabold text-gray-900 bg-white active:scale-95 border-2 border-purple-100 shadow-xs transition-transform cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                       >
                         <span>Join</span>
                       </button>
@@ -1041,7 +1044,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    Leaderboard champions earning USDC on Arc Testnet
+                    Leaderboard champions earning USDC on Arc
                   </p>
                 </div>
               </div>
@@ -1102,17 +1105,17 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                       {winner.username}
                     </span>
 
-                    {/* USDC Won */}
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <TokenUSDC variant="branded" size={11} />
+                    {/* USDC Won (increased icon size) */}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <TokenUSDC variant="branded" size={17} className="shrink-0" />
                       <span className="text-xs sm:text-sm font-black text-slate-950 tabular-nums">
                         ${winner.totalWinnings}
                       </span>
                     </div>
 
-                    {/* Streak / Wins */}
+                    {/* Wins count without streak */}
                     <span className="text-[10px] font-semibold text-slate-500 mt-0.5">
-                      {winner.winCount} wins · {winner.winStreak}🔥
+                      {winner.winCount} wins
                     </span>
                   </div>
                 )
@@ -1142,13 +1145,13 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                           {entry.username}
                         </p>
                         <p className="text-[10px] text-slate-500 font-medium">
-                          {entry.winCount} wins · {entry.winStreak} streak
+                          {entry.winCount} wins
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1">
-                      <TokenUSDC variant="branded" size={11} />
+                    <div className="flex items-center gap-1.5">
+                      <TokenUSDC variant="branded" size={15} className="shrink-0" />
                       <span className="text-xs font-extrabold text-slate-900 tabular-nums">
                         ${entry.totalWinnings}
                       </span>
@@ -1173,8 +1176,8 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
 
           {/* ── Footer onchain info badge ── */}
           <div className="flex items-center justify-center gap-1.5 sm:gap-2 text-center text-[11px] sm:text-xs font-semibold text-gray-500 pt-1 px-2">
-            <TokenUSDC variant="branded" size={13} />
-            <span>Prizes paid in USDC on Arc Testnet · instant, zero gas fee</span>
+            <TokenUSDC variant="branded" size={14} />
+            <span>Prizes paid in USDC on Arc · instant, zero gas fee</span>
           </div>
         </motion.div>
       </main>

@@ -391,7 +391,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
 
           {isWrongChain && (
             <p className="rounded-2xl px-4 py-3 text-sm" style={{ background: 'rgba(186,43,76,0.07)', border: '1px solid rgba(186,43,76,0.2)', color: 'var(--danger)' }}>
-              Switch to Arc Testnet to create a room.
+              Switch to Arc to create a room.
             </p>
           )}
 
@@ -424,7 +424,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
             className="w-full rounded-2xl py-4 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
             style={{ background: 'var(--accent)', color: 'white' }}
           >
-            {isWrongChain ? 'Switch to Arc Testnet' : createPending || createConfirming ? 'Creating...' : 'Create Room'}
+            {isWrongChain ? 'Switch to Arc' : createPending || createConfirming ? 'Creating...' : 'Create Room'}
           </button>
         </div>
       </div>

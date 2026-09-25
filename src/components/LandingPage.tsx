@@ -206,7 +206,7 @@ function HowToPlayModal({ open, onClose }: { open: boolean; onClose: () => void 
               <div className="mt-3.5 flex items-center gap-2 rounded-xl px-4 py-3" style={{ background: '#ede9fe' }}>
                 <TokenUSDC variant="branded" size={15} />
                 <p className="text-xs" style={{ color: '#5b21b6' }}>
-                  All prizes paid in <strong>USDC</strong> on Arc Testnet — instant, verifiable, zero ETH needed.
+                  All prizes paid in <strong>USDC</strong> on Arc — instant, verifiable, zero ETH needed.
                 </p>
               </div>
             </div>

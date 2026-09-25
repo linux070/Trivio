@@ -280,7 +280,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
 
                   {isWrongChain && (isRoomOpen || isAlreadyJoined) && (
                     <p className="mt-3 rounded-xl px-3.5 py-2.5 text-xs" style={{ background: 'rgba(186,43,76,0.07)', color: 'var(--danger)', border: '1px solid rgba(186,43,76,0.15)' }}>
-                      Switch to Arc Testnet to continue.
+                      Switch to Arc to continue.
                     </p>
                   )}
 
@@ -320,7 +320,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                       className="mt-3 w-full rounded-2xl py-4 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
                       style={{ background: 'var(--accent)', color: 'white' }}
                     >
-                      {isWrongChain ? 'Switch to Arc Testnet' : joinPending || joinConfirming ? 'Joining...' : `Join Room${buyIn !== undefined && buyIn > 0n ? ` · ${buyInHuman} USDC` : ''}`}
+                      {isWrongChain ? 'Switch to Arc' : joinPending || joinConfirming ? 'Joining...' : `Join Room${buyIn !== undefined && buyIn > 0n ? ` · ${buyInHuman} USDC` : ''}`}
                     </button>
                   )}
                 </motion.div>
