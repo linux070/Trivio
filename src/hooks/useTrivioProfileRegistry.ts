@@ -134,9 +134,9 @@ export function useCheckUsernameAvailable(username: string, chainId: number = AR
  * Write/Update onchain profile
  */
 export function useSetOnchainProfile() {
-  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const { writeContract, writeContractAsync, data: hash, isPending, error, reset } = useWriteContract()
 
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+  const { isLoading: isConfirming, isSuccess, isError: isReceiptError } = useWaitForTransactionReceipt({
     hash,
   })
 
@@ -156,12 +156,32 @@ export function useSetOnchainProfile() {
     })
   }
 
+  const setProfileAsync = (
+    username: string,
+    avatarUrl: string,
+    avatarSeed: string,
+    avatarStyle: string,
+    chainId: number = ARC_TESTNET_CHAIN_ID
+  ) => {
+    return writeContractAsync({
+      address: TRIVIO_PROFILE_REGISTRY_ADDRESS,
+      abi: PROFILE_REGISTRY_ABI,
+      functionName: 'setProfile',
+      args: [username, avatarUrl, avatarSeed, avatarStyle],
+      chainId,
+    })
+  }
+
   return {
     setProfile,
+    setProfileAsync,
     isPending,
     isConfirming,
     isSuccess,
+    isReceiptError,
     hash,
     error,
+    reset,
   }
 }
+

@@ -3,7 +3,8 @@ import { useAccount } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import type { Category } from '@/lib/questions'
 import { ALL_CATEGORIES } from '@/lib/questions'
-import { hasUserProfile } from '@/lib/userProfile'
+import { hasUserProfile, saveUserProfile, getDiceBearAvatarUrl, type UserProfile } from '@/lib/userProfile'
+import { useOnchainProfile } from '@/hooks/useTrivioProfileRegistry'
 import {
   saveRoomCategory,
   getRoomCategory,
@@ -240,6 +241,13 @@ export default function App() {
     setScreen({ name: 'lobby', initialCategory: getSavedCategory() })
   }
 
+  // Read onchain profile for returning user detection
+  const {
+    profile: onchainProfile,
+    hasProfile: hasOnchainProfile,
+    isLoading: isOnchainProfileLoading,
+  } = useOnchainProfile(activeAddress)
+
   // Strictly sync screen state when Privy authentication completes
   useEffect(() => {
     if (ready && authenticated) {
@@ -249,11 +257,40 @@ export default function App() {
       } catch {
         // ignore
       }
-      if (!hasUserProfile()) {
-        setShowOnboarding(true)
-      } else if (screen.name === 'landing') {
-        restoreGameScreen()
+
+      // 1. Returning user with existing local profile -> go straight to game screen
+      if (hasUserProfile(activeAddress) || hasUserProfile()) {
+        setShowOnboarding(false)
+        if (screen.name === 'landing') {
+          restoreGameScreen()
+        }
+        return
       }
+
+      // 2. Returning user with existing onchain profile -> sync & go straight to game screen
+      if (hasOnchainProfile && onchainProfile) {
+        const p: UserProfile = {
+          username: onchainProfile.username,
+          avatarUrl: onchainProfile.avatarUrl || getDiceBearAvatarUrl(onchainProfile.avatarStyle || 'bottts-neutral', onchainProfile.avatarSeed || onchainProfile.username),
+          avatarSeed: onchainProfile.avatarSeed || onchainProfile.username,
+          avatarStyle: onchainProfile.avatarStyle || 'bottts-neutral',
+          createdAt: Number(onchainProfile.updatedAt) * 1000 || Date.now(),
+        }
+        saveUserProfile(p, activeAddress)
+        setShowOnboarding(false)
+        if (screen.name === 'landing') {
+          restoreGameScreen()
+        }
+        return
+      }
+
+      // 3. If still querying onchain registry, wait briefly before assuming new user
+      if (isOnchainProfileLoading) {
+        return
+      }
+
+      // 4. Truly new user -> trigger onboarding modal
+      setShowOnboarding(true)
     } else if (ready && !authenticated) {
       if (wasConnectedRef.current) {
         wasConnectedRef.current = false
@@ -272,7 +309,7 @@ export default function App() {
         setScreen({ name: 'landing' })
       }
     }
-  }, [ready, authenticated, screen.name])
+  }, [ready, authenticated, screen.name, activeAddress, hasOnchainProfile, onchainProfile, isOnchainProfileLoading])
 
   // Watch for inbound join links while session is already active
   useEffect(() => {
@@ -364,11 +401,27 @@ export default function App() {
     } catch {
       // ignore
     }
-    if (!hasUserProfile()) {
-      setShowOnboarding(true)
+    if (hasUserProfile(activeAddress) || hasUserProfile()) {
+      setShowOnboarding(false)
+      restoreGameScreen()
       return
     }
-    restoreGameScreen()
+    if (hasOnchainProfile && onchainProfile) {
+      const p: UserProfile = {
+        username: onchainProfile.username,
+        avatarUrl: onchainProfile.avatarUrl || getDiceBearAvatarUrl(onchainProfile.avatarStyle || 'bottts-neutral', onchainProfile.avatarSeed || onchainProfile.username),
+        avatarSeed: onchainProfile.avatarSeed || onchainProfile.username,
+        avatarStyle: onchainProfile.avatarStyle || 'bottts-neutral',
+        createdAt: Number(onchainProfile.updatedAt) * 1000 || Date.now(),
+      }
+      saveUserProfile(p, activeAddress)
+      setShowOnboarding(false)
+      restoreGameScreen()
+      return
+    }
+    if (!isOnchainProfileLoading) {
+      setShowOnboarding(true)
+    }
   }
 
   const handleOnboardingComplete = () => {
@@ -400,12 +453,12 @@ export default function App() {
   }
 
   // Check if we have an active stored user session
-  const isStoredAuth = typeof window !== 'undefined' && localStorage.getItem(STORAGE_AUTH_KEY) === 'true' && hasUserProfile()
+  const isStoredAuth = typeof window !== 'undefined' && localStorage.getItem(STORAGE_AUTH_KEY) === 'true' && (hasUserProfile(activeAddress) || hasUserProfile())
 
   // Auth & Onboarding guard:
-  // If the user has a stored authenticated session and a valid screen (e.g. lobby/create/join/game),
-  // do NOT flash LandingPage while Privy is asynchronously initializing (!ready).
-  if (screen.name === 'landing' || (!isStoredAuth && (!ready || !authenticated || !hasUserProfile()))) {
+  // If showOnboarding is active, or screen is landing, or session is not authenticated,
+  // do NOT flash the Lobby in the background. Keep the clean Landing Page backdrop.
+  if (showOnboarding || screen.name === 'landing' || (!isStoredAuth && (!ready || !authenticated || (!hasUserProfile(activeAddress) && !hasUserProfile())))) {
     return (
       <>
         <LandingPage onConnected={handleConnected} />

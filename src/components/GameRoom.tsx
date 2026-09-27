@@ -10,6 +10,7 @@ import { useStartGame, useDeclareWinner, useRoomInfo, formatUSDCRaw } from '@/ho
 import { getQuestions, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
 import { getRoomCategory, getRoomDuration, saveActiveGame, clearActiveGame } from '@/lib/roomStorage'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
+import { QuestionCard } from '@/components/QuestionCard'
 
 const glass = {
   card: {
@@ -367,20 +368,15 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
           </div>
 
           {/* Question */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={qIndex}
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -30 }}
-              className="mb-4 sm:mb-5 rounded-2xl sm:rounded-3xl p-4 sm:p-6"
-              style={glass.card}
-            >
-              <p className="text-sm sm:text-base font-semibold leading-relaxed text-balance" style={{ color: 'var(--ink)' }}>
-                {currentQ.question}
-              </p>
-            </motion.div>
-          </AnimatePresence>
+          <div className="mb-4 sm:mb-5">
+            <QuestionCard
+              question={currentQ.question}
+              category={resolvedCategory}
+              qIndex={qIndex}
+              totalQuestions={questions.length}
+              layoutKey={qIndex}
+            />
+          </div>
 
           {/* Options Grid */}
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -415,7 +411,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                   >
                     {String.fromCharCode(65 + i)}
                   </span>
-                  <span className="flex-1 leading-snug truncate">{opt}</span>
+                  <span className="flex-1 leading-snug break-words text-balance">{opt}</span>
                 </button>
               )
             })}
@@ -462,16 +458,6 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                     +{lastPts} pts
                   </div>
                 )}
-              </div>
-
-              {/* Hairline countdown timer */}
-              <div className="mt-3 h-0.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full bg-slate-900/40 rounded-full"
-                  initial={{ width: '100%' }}
-                  animate={{ width: '0%' }}
-                  transition={{ duration: 2.5, ease: 'linear' }}
-                />
               </div>
             </motion.div>
           )}

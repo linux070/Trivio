@@ -26,6 +26,8 @@ import {
   Flame,
   Activity,
   KeyRound,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
@@ -127,8 +129,11 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
   const {
     profile: onchainProfile,
     hasProfile: hasOnchainProfile,
+    isLoading: isOnchainLoading,
     refetch: refetchOnchainProfile,
   } = useOnchainProfile(activeAddress, activeChainId)
+
+  const isProfileVerified = Boolean(hasOnchainProfile || profile?.isOnchainVerified)
 
   const {
     setProfile: setOnchainProfile,
@@ -156,6 +161,7 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
         avatarSeed: onchainProfile.avatarSeed || onchainProfile.username,
         avatarStyle: onchainProfile.avatarStyle || 'bottts-neutral',
         createdAt: Number(onchainProfile.updatedAt) * 1000 || Date.now(),
+        isOnchainVerified: true,
       }
       saveUserProfile(p, activeAddress)
       setProfile(p)
@@ -170,11 +176,16 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
   useEffect(() => {
     if (isOnchainSuccess) {
       refetchOnchainProfile()
+      if (profile) {
+        const updated = { ...profile, isOnchainVerified: true }
+        saveUserProfile(updated, activeAddress)
+        setProfile(updated)
+      }
       toast.success('Profile registered on Arc Testnet!', {
         description: onchainTxHash ? `Tx: ${onchainTxHash.slice(0, 10)}...` : undefined,
       })
     }
-  }, [isOnchainSuccess, onchainTxHash, refetchOnchainProfile])
+  }, [isOnchainSuccess, onchainTxHash, refetchOnchainProfile, activeAddress])
 
   useEffect(() => {
     if (chainId === ARC_MAINNET_CHAIN_ID) {
@@ -394,30 +405,39 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
       {/* Profile Chip Button */}
       <button
         onClick={() => setOpen(prev => !prev)}
-        className="group flex items-center gap-2 sm:gap-2.5 rounded-full border border-gray-200/90 bg-white/90 pl-1.5 sm:pl-2 pr-2.5 sm:pr-3.5 py-1 sm:py-1.5 text-xs sm:text-sm font-semibold text-gray-900 shadow-xs backdrop-blur-md transition-all hover:border-gray-300 hover:bg-white hover:shadow-sm active:scale-95 cursor-pointer"
+        className="group flex items-center gap-2 rounded-full border border-gray-200/80 bg-white/95 pl-1.5 pr-3 py-1 text-xs sm:text-sm font-semibold text-gray-900 shadow-2xs backdrop-blur-md transition-all hover:border-purple-200 hover:bg-white hover:shadow-xs active:scale-95 cursor-pointer"
         style={{ letterSpacing: '-0.01em' }}
+        title={isProfileVerified ? 'Onchain Verified Handle' : 'Handle Unclaimed Onchain - Click to claim'}
       >
-        <div className="relative flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-full bg-purple-50 overflow-hidden ring-1 ring-black/5">
+        <div className="relative flex h-6 w-6 sm:h-7 sm:w-7 shrink-0 items-center justify-center rounded-full bg-purple-50 ring-1 ring-black/5">
           {profile?.avatarUrl && !avatarImgError ? (
             <img
               src={profile.avatarUrl}
               alt={profile.username}
-              className="h-full w-full object-cover"
+              className="h-full w-full rounded-full object-cover"
               onError={() => setAvatarImgError(true)}
             />
           ) : (
-            <span className="flex h-full w-full items-center justify-center bg-purple-100 text-purple-700 font-bold text-[10px] sm:text-xs">
+            <span className="flex h-full w-full items-center justify-center bg-purple-100 text-purple-700 font-bold text-[10px] sm:text-xs rounded-full">
               {displayName.replace(/^@/, '').slice(0, 1).toUpperCase()}
             </span>
           )}
+
+          {/* Micro status indicator */}
+          {!isProfileVerified && !isOnchainLoading && profile?.username && (
+            <span
+              className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white"
+              title="Handle not yet claimed onchain"
+            />
+          )}
         </div>
 
-        <span className="font-semibold text-[11px] sm:text-sm text-gray-900 max-w-[120px] sm:max-w-[160px] truncate tracking-tight">
+        <span className="font-semibold text-[11px] sm:text-sm text-gray-900 max-w-[110px] sm:max-w-[150px] truncate tracking-tight">
           {displayName}
         </span>
 
         <ChevronDown
-          className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 transition-transform duration-200 ease-out group-hover:text-gray-600 ${open ? 'rotate-180 text-gray-700' : ''}`}
+          className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ease-out group-hover:text-gray-700 ${open ? 'rotate-180 text-gray-900' : ''}`}
         />
       </button>
 
@@ -563,11 +583,10 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                           e.preventDefault()
                           handleSaveName()
                         }}
-                        className={`flex items-center gap-1 pb-0.5 border-b ${
-                          isReservedUsername(nameInput)
+                        className={`flex items-center gap-1 pb-0.5 border-b ${isReservedUsername(nameInput)
                             ? 'border-amber-400 focus-within:border-amber-500'
                             : 'border-purple-300/80 focus-within:border-purple-500/70'
-                        } transition-colors`}
+                          } transition-colors`}
                       >
                         <span className="text-gray-400 font-medium text-sm select-none">@</span>
                         <input
@@ -613,18 +632,55 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                       )}
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={handleStartEditName}
-                      className="group/name flex items-center gap-1.5 text-left cursor-pointer rounded-lg -ml-1 px-1 py-0.5"
-                      title="Click to edit username"
-                    >
-                      <h3 className="text-sm font-medium text-gray-800">
-                        {profile?.username ? `@${profile.username}` : 'Anonymous Player'}
-                      </h3>
-                      <ShieldCheck size={13} className="text-purple-600 shrink-0" />
-                      <Pencil size={10} className="text-gray-300 group-hover/name:text-gray-500 transition-colors ml-0.5" />
-                    </button>
+                    <div className="flex items-center justify-between gap-1">
+                      <button
+                        type="button"
+                        onClick={handleStartEditName}
+                        className="group/name flex items-center gap-1.5 text-left cursor-pointer rounded-lg -ml-1 px-1 py-0.5 truncate"
+                        title="Click to edit username"
+                      >
+                        <h3 className="text-sm font-semibold text-gray-900 truncate">
+                          {profile?.username ? `@${profile.username}` : 'Anonymous Player'}
+                        </h3>
+                        {isProfileVerified && (
+                          <ShieldCheck size={13} className="text-purple-600 shrink-0" title="Verified on Arc Testnet" />
+                        )}
+                        <Pencil size={10} className="text-gray-300 group-hover/name:text-gray-500 transition-colors ml-0.5 shrink-0" />
+                      </button>
+
+                      {!isProfileVerified && !isOnchainLoading && (
+                        <button
+                          type="button"
+                          disabled={isSettingOnchain || isConfirmingOnchain}
+                          onClick={() => {
+                            if (activeAddress && profile?.username) {
+                              toast.info('Claiming username on Arc...')
+                              setOnchainProfile(
+                                profile.username,
+                                profile.avatarUrl,
+                                profile.avatarSeed,
+                                profile.avatarStyle,
+                                activeChainId
+                              )
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-500 bg-gray-100/90 hover:bg-gray-200/80 px-2.5 py-0.5 rounded-full border border-gray-200/60 shrink-0 transition-all cursor-pointer active:scale-95 disabled:opacity-75 disabled:pointer-events-none"
+                          title="Click to claim username onchain"
+                        >
+                          {isSettingOnchain || isConfirmingOnchain ? (
+                            <>
+                              <Loader2 size={11} className="animate-spin text-purple-600" />
+                              <span>Claiming...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                              <span>Unclaimed</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -665,10 +721,10 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                       href="https://faucet.circle.com/"
                       target="_blank"
                       rel="noreferrer"
-                      className="rounded-full bg-purple-100/90 hover:bg-purple-200 px-3 py-1 text-[11px] font-bold text-purple-700 transition-colors shadow-2xs"
+                      className="inline-flex items-center gap-1 rounded-full bg-purple-100/90 hover:bg-purple-200 px-3 py-1 text-xs font-bold text-purple-700 hover:text-purple-900 transition-all shadow-2xs active:scale-95 cursor-pointer"
                       title="Get free Circle USDC"
                     >
-                      Faucet
+                      <span>Faucet</span>
                     </a>
                   )}
                 </div>
@@ -874,11 +930,10 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                     key={group.id}
                     type="button"
                     onClick={() => handleSelectGroup(group.id)}
-                    className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-2 sm:px-3 text-xs transition-all duration-150 cursor-pointer select-none text-center ${
-                      isGroupActive
+                    className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-2 sm:px-3 text-xs transition-all duration-150 cursor-pointer select-none text-center ${isGroupActive
                         ? 'bg-white text-slate-900 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] border border-slate-200/60 font-bold'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-white/50 font-semibold'
-                    }`}
+                      }`}
                   >
                     <span className="text-sm shrink-0 leading-none">{group.emoji}</span>
                     <span className="tracking-tight leading-tight text-[11px] sm:text-xs whitespace-normal sm:whitespace-nowrap">
@@ -908,11 +963,10 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                         key={sub.id}
                         type="button"
                         onClick={() => handleSelectCategory(sub.id)}
-                        className={`group w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl text-left transition-all duration-150 cursor-pointer active:scale-[0.99] ${
-                          isSubSelected
+                        className={`group w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl text-left transition-all duration-150 cursor-pointer active:scale-[0.99] ${isSubSelected
                             ? 'bg-violet-50/40 border-[1.5px] border-violet-600 shadow-[0_2px_8px_-2px_rgba(124,58,237,0.12)]'
                             : 'bg-slate-50/60 hover:bg-white border border-slate-200/75 hover:border-slate-300 shadow-[0_1px_2px_rgba(0,0,0,0.02)]'
-                        }`}
+                          }`}
                       >
                         {/* Mode Info */}
                         <div className="flex items-start gap-3 min-w-0 pr-2">

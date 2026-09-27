@@ -9,6 +9,7 @@ export interface UserProfile {
   avatarSeed: string
   avatarStyle: string
   createdAt: number
+  isOnchainVerified?: boolean
 }
 
 const STORAGE_PROFILE_KEY = 'trivio_user_profile'

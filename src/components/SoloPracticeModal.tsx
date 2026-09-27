@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Clock, Zap, Trophy } from 'lucide-react'
 import { getQuestions, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
+import { QuestionCard } from '@/components/QuestionCard'
 
 interface SoloPracticeModalProps {
   category: Category
@@ -194,12 +195,14 @@ export default function SoloPracticeModal({
                 </div>
               </div>
 
-              {/* Question Text */}
-              <div className="rounded-2xl bg-slate-50 p-4 border border-slate-200/80 min-h-[72px] flex items-center">
-                <p className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
-                  {currentQ.question}
-                </p>
-              </div>
+              {/* Question Card */}
+              <QuestionCard
+                question={currentQ.question}
+                category={category}
+                qIndex={qIndex}
+                totalQuestions={TOTAL_QUESTIONS}
+                layoutKey={qIndex}
+              />
 
               {/* Options Grid */}
               <div className="grid grid-cols-1 gap-2 pt-1">
@@ -230,7 +233,7 @@ export default function SoloPracticeModal({
                       >
                         {String.fromCharCode(65 + idx)}
                       </span>
-                      <span className="flex-1 leading-snug truncate">{opt}</span>
+                      <span className="flex-1 leading-snug break-words text-balance">{opt}</span>
                     </button>
                   )
                 })}
@@ -277,16 +280,6 @@ export default function SoloPracticeModal({
                         +{lastPts} pts
                       </div>
                     )}
-                  </div>
-
-                  {/* Hairline countdown timer */}
-                  <div className="mt-2.5 h-0.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <motion.div
-                      className="h-full bg-slate-900/40 rounded-full"
-                      initial={{ width: '100%' }}
-                      animate={{ width: '0%' }}
-                      transition={{ duration: 2.5, ease: 'linear' }}
-                    />
                   </div>
                 </motion.div>
               )}

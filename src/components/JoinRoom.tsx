@@ -211,7 +211,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                   <div className="space-y-2">
                     <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5" style={glass.inner}>
                       <span className="text-xs" style={{ color: 'var(--muted)' }}>Game Mode</span>
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-bold text-purple-700 border border-purple-100">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 border border-slate-200/90 shadow-2xs">
                         <span>{CATEGORY_GROUPS.flatMap(g => g.subcategories).find(s => s.id === resolvedCategory)?.emoji ?? '🎮'}</span>
                         <span>{resolvedCategory}</span>
                       </span>
