@@ -28,7 +28,7 @@ type Screen =
   | { name: 'create'; category: Category }
   | { name: 'join'; category: Category; prefillCode?: string }
   | { name: 'game'; roomCode: string; category: Category }
-  | { name: 'results'; winnerAddress: string; prizeAmount: string; txHash?: string }
+  | { name: 'results'; winnerAddress: string; prizeAmount: string; txHash?: string; roomCode?: string }
 
 /** Read ?join=CODE and ?cat=CATEGORY from the URL */
 export function getJoinParamsFromUrl(): { roomCode: string; category?: Category } | null {
@@ -540,7 +540,7 @@ export default function App() {
         onBack={() => setScreen({ name: 'lobby' })}
         onGameEnd={(winnerAddress, prizeAmount, txHash) => {
           clearActiveGame()
-          setScreen({ name: 'results', winnerAddress, prizeAmount, txHash })
+          setScreen({ name: 'results', winnerAddress, prizeAmount, txHash, roomCode: screen.roomCode })
         }}
       />
     )
@@ -552,6 +552,7 @@ export default function App() {
         winnerAddress={screen.winnerAddress}
         prizeAmount={screen.prizeAmount}
         txHash={screen.txHash}
+        roomCode={screen.roomCode}
         myAddress={activeAddress}
         onPlayAgain={() => {
           clearActiveGame()

@@ -8,7 +8,7 @@ import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import { useStartGame, useDeclareWinner, useRoomInfo, formatUSDCRaw } from '@/hooks/useTriviaContract'
 import { getQuestions, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
-import { getRoomCategory, getRoomDuration, saveActiveGame, clearActiveGame } from '@/lib/roomStorage'
+import { getRoomCategory, getRoomDuration, getRoomPayout, calculatePayoutSplits, saveActiveGame, clearActiveGame } from '@/lib/roomStorage'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { QuestionCard } from '@/components/QuestionCard'
 
@@ -221,6 +221,28 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                   <p className="display text-2xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>{prizeHuman}</p>
                 </div>
               </div>
+            </div>
+
+            {/* Payout Distribution Banner */}
+            <div className="mb-4 flex flex-col gap-1 rounded-2xl p-3" style={glass.inner}>
+              <div className="flex items-center justify-between">
+                <span className="text-xs flex items-center gap-1 font-medium" style={{ color: 'var(--muted)' }}>
+                  <Trophy size={13} className="text-amber-500" />
+                  Payout Distribution
+                </span>
+                <span className="text-[11px] font-bold text-slate-800 bg-white px-2.5 py-0.5 rounded-lg border border-slate-200 shadow-2xs">
+                  {getRoomPayout(roomCode).label}
+                </span>
+              </div>
+              {getRoomPayout(roomCode).splits.length > 1 && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-slate-200/60">
+                  {calculatePayoutSplits(prizeHuman, getRoomPayout(roomCode).splits).map((s, idx) => (
+                    <span key={idx} className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
+                      {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🏅'} {s.label}: <strong>${s.amount} ({s.percent}%)</strong>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* ── Modern Invite Players Box (Slim, Clean Theme) ── */}
@@ -499,6 +521,29 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
               <TokenUSDC variant="branded" size={18} />
               <span className="text-base font-bold tabular-nums" style={{ color: 'var(--ink)' }}>{prizeHuman}</span>
               <span className="text-sm" style={{ color: 'var(--muted)' }}>USDC prize pool</span>
+            </div>
+
+            {/* Multi-Winner Breakdown Preview */}
+            <div className="mt-3 flex flex-col gap-1.5 rounded-2xl p-3" style={glass.inner}>
+              <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <Trophy size={13} className="text-amber-500" />
+                  Payout: {getRoomPayout(roomCode).label}
+                </span>
+                <span className="text-purple-700 font-semibold">{getRoomPayout(roomCode).splits.length} {getRoomPayout(roomCode).splits.length === 1 ? 'Winner' : 'Winners'}</span>
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1">
+                {calculatePayoutSplits(prizeHuman, getRoomPayout(roomCode).splits).map((s, idx) => (
+                  <div key={idx} className="flex items-center justify-between bg-white/90 rounded-xl px-2.5 py-1.5 border border-slate-200/70 text-xs">
+                    <span className="font-semibold text-slate-700">
+                      {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🏅'} {s.label}
+                    </span>
+                    <span className="font-bold text-slate-900 tabular-nums">
+                      ${s.amount} <span className="text-[10px] text-slate-500">({s.percent}%)</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           </motion.div>
 

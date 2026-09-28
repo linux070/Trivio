@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
-import { ArrowLeft, Copy, Check, Clock } from 'lucide-react'
+import { ArrowLeft, Copy, Check } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import {
@@ -16,7 +16,17 @@ import {
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { type Category, CATEGORY_GROUPS } from '@/lib/questions'
 import { parseUSDC } from '@/hooks/useTriviaContract'
-import { saveRoomCategory, saveRoomDuration, saveActiveGame } from '@/lib/roomStorage'
+import {
+  saveRoomCategory,
+  saveRoomDuration,
+  saveRoomPayout,
+  saveActiveGame,
+  PAYOUT_PRESETS,
+  calculatePayoutSplits,
+  type PayoutPreset,
+  type PayoutSplitItem,
+  type PayoutStructure,
+} from '@/lib/roomStorage'
 
 const glass = {
   card: {
@@ -64,6 +74,96 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
   const [copied, setCopied] = useState(false)
   const [codeEdited, setCodeEdited] = useState(false)
 
+  const [payoutPreset, setPayoutPreset] = useState<PayoutPreset>('top1')
+  const [customWinnerCount, setCustomWinnerCount] = useState<number>(4)
+  const [customSplitStyle, setCustomSplitStyle] = useState<'tiered' | 'even'>('tiered')
+
+  // Helper to generate clean splits without needing sliders
+  const generateSplits = (count: number, style: 'tiered' | 'even' = 'tiered'): PayoutSplitItem[] => {
+    const n = Math.max(1, Math.min(count, 20))
+    const suffixes = ['th', 'st', 'nd', 'rd']
+    const getSuffix = (num: number) => {
+      const v = num % 100
+      return suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0]
+    }
+
+    if (n === 1) {
+      return [{ rank: 1, bps: 10000, percent: 100, label: '1st Place' }]
+    }
+
+    if (style === 'even') {
+      const evenBps = Math.floor(10000 / n)
+      const remainder = 10000 - evenBps * n
+      return Array.from({ length: n }, (_, i) => {
+        const r = i + 1
+        const bps = i === 0 ? evenBps + remainder : evenBps
+        return {
+          rank: r,
+          bps,
+          percent: Number((bps / 100).toFixed(1)),
+          label: `${r}${getSuffix(r)} Place`,
+        }
+      })
+    }
+
+    // Tiered curve
+    const rawWeights = Array.from({ length: n }, (_, i) => 1 / Math.pow(i + 1, 0.7))
+    const totalWeight = rawWeights.reduce((a, b) => a + b, 0)
+    let allocatedBps = 0
+    return rawWeights.map((w, i) => {
+      const r = i + 1
+      let bps = Math.round((w / totalWeight) * 10000)
+      if (i === n - 1) {
+        bps = 10000 - allocatedBps
+      } else {
+        allocatedBps += bps
+      }
+      const clampedBps = Math.max(100, bps)
+      return {
+        rank: r,
+        bps: clampedBps,
+        percent: Number((clampedBps / 100).toFixed(1)),
+        label: `${r}${getSuffix(r)} Place`,
+      }
+    })
+  }
+
+  const [customSplits, setCustomSplits] = useState<PayoutSplitItem[]>(() => generateSplits(4, 'tiered'))
+
+  const handleCustomCountChange = (newCount: number, style = customSplitStyle) => {
+    const clamped = Math.max(1, Math.min(newCount, Math.max(maxPlayers, 20)))
+    setCustomWinnerCount(clamped)
+    setCustomSplits(generateSplits(clamped, style))
+  }
+
+  const handleCustomStyleChange = (style: 'tiered' | 'even') => {
+    setCustomSplitStyle(style)
+    setCustomSplits(generateSplits(customWinnerCount, style))
+  }
+
+  const activePayoutStructure: PayoutStructure =
+    payoutPreset === 'custom'
+      ? {
+          preset: 'custom',
+          label: `Custom (${customSplits.length} Winners)`,
+          splits: customSplits,
+        }
+      : PAYOUT_PRESETS[payoutPreset] || PAYOUT_PRESETS.top1
+
+  const totalCustomBps = customSplits.reduce((acc, s) => acc + (s.bps || 0), 0)
+  const isCustomBpsValid = totalCustomBps === 10000
+  const isPayoutValid = payoutPreset !== 'custom' || isCustomBpsValid
+
+  // Estimated total prize pool calculation for real-time distribution previews
+  const estimatedTotalPrize =
+    mode === 'buyin'
+      ? (parseFloat(buyIn) || 0) * maxPlayers
+      : (parseFloat(sponsoredPrize) || 0)
+
+  const previewSplits = calculatePayoutSplits(estimatedTotalPrize, activePayoutStructure.splits)
+
+
+
   const { data: rawBalance } = useUsdcBalance(activeAddress)
   const balanceHuman = rawBalance !== undefined ? formatUSDCRaw(rawBalance) : null
 
@@ -92,10 +192,11 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
       toast.success(`Room ${roomCode} created!`)
       saveRoomCategory(roomCode, category)
       saveRoomDuration(roomCode, roundDuration)
+      saveRoomPayout(roomCode, activePayoutStructure)
       saveActiveGame(roomCode, category, true)
       onRoomCreated(roomCode, category)
     }
-  }, [created, roomCode, category, roundDuration, onRoomCreated])
+  }, [created, roomCode, category, roundDuration, activePayoutStructure, onRoomCreated])
 
   const isWrongChain = chainId !== ARC_TESTNET_CHAIN_ID
 
@@ -103,6 +204,10 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
 
   const handleCreate = () => {
     if (isWrongChain) { switchChain({ chainId: ARC_TESTNET_CHAIN_ID }); return }
+    if (!isPayoutValid) {
+      toast.error('Custom payout split must equal exactly 10,000 basis points (100%)')
+      return
+    }
     createRoom(
       roomCode,
       mode === 'buyin' ? buyIn : '0',
@@ -257,7 +362,6 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
                 className="min-w-0 flex-1 bg-transparent text-lg sm:text-xl font-bold outline-none tabular-nums"
                 style={{ color: 'var(--ink)', fontFamily: "'Space Grotesk', sans-serif" }}
               />
-              <span className="shrink-0 text-sm font-medium" style={{ color: 'var(--muted)' }}>USDC</span>
             </div>
             {balanceHuman !== null && (
               <p className="mt-1.5 text-xs" style={{ color: 'var(--subtle)' }}>
@@ -266,16 +370,209 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
             )}
           </div>
 
-          {/* 5. Round Timer / Duration */}
+          {/* 5. Payout Distribution */}
           <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
-            <div className="mb-2.5 flex items-center justify-between">
+            <div className="mb-2.5">
+              <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
+                Payout Distribution
+              </p>
+            </div>
+
+            {/* 3 Preset Pills + Inline Stepper (slot 4) */}
+            <div className="grid grid-cols-4 gap-2 mb-3.5 h-10">
+              {[
+                { id: 'top1', label: 'Top 1' },
+                { id: 'top3', label: 'Top 3' },
+                { id: 'top5', label: 'Top 5' },
+              ].map(p => {
+                const isActive = payoutPreset === p.id
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setPayoutPreset(p.id as PayoutPreset)}
+                    className="h-full rounded-xl flex items-center justify-center text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                    style={{
+                      background: isActive ? 'var(--accent)' : 'rgba(255,255,255,0.7)',
+                      color: isActive ? 'white' : 'var(--ink)',
+                      border: isActive ? '1px solid transparent' : '1px solid var(--border)',
+                      boxShadow: isActive ? '0 2px 8px rgba(124,58,237,0.25)' : 'none',
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                )
+              })}
+
+              {/* Slot 4: Custom stepper */}
+              {(() => {
+                const isActive = payoutPreset === 'custom'
+                return (
+                  <div
+                    className="flex items-center h-full rounded-xl overflow-hidden transition-all duration-200"
+                    style={{
+                      background: isActive
+                        ? 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)'
+                        : 'rgba(255,255,255,0.7)',
+                      border: isActive ? '1px solid transparent' : '1px solid var(--border)',
+                      boxShadow: isActive
+                        ? '0 2px 8px rgba(124,58,237,0.25), inset 0 1px 0 rgba(255,255,255,0.15)'
+                        : 'none',
+                    }}
+                  >
+                    {/* − button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPayoutPreset('custom')
+                        handleCustomCountChange(isActive ? customWinnerCount - 1 : customWinnerCount)
+                      }}
+                      disabled={isActive && customWinnerCount <= 1}
+                      className="w-7 h-full flex items-center justify-center disabled:opacity-20 cursor-pointer transition-all hover:bg-black/5 active:scale-90"
+                      style={{ color: isActive ? 'rgba(255,255,255,0.9)' : 'var(--subtle)' }}
+                      aria-label="Fewer winners"
+                    >
+                      <svg width="10" height="2" viewBox="0 0 10 2"><rect width="10" height="1.5" rx=".75" fill="currentColor"/></svg>
+                    </button>
+
+                    {/* Divider */}
+                    <div className="w-px h-4" style={{ background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--border)' }} />
+
+                    {/* Center: shows "Custom" when inactive, or just the count when active */}
+                    <button
+                      type="button"
+                      onClick={() => { if (!isActive) setPayoutPreset('custom') }}
+                      className="flex-1 h-full flex items-center justify-center cursor-pointer px-1"
+                    >
+                      {isActive ? (
+                        <span
+                          className="text-sm font-extrabold tabular-nums leading-none"
+                          style={{ color: 'white', letterSpacing: '-0.02em' }}
+                        >
+                          {customWinnerCount}
+                        </span>
+                      ) : (
+                        <span
+                          className="text-xs font-bold leading-none"
+                          style={{ color: 'var(--ink)' }}
+                        >
+                          Custom
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Divider */}
+                    <div className="w-px h-4" style={{ background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--border)' }} />
+
+                    {/* + button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPayoutPreset('custom')
+                        handleCustomCountChange(isActive ? customWinnerCount + 1 : customWinnerCount)
+                      }}
+                      disabled={isActive && customWinnerCount >= 20}
+                      className="w-7 h-full flex items-center justify-center disabled:opacity-20 cursor-pointer transition-all hover:bg-black/5 active:scale-90"
+                      style={{ color: isActive ? 'rgba(255,255,255,0.9)' : 'var(--subtle)' }}
+                      aria-label="More winners"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 10 10">
+                        <rect x="4.25" y="0" width="1.5" height="10" rx=".75" fill="currentColor"/>
+                        <rect y="4.25" width="10" height="1.5" rx=".75" fill="currentColor"/>
+                      </svg>
+                    </button>
+                  </div>
+                )
+              })()}
+            </div>
+
+            {/* Prize Breakdown */}
+            <div className="rounded-2xl overflow-hidden border border-slate-200/80">
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
+                <p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                  Prize Breakdown
+                </p>
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 tabular-nums">
+                  <TokenUSDC variant="branded" size={13} />
+                  <span>~${estimatedTotalPrize.toFixed(2)} Pool</span>
+                </div>
+              </div>
+
+              {/* Prize list */}
+              <div className="p-3 space-y-1.5" style={{ maxHeight: '220px', overflowY: 'auto' }}>
+                {previewSplits.map((split, idx) => {
+                  const isTop3 = idx < 3
+                  const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null
+                  const barColor = idx === 0
+                    ? 'linear-gradient(90deg, #fbbf24, #f59e0b)'
+                    : idx === 1
+                      ? 'linear-gradient(90deg, #cbd5e1, #94a3b8)'
+                      : idx === 2
+                        ? 'linear-gradient(90deg, #fbbf24, #d97706)'
+                        : 'linear-gradient(90deg, #e2e8f0, #cbd5e1)'
+
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-3 rounded-xl px-3 transition-colors"
+                      style={{
+                        padding: isTop3 ? '10px 12px' : '7px 12px',
+                        background: isTop3 ? 'rgba(255,255,255,0.9)' : 'transparent',
+                        border: isTop3 ? '1px solid rgba(0,0,0,0.04)' : '1px solid transparent',
+                      }}
+                    >
+                      {/* Rank */}
+                      <div className="shrink-0 flex items-center justify-center" style={{ width: '24px' }}>
+                        {medal ? (
+                          <span className="text-base leading-none">{medal}</span>
+                        ) : (
+                          <span className="text-[11px] font-bold text-slate-400 tabular-nums">{idx + 1}</span>
+                        )}
+                      </div>
+
+                      {/* Label + Bar */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline justify-between mb-1">
+                          <span className={`font-bold text-slate-800 ${isTop3 ? 'text-xs' : 'text-[11px]'}`}>
+                            {split.label}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-400 tabular-nums ml-2">
+                            {split.percent}%
+                          </span>
+                        </div>
+                        {/* Visual bar */}
+                        <div className="h-1 rounded-full bg-slate-100 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${Math.max(split.percent, 2)}%`,
+                              background: barColor,
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Amount */}
+                      <div className="shrink-0 flex items-center gap-1 tabular-nums ml-1">
+                        <TokenUSDC variant="branded" size={12} />
+                        <span className={`font-bold text-slate-900 ${isTop3 ? 'text-xs' : 'text-[11px]'}`}>
+                          ${split.amount}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* 6. Round Timer / Duration */}
+          <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
+            <div className="mb-2.5">
               <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
                 Round Timer
               </p>
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 shrink-0 bg-white/95 px-3 py-1 rounded-xl border border-slate-200/90 shadow-2xs">
-                <Clock size={13} className="text-slate-600 stroke-[2.25]" />
-                <span>{roundDuration}s per round</span>
-              </span>
             </div>
 
             {/* Quick Presets */}
@@ -420,7 +717,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
           )}
           <button
             onClick={isWrongChain ? () => switchChain({ chainId: ARC_TESTNET_CHAIN_ID }) : handleCreate}
-            disabled={createPending || createConfirming || !contractReady || !codeValid || codeTaken || (mode === 'sponsored' && needsApproval)}
+            disabled={createPending || createConfirming || !contractReady || !codeValid || codeTaken || !isPayoutValid || (mode === 'sponsored' && needsApproval)}
             className="w-full rounded-2xl py-4 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
             style={{ background: 'var(--accent)', color: 'white' }}
           >

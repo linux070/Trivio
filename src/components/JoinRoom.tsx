@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Users, Check } from 'lucide-react'
+import { ArrowLeft, Users, Check, Trophy } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import {
@@ -17,7 +17,7 @@ import {
 } from '@/hooks/useTriviaContract'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { type Category, CATEGORY_GROUPS } from '@/lib/questions'
-import { getRoomCategory, saveRoomCategory } from '@/lib/roomStorage'
+import { getRoomCategory, saveRoomCategory, getRoomPayout, calculatePayoutSplits } from '@/lib/roomStorage'
 
 const ROOM_STATUS = ['Open', 'In Progress', 'Finished', 'Cancelled']
 
@@ -246,6 +246,28 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                         <TokenUSDC variant="branded" size={13} />
                         {buyIn !== undefined && buyIn > 0n ? buyInHuman : prizePoolHuman} USDC
                       </span>
+                    </div>
+
+                    {/* Payout Structure Row */}
+                    <div className="flex flex-col gap-1.5 rounded-xl px-3.5 py-2.5" style={glass.inner}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs flex items-center gap-1" style={{ color: 'var(--muted)' }}>
+                          <Trophy size={13} className="text-amber-500" />
+                          Payout Structure
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-800 bg-white px-2.5 py-0.5 rounded-lg border border-slate-200 shadow-2xs">
+                          {getRoomPayout(checkedCode).label}
+                        </span>
+                      </div>
+                      {getRoomPayout(checkedCode).splits.length > 1 && (
+                        <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-slate-200/60">
+                          {getRoomPayout(checkedCode).splits.map((s, idx) => (
+                            <span key={idx} className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
+                              {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🏅'} {s.label}: <strong>{s.percent}%</strong>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 

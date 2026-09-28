@@ -645,7 +645,9 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                           {profile?.username ? `@${profile.username}` : 'Anonymous Player'}
                         </h3>
                         {isProfileVerified && (
-                          <ShieldCheck size={13} className="text-purple-600 shrink-0" title="Verified on Arc Testnet" />
+                          <span title="Verified on Arc Testnet" className="inline-flex items-center">
+                            <ShieldCheck size={13} className="text-purple-600 shrink-0" />
+                          </span>
                         )}
                         <Pencil size={10} className="text-gray-300 group-hover/name:text-gray-500 transition-colors ml-0.5 shrink-0" />
                       </button>
