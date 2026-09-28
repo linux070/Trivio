@@ -235,17 +235,17 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-md px-3.5 pt-4 sm:max-w-xl md:max-w-2xl sm:px-6 sm:py-6"
-        style={{ paddingBottom: 'max(6.5rem, calc(env(safe-area-inset-bottom, 20px) + 5rem))' }}
+        className="relative z-10 mx-auto w-full max-w-md px-4 pt-4 sm:max-w-xl md:max-w-2xl sm:px-6 sm:pt-6"
+        style={{ paddingBottom: 'max(7rem, calc(env(safe-area-inset-bottom, 0px) + 6rem))' }}
       >
         <div className="mb-5 sm:mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={onBack}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 hover:bg-white backdrop-blur-md shadow-xs border border-[var(--border)] transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer"
+              className="flex h-10 w-10 sm:h-9 sm:w-9 items-center justify-center rounded-full bg-white/80 hover:bg-white backdrop-blur-md shadow-xs border border-[var(--border)] transition-all duration-150 active:scale-95 cursor-pointer"
               title="Go back"
             >
-              <ArrowLeft size={16} className="stroke-[2.25]" style={{ color: 'var(--ink)' }} />
+              <ArrowLeft size={17} className="stroke-[2.25]" style={{ color: 'var(--ink)' }} />
             </button>
             <h1 className="display text-xl sm:text-2xl font-semibold" style={{ color: 'var(--ink)', letterSpacing: '-0.03em' }}>create room</h1>
           </div>
@@ -257,7 +257,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
           </div>
         )}
 
-        <div className="space-y-3.5 sm:space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {/* 1. Game Mode / Category Card */}
           <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
             <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
@@ -328,7 +328,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
                 <button
                   key={m}
                   onClick={() => setMode(m)}
-                  className="rounded-2xl px-4 py-3 text-sm font-semibold transition-all"
+                  className="rounded-2xl px-4 py-3.5 sm:py-3 text-sm font-semibold transition-all active:scale-[0.97]"
                   style={{
                     background: mode === m ? 'var(--accent)' : 'rgba(255,255,255,0.5)',
                     color: mode === m ? 'white' : 'var(--muted)',
@@ -351,12 +351,13 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>
               {mode === 'buyin' ? 'Buy-in per player' : 'Prize pool'}
             </p>
-            <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={glass.inner}>
+            <div className="flex items-center gap-3 rounded-2xl px-4 py-3.5 sm:py-3" style={glass.inner}>
               <TokenUSDC variant="branded" size={20} />
               <input
                 type="number"
                 min="0.01"
                 step="0.01"
+                inputMode="decimal"
                 value={mode === 'buyin' ? buyIn : sponsoredPrize}
                 onChange={e => mode === 'buyin' ? setBuyIn(e.target.value) : setSponsoredPrize(e.target.value)}
                 className="min-w-0 flex-1 bg-transparent text-lg sm:text-xl font-bold outline-none tabular-nums"
@@ -379,7 +380,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
             </div>
 
             {/* 3 Preset Pills + Inline Stepper (slot 4) */}
-            <div className="grid grid-cols-4 gap-2 mb-3.5 h-10">
+            <div className="grid grid-cols-4 gap-1.5 sm:gap-2 mb-3.5 h-11 sm:h-10">
               {[
                 { id: 'top1', label: 'Top 1' },
                 { id: 'top3', label: 'Top 3' },
@@ -391,7 +392,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
                     key={p.id}
                     type="button"
                     onClick={() => setPayoutPreset(p.id as PayoutPreset)}
-                    className="h-full rounded-xl flex items-center justify-center text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                    className="h-full rounded-xl flex items-center justify-center text-[11px] sm:text-xs font-bold transition-all active:scale-95 cursor-pointer"
                     style={{
                       background: isActive ? 'var(--accent)' : 'rgba(255,255,255,0.7)',
                       color: isActive ? 'white' : 'var(--ink)',
@@ -500,7 +501,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
               </div>
 
               {/* Prize list */}
-              <div className="p-3 space-y-1.5" style={{ maxHeight: '220px', overflowY: 'auto' }}>
+              <div className="p-2 sm:p-3 space-y-1.5" style={{ maxHeight: '200px', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
                 {previewSplits.map((split, idx) => {
                   const isTop3 = idx < 3
                   const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null
@@ -576,13 +577,13 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
             </div>
 
             {/* Quick Presets */}
-            <div className="grid grid-cols-4 gap-2 mb-3">
+            <div className="grid grid-cols-4 gap-1.5 sm:gap-2 mb-3">
               {[10, 15, 20, 30].map(sec => (
                 <button
                   key={sec}
                   type="button"
                   onClick={() => setRoundDuration(sec)}
-                  className="rounded-xl py-2 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                  className="rounded-xl py-2.5 sm:py-2 text-xs font-bold transition-all active:scale-95 cursor-pointer"
                   style={{
                     background: roundDuration === sec ? 'var(--accent)' : 'rgba(255,255,255,0.7)',
                     color: roundDuration === sec ? 'white' : 'var(--ink)',
@@ -601,7 +602,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
                 type="button"
                 onClick={() => setRoundDuration(prev => Math.max(5, prev - 5))}
                 disabled={roundDuration <= 5}
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-xl font-bold transition-all hover:bg-black/5 disabled:opacity-30 cursor-pointer"
+                className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-xl text-xl font-bold transition-all hover:bg-black/5 active:scale-95 disabled:opacity-30 cursor-pointer"
                 style={{ color: 'var(--ink)' }}
               >
                 −
@@ -619,7 +620,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
                 type="button"
                 onClick={() => setRoundDuration(prev => Math.min(60, prev + 5))}
                 disabled={roundDuration >= 60}
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-xl font-bold transition-all hover:bg-black/5 disabled:opacity-30 cursor-pointer"
+                className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-xl text-xl font-bold transition-all hover:bg-black/5 active:scale-95 disabled:opacity-30 cursor-pointer"
                 style={{ color: 'var(--ink)' }}
               >
                 +
@@ -638,7 +639,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
               <button
                 onClick={() => { const n = Math.max(1, maxPlayers - 1); setMaxPlayers(n); setMaxPlayersInput(String(n)) }}
                 disabled={maxPlayers <= 1}
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-xl font-bold transition-all hover:bg-black/5 disabled:opacity-30 cursor-pointer"
+                className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-xl text-xl font-bold transition-all hover:bg-black/5 active:scale-95 disabled:opacity-30 cursor-pointer"
                 style={{ color: 'var(--ink)' }}
               >
                 −
@@ -675,7 +676,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
                   setMaxPlayersInput(String(n))
                 }}
                 disabled={maxPlayers >= (selectedSubInfo?.maxPlayers ?? 50)}
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-xl font-bold transition-all hover:bg-black/5 disabled:opacity-30 cursor-pointer"
+                className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-xl text-xl font-bold transition-all hover:bg-black/5 active:scale-95 disabled:opacity-30 cursor-pointer"
                 style={{ color: 'var(--ink)' }}
               >
                 +
@@ -718,8 +719,8 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
           <button
             onClick={isWrongChain ? () => switchChain({ chainId: ARC_TESTNET_CHAIN_ID }) : handleCreate}
             disabled={createPending || createConfirming || !contractReady || !codeValid || codeTaken || !isPayoutValid || (mode === 'sponsored' && needsApproval)}
-            className="w-full rounded-2xl py-4 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
-            style={{ background: 'var(--accent)', color: 'white' }}
+            className="w-full rounded-2xl py-4 text-base sm:text-sm font-semibold transition-opacity hover:opacity-80 active:scale-[0.98] disabled:opacity-40"
+            style={{ background: 'var(--accent)', color: 'white', minHeight: '52px' }}
           >
             {isWrongChain ? 'Switch to Arc' : createPending || createConfirming ? 'Creating...' : 'Create Room'}
           </button>
