@@ -51,7 +51,7 @@ const SHAPES = [
 function FloatingShapes() {
   return (
     <div
-      className="pointer-events-none absolute inset-0 overflow-hidden"
+      className="pointer-events-none absolute inset-0 z-[1] overflow-hidden"
       style={{
         background:
           'radial-gradient(circle at 90% 5%, rgba(192,132,252,0.22) 0%, transparent 45%), radial-gradient(circle at 10% 95%, rgba(139,92,246,0.20) 0%, transparent 45%), radial-gradient(ellipse at 50% 45%, rgba(255,255,255,0.06) 0%, transparent 60%)',
@@ -114,8 +114,8 @@ const HOW_TO_PLAY = [
   },
   {
     icon: Trophy,
-    label: 'Winner takes all',
-    desc: 'Top scorer receives the full USDC prize pool, paid out onchain instantly.',
+    label: 'Earn prizes',
+    desc: 'Top scorers split the USDC prize pool. Payouts settle onchain, instantly.',
     iconBg: '#dcfce7',
     iconColor: '#166534',
   },

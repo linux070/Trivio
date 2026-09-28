@@ -33,7 +33,7 @@ input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
 html {
   min-height: 100%;
   min-height: 100dvh;
-  background-color: #fafafa;
+  background-color: #4c1d95;
 }
 
 body {
@@ -41,7 +41,7 @@ body {
   font-family: 'DM Sans', sans-serif;
   min-height: 100%;
   min-height: 100dvh;
-  background-color: #fafafa;
+  background-color: #4c1d95;
   -webkit-tap-highlight-color: transparent;
   overflow-x: hidden;
   overscroll-behavior-y: none;
@@ -78,10 +78,19 @@ body {
 }
 
 /* ── Floating shapes background — Deep Purple ── */
+/* iOS Safari ignores background-attachment:fixed, so we use a
+   position:fixed pseudo-element to pin the gradient behind content. */
 .trivio-bg {
+  position: relative;
+  background: #4c1d95; /* solid fallback while pseudo paints */
+}
+.trivio-bg::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
   background: linear-gradient(160deg, #7c3aed 0%, #6d28d9 30%, #5b21b6 65%, #4c1d95 100%);
-  background-size: cover;
-  background-attachment: fixed;
+  pointer-events: none;
 }
 
 .shape {
