@@ -97,27 +97,29 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
   const nameInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [profile, setProfile] = useState<UserProfile | null>(() => getUserProfile())
-  const [avatarImgError, setAvatarImgError] = useState(false)
   const privyWalletAddress = user?.wallet?.address as `0x${string}` | undefined
   const activeAddress = wagmiAddress || privyWalletAddress || '0x0000000000000000000000000000000000000000'
+  const [profile, setProfile] = useState<UserProfile | null>(() => getUserProfile(activeAddress))
+  const [avatarImgError, setAvatarImgError] = useState(false)
 
   useEffect(() => {
     setAvatarImgError(false)
   }, [profile?.avatarUrl])
 
   useEffect(() => {
-    const p = getUserProfile()
-    if (p) {
-      if (!p.avatarUrl) {
-        const fixed: UserProfile = {
-          ...p,
-          avatarUrl: getDiceBearAvatarUrl(p.avatarStyle || 'bottts-neutral', p.avatarSeed || p.username),
+    if (activeAddress && activeAddress !== '0x0000000000000000000000000000000000000000') {
+      const p = getUserProfile(activeAddress)
+      if (p) {
+        if (!p.avatarUrl) {
+          const fixed: UserProfile = {
+            ...p,
+            avatarUrl: getDiceBearAvatarUrl(p.avatarStyle || 'bottts-neutral', p.avatarSeed || p.username),
+          }
+          saveUserProfile(fixed, activeAddress)
+          setProfile(fixed)
+        } else {
+          setProfile(p)
         }
-        saveUserProfile(fixed)
-        setProfile(fixed)
-      } else {
-        setProfile(p)
       }
     }
   }, [activeAddress])

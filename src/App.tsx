@@ -3,7 +3,7 @@ import { useAccount } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import type { Category } from '@/lib/questions'
 import { ALL_CATEGORIES } from '@/lib/questions'
-import { hasUserProfile, saveUserProfile, getDiceBearAvatarUrl, type UserProfile } from '@/lib/userProfile'
+import { hasUserProfile, saveUserProfile, clearActiveUserProfile, getDiceBearAvatarUrl, type UserProfile } from '@/lib/userProfile'
 import { useOnchainProfile } from '@/hooks/useTrivioProfileRegistry'
 import {
   saveRoomCategory,
@@ -258,39 +258,43 @@ export default function App() {
         // ignore
       }
 
-      // 1. Returning user with existing local profile -> go straight to game screen
-      if (hasUserProfile(activeAddress) || hasUserProfile()) {
-        setShowOnboarding(false)
-        if (screen.name === 'landing') {
-          restoreGameScreen()
+      // When Privy session is authenticated and wallet address is available
+      if (activeAddress) {
+        // 1. Returning user with existing local profile for this address -> go straight to game screen
+        if (hasUserProfile(activeAddress)) {
+          setShowOnboarding(false)
+          if (screen.name === 'landing') {
+            restoreGameScreen()
+          }
+          return
         }
-        return
-      }
 
-      // 2. Returning user with existing onchain profile -> sync & go straight to game screen
-      if (hasOnchainProfile && onchainProfile) {
-        const p: UserProfile = {
-          username: onchainProfile.username,
-          avatarUrl: onchainProfile.avatarUrl || getDiceBearAvatarUrl(onchainProfile.avatarStyle || 'bottts-neutral', onchainProfile.avatarSeed || onchainProfile.username),
-          avatarSeed: onchainProfile.avatarSeed || onchainProfile.username,
-          avatarStyle: onchainProfile.avatarStyle || 'bottts-neutral',
-          createdAt: Number(onchainProfile.updatedAt) * 1000 || Date.now(),
+        // 2. Returning user with existing onchain profile -> sync & go straight to game screen
+        if (hasOnchainProfile && onchainProfile) {
+          const p: UserProfile = {
+            username: onchainProfile.username,
+            avatarUrl: onchainProfile.avatarUrl || getDiceBearAvatarUrl(onchainProfile.avatarStyle || 'bottts-neutral', onchainProfile.avatarSeed || onchainProfile.username),
+            avatarSeed: onchainProfile.avatarSeed || onchainProfile.username,
+            avatarStyle: onchainProfile.avatarStyle || 'bottts-neutral',
+            createdAt: Number(onchainProfile.updatedAt) * 1000 || Date.now(),
+            isOnchainVerified: true,
+          }
+          saveUserProfile(p, activeAddress)
+          setShowOnboarding(false)
+          if (screen.name === 'landing') {
+            restoreGameScreen()
+          }
+          return
         }
-        saveUserProfile(p, activeAddress)
-        setShowOnboarding(false)
-        if (screen.name === 'landing') {
-          restoreGameScreen()
+
+        // 3. If still querying onchain registry, wait briefly before assuming new user
+        if (isOnchainProfileLoading) {
+          return
         }
-        return
-      }
 
-      // 3. If still querying onchain registry, wait briefly before assuming new user
-      if (isOnchainProfileLoading) {
-        return
+        // 4. Truly new user for this address -> trigger onboarding modal
+        setShowOnboarding(true)
       }
-
-      // 4. Truly new user -> trigger onboarding modal
-      setShowOnboarding(true)
     } else if (ready && !authenticated) {
       if (wasConnectedRef.current) {
         wasConnectedRef.current = false
@@ -298,6 +302,7 @@ export default function App() {
           localStorage.removeItem(STORAGE_AUTH_KEY)
           localStorage.removeItem(STORAGE_SCREEN_KEY)
           sessionStorage.removeItem(STORAGE_SCREEN_KEY)
+          clearActiveUserProfile()
           localStorage.removeItem('wagmi.recentConnectorId')
           localStorage.removeItem('wagmi.store')
           if (window.location.hash) {
@@ -306,6 +311,7 @@ export default function App() {
         } catch {
           // ignore
         }
+        setShowOnboarding(false)
         setScreen({ name: 'landing' })
       }
     }
@@ -313,7 +319,7 @@ export default function App() {
 
   // Watch for inbound join links while session is already active
   useEffect(() => {
-    if (ready && authenticated && hasUserProfile() && screen.name !== 'landing') {
+    if (ready && authenticated && hasUserProfile(activeAddress) && screen.name !== 'landing') {
       const joinParams = getJoinParamsFromUrl()
       if (joinParams) {
         const cat = joinParams.category || getRoomCategory(joinParams.roomCode) || 'General Knowledge'
@@ -326,7 +332,7 @@ export default function App() {
         setScreen({ name: 'join', category: cat, prefillCode: joinParams.roomCode })
       }
     }
-  }, [ready, authenticated, screen.name])
+  }, [ready, authenticated, activeAddress, screen.name])
 
   // Synchronize URL hash and storage whenever screen changes
   useEffect(() => {
@@ -401,25 +407,26 @@ export default function App() {
     } catch {
       // ignore
     }
-    if (hasUserProfile(activeAddress) || hasUserProfile()) {
+    if (activeAddress && hasUserProfile(activeAddress)) {
       setShowOnboarding(false)
       restoreGameScreen()
       return
     }
-    if (hasOnchainProfile && onchainProfile) {
+    if (activeAddress && hasOnchainProfile && onchainProfile) {
       const p: UserProfile = {
         username: onchainProfile.username,
         avatarUrl: onchainProfile.avatarUrl || getDiceBearAvatarUrl(onchainProfile.avatarStyle || 'bottts-neutral', onchainProfile.avatarSeed || onchainProfile.username),
         avatarSeed: onchainProfile.avatarSeed || onchainProfile.username,
         avatarStyle: onchainProfile.avatarStyle || 'bottts-neutral',
         createdAt: Number(onchainProfile.updatedAt) * 1000 || Date.now(),
+        isOnchainVerified: true,
       }
       saveUserProfile(p, activeAddress)
       setShowOnboarding(false)
       restoreGameScreen()
       return
     }
-    if (!isOnchainProfileLoading) {
+    if (activeAddress && !isOnchainProfileLoading) {
       setShowOnboarding(true)
     }
   }
@@ -440,6 +447,7 @@ export default function App() {
       localStorage.removeItem(STORAGE_AUTH_KEY)
       localStorage.removeItem(STORAGE_SCREEN_KEY)
       sessionStorage.removeItem(STORAGE_SCREEN_KEY)
+      clearActiveUserProfile()
       clearActiveGame()
       localStorage.removeItem('wagmi.recentConnectorId')
       localStorage.removeItem('wagmi.store')
@@ -449,20 +457,30 @@ export default function App() {
     } catch {
       // ignore
     }
+    setShowOnboarding(false)
     setScreen({ name: 'landing' })
   }
 
-  // Check if we have an active stored user session
-  const isStoredAuth = typeof window !== 'undefined' && localStorage.getItem(STORAGE_AUTH_KEY) === 'true' && (hasUserProfile(activeAddress) || hasUserProfile())
+  // Check if we have an active stored user session with a valid profile for this active address
+  const hasValidProfile = Boolean(activeAddress ? hasUserProfile(activeAddress) : false)
+  const isStoredAuth =
+    typeof window !== 'undefined' &&
+    localStorage.getItem(STORAGE_AUTH_KEY) === 'true' &&
+    hasValidProfile
 
   // Auth & Onboarding guard:
   // If showOnboarding is active, or screen is landing, or session is not authenticated,
   // do NOT flash the Lobby in the background. Keep the clean Landing Page backdrop.
-  if (showOnboarding || screen.name === 'landing' || (!isStoredAuth && (!ready || !authenticated || (!hasUserProfile(activeAddress) && !hasUserProfile())))) {
+  if (
+    showOnboarding ||
+    screen.name === 'landing' ||
+    (!isStoredAuth && (!ready || !authenticated || !hasValidProfile))
+  ) {
     return (
       <>
         <LandingPage onConnected={handleConnected} />
         <OnboardingModal
+          key={activeAddress || 'onboarding'}
           open={showOnboarding && authenticated}
           address={activeAddress}
           provider={provider}

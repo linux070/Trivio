@@ -64,18 +64,24 @@ export default function OnboardingModal({
   const isReserved = isReservedUsername(cleanUsername)
   const { data: isAvailableOnchain, isLoading: isCheckingOnchain } = useCheckUsernameAvailable(cleanUsername)
 
-  // Re-sync with initialProfile if opened
-  const lastOpenRef = useRef(open)
-  if (open && !lastOpenRef.current) {
-    setStep('form')
-    setPendingProfile(null)
-    if (initialProfile) {
-      setUsername(initialProfile.username)
-      setSeed(initialProfile.avatarSeed || suggestions.seed)
-      setCustomAvatarUrl(initialProfile.avatarStyle === 'custom' ? initialProfile.avatarUrl : null)
+  // Re-sync with fresh suggestions or initialProfile whenever modal opens or active account changes
+  useEffect(() => {
+    if (open) {
+      setStep('form')
+      setPendingProfile(null)
+      if (initialProfile) {
+        setUsername(initialProfile.username)
+        setSeed(initialProfile.avatarSeed || suggestions.seed)
+        setCustomAvatarUrl(initialProfile.avatarStyle === 'custom' ? initialProfile.avatarUrl : null)
+      } else {
+        const fresh = getDefaultProfileSuggestions(address, provider)
+        setUsername(fresh.username)
+        setSeed(fresh.seed)
+        setStyleIndex(0)
+        setCustomAvatarUrl(null)
+      }
     }
-  }
-  lastOpenRef.current = open
+  }, [open, address, initialProfile, provider])
 
   // Clear timers on unmount
   useEffect(() => {

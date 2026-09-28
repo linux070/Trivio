@@ -15,6 +15,7 @@ import { useCheckUsernameAvailable } from '@/hooks/useTrivioProfileRegistry'
 
 interface EditProfileModalProps {
   open: boolean
+  address?: string
   initialProfile: UserProfile | null
   onClose: () => void
   onComplete: (profile: UserProfile) => void
@@ -22,11 +23,12 @@ interface EditProfileModalProps {
 
 export default function EditProfileModal({
   open,
+  address,
   initialProfile,
   onClose,
   onComplete,
 }: EditProfileModalProps) {
-  const defaults = getDefaultProfileSuggestions()
+  const defaults = getDefaultProfileSuggestions(address)
   const [username, setUsername] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [avatarSeed, setAvatarSeed] = useState('')
@@ -156,7 +158,7 @@ export default function EditProfileModal({
     }
 
     try {
-      saveUserProfile(updated)
+      saveUserProfile(updated, address)
       toast.success('Profile updated!')
       onComplete(updated)
     } catch {

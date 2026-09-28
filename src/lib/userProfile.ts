@@ -48,9 +48,17 @@ export function getDiceBearAvatarUrl(style: string = 'bottts-neutral', seed: str
  */
 export function getUserProfile(address?: string): UserProfile | null {
   try {
-    if (address && address.startsWith('0x') && address.length === 42) {
+    if (address && address.startsWith('0x') && address.length === 42 && address !== '0x0000000000000000000000000000000000000000') {
       const scoped = localStorage.getItem(`trivio_profile_${address.toLowerCase()}`)
-      if (scoped) return JSON.parse(scoped) as UserProfile
+      if (scoped) {
+        try {
+          return JSON.parse(scoped) as UserProfile
+        } catch {
+          return null
+        }
+      }
+      // CRITICAL: When address is provided, never fall back to another user's global profile!
+      return null
     }
     const raw = localStorage.getItem(STORAGE_PROFILE_KEY)
     if (raw) return JSON.parse(raw) as UserProfile
@@ -73,11 +81,22 @@ export function hasUserProfile(address?: string): boolean {
 export function saveUserProfile(profile: UserProfile, address?: string): void {
   try {
     localStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(profile))
-    if (address && address.startsWith('0x') && address.length === 42) {
+    if (address && address.startsWith('0x') && address.length === 42 && address !== '0x0000000000000000000000000000000000000000') {
       localStorage.setItem(`trivio_profile_${address.toLowerCase()}`, JSON.stringify(profile))
     }
   } catch (err) {
     console.error('Failed to save user profile:', err)
+  }
+}
+
+/**
+ * Clear global active user profile from storage on logout
+ */
+export function clearActiveUserProfile(): void {
+  try {
+    localStorage.removeItem(STORAGE_PROFILE_KEY)
+  } catch (err) {
+    console.error('Failed to clear active user profile:', err)
   }
 }
 
