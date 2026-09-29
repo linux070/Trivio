@@ -14,6 +14,7 @@ import {
   useUsdcBalance,
   formatUSDCRaw,
   parseUSDC,
+  type RoomTuple,
 } from '@/hooks/useTriviaContract'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { type Category, CATEGORY_GROUPS } from '@/lib/questions'
@@ -69,7 +70,6 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   const { data: roomInfo, isLoading: roomLoading, error: roomError } = useRoomInfo(checkedCode)
   const { data: isPlayerOnchain } = useIsPlayer(checkedCode, activeAddress)
 
-  type RoomTuple = readonly [`0x${string}`, bigint, bigint, number, number, number, `0x${string}`]
   const [host, buyIn, prizePool, maxPlayers, playerCount, status] = (roomInfo as RoomTuple) ?? []
 
   const isHost = Boolean(

@@ -77,84 +77,9 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
   const [codeEdited, setCodeEdited] = useState(false)
 
   const [payoutPreset, setPayoutPreset] = useState<PayoutPreset>('top1')
-  const [customWinnerCount, setCustomWinnerCount] = useState<number>(4)
-  const [customSplitStyle, setCustomSplitStyle] = useState<'tiered' | 'even'>('tiered')
-
-  // Helper to generate clean splits without needing sliders
-  const generateSplits = (count: number, style: 'tiered' | 'even' = 'tiered'): PayoutSplitItem[] => {
-    const n = Math.max(1, Math.min(count, 20))
-    const suffixes = ['th', 'st', 'nd', 'rd']
-    const getSuffix = (num: number) => {
-      const v = num % 100
-      return suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0]
-    }
-
-    if (n === 1) {
-      return [{ rank: 1, bps: 10000, percent: 100, label: '1st Place' }]
-    }
-
-    if (style === 'even') {
-      const evenBps = Math.floor(10000 / n)
-      const remainder = 10000 - evenBps * n
-      return Array.from({ length: n }, (_, i) => {
-        const r = i + 1
-        const bps = i === 0 ? evenBps + remainder : evenBps
-        return {
-          rank: r,
-          bps,
-          percent: Number((bps / 100).toFixed(1)),
-          label: `${r}${getSuffix(r)} Place`,
-        }
-      })
-    }
-
-    // Tiered curve
-    const rawWeights = Array.from({ length: n }, (_, i) => 1 / Math.pow(i + 1, 0.7))
-    const totalWeight = rawWeights.reduce((a, b) => a + b, 0)
-    let allocatedBps = 0
-    return rawWeights.map((w, i) => {
-      const r = i + 1
-      let bps = Math.round((w / totalWeight) * 10000)
-      if (i === n - 1) {
-        bps = 10000 - allocatedBps
-      } else {
-        allocatedBps += bps
-      }
-      const clampedBps = Math.max(100, bps)
-      return {
-        rank: r,
-        bps: clampedBps,
-        percent: Number((clampedBps / 100).toFixed(1)),
-        label: `${r}${getSuffix(r)} Place`,
-      }
-    })
-  }
-
-  const [customSplits, setCustomSplits] = useState<PayoutSplitItem[]>(() => generateSplits(4, 'tiered'))
-
-  const handleCustomCountChange = (newCount: number, style = customSplitStyle) => {
-    const clamped = Math.max(1, Math.min(newCount, Math.max(maxPlayers, 20)))
-    setCustomWinnerCount(clamped)
-    setCustomSplits(generateSplits(clamped, style))
-  }
-
-  const handleCustomStyleChange = (style: 'tiered' | 'even') => {
-    setCustomSplitStyle(style)
-    setCustomSplits(generateSplits(customWinnerCount, style))
-  }
 
   const activePayoutStructure: PayoutStructure =
-    payoutPreset === 'custom'
-      ? {
-          preset: 'custom',
-          label: `Custom (${customSplits.length} Winners)`,
-          splits: customSplits,
-        }
-      : PAYOUT_PRESETS[payoutPreset] || PAYOUT_PRESETS.top1
-
-  const totalCustomBps = customSplits.reduce((acc, s) => acc + (s.bps || 0), 0)
-  const isCustomBpsValid = totalCustomBps === 10000
-  const isPayoutValid = payoutPreset !== 'custom' || isCustomBpsValid
+    PAYOUT_PRESETS[payoutPreset] || PAYOUT_PRESETS.top1
 
   // Estimated total prize pool calculation for real-time distribution previews
   const estimatedTotalPrize =
@@ -206,18 +131,12 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
 
   const handleCreate = () => {
     if (isWrongChain) { switchChain({ chainId: ARC_TESTNET_CHAIN_ID }); return }
-    if (!isPayoutValid) {
-      toast.error('Custom payout split must equal exactly 10,000 basis points (100%)')
-      return
-    }
 
     let modeEnum = PayoutMode.SingleWinner
     if (payoutPreset === 'top2') modeEnum = PayoutMode.Top2Split
     else if (payoutPreset === 'top3') modeEnum = PayoutMode.Top3Podium
     else if (payoutPreset === 'top5') modeEnum = PayoutMode.Top5Split
-    else if (payoutPreset === 'custom') modeEnum = PayoutMode.CustomSplits
 
-    const splitsBps = payoutPreset === 'custom' ? customSplits.map(s => s.bps) : []
     const seed = keccak256(toBytes(roomCode + category + Date.now().toString()))
 
     createRoom(
@@ -226,7 +145,6 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
       mode === 'sponsored' ? sponsoredPrize : '0',
       maxPlayers,
       modeEnum,
-      splitsBps,
       seed
     )
   }
@@ -728,7 +646,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
           )}
           <button
             onClick={isWrongChain ? () => switchChain({ chainId: ARC_TESTNET_CHAIN_ID }) : handleCreate}
-            disabled={createPending || createConfirming || !contractReady || !codeValid || codeTaken || !isPayoutValid || (mode === 'sponsored' && needsApproval)}
+            disabled={createPending || createConfirming || !contractReady || !codeValid || codeTaken || (mode === 'sponsored' && needsApproval)}
             className="w-full rounded-2xl py-4 text-sm sm:text-base font-extrabold transition-all duration-200 shadow-lg shadow-purple-600/25 hover:shadow-purple-600/35 hover:brightness-105 active:scale-[0.99] disabled:opacity-40 disabled:pointer-events-none cursor-pointer text-white flex items-center justify-center gap-2"
             style={{
               background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 50%, #5b21b6 100%)',

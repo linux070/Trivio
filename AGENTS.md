@@ -6,7 +6,7 @@
 | Contract | Chain | Address | Explorer |
 |---|---|---|---|
 | TrivioProfileRegistry | Arc Testnet | `0xd69522761493ce3fc74fc07ae99d5cbd6de5f480` | [View](https://explorer.testnet.arc.io/address/0xd69522761493ce3fc74fc07ae99d5cbd6de5f480) |
-| TriviaGame | Arc Testnet | `0x523e320aFdABcfE330c1edB1Fd9FC94Dc7326B7f` | [View](https://explorer.testnet.arc.io/address/0x523e320aFdABcfE330c1edB1Fd9FC94Dc7326B7f) |
+| TriviaGame | Arc Testnet | `0x1b785e38e8ebb334b52a305a10e92b5ef9564624` | [View](https://explorer.testnet.arc.io/address/0x1b785e38e8ebb334b52a305a10e92b5ef9564624) |
 
 USDC constructor arg (Arc Testnet): `0x3600000000000000000000000000000000000000`
 

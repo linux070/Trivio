@@ -1,11 +1,11 @@
 {
-  "contractAddress": "0x11b30d080135bdb746adf2bdfb9754605fb9b171",
+  "contractAddress": "0x1b785e38e8ebb334b52a305a10e92b5ef9564624",
   "network": "ARC-TESTNET",
   "deployerWalletId": "3c2464b2-8369-52e2-a782-800bbeca5396",
   "contract_code_path": "/home/user/app/contracts/TriviaGame.sol",
   "contract_compiled_code_path": "/home/user/app/contracts/out/TriviaGame.sol/TriviaGame.json",
   "contract_network_and_links": {
-    "Arc Testnet": "https://explorer.testnet.arc.io/address/0x11b30d080135bdb746adf2bdfb9754605fb9b171"
+    "Arc Testnet": "https://explorer.testnet.arc.io/address/0x1b785e38e8ebb334b52a305a10e92b5ef9564624"
   },
   "contract_deployments": [
     {

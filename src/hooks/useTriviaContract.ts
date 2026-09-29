@@ -12,8 +12,20 @@ export enum PayoutMode {
   Top2Split = 1,
   Top3Podium = 2,
   Top5Split = 3,
-  CustomSplits = 4,
 }
+
+export type RoomTuple = readonly [
+  `0x${string}`, // host
+  bigint,        // usdcBuyIn
+  bigint,        // prizePool
+  number,        // maxPlayers
+  number,        // playerCount
+  number,        // status: 0=Open, 1=InProgress, 2=Finished, 3=Cancelled
+  number,        // payoutMode: 0=SingleWinner, 1=Top2, 2=Top3, 3=Top5
+  `0x${string}`, // questionSeedHash
+  bigint,        // createdAt
+  bigint         // startedAt
+]
 
 export interface PlayerScoreProof {
   player: `0x${string}`
@@ -34,7 +46,6 @@ export const TRIVIA_ABI = [
       { name: 'sponsoredPrize', type: 'uint256' },
       { name: 'maxPlayers', type: 'uint8' },
       { name: 'payoutMode', type: 'uint8' },
-      { name: 'customSplits', type: 'uint16[]' },
       { name: 'questionSeedHash', type: 'bytes32' },
     ],
     outputs: [],
@@ -311,7 +322,6 @@ export function useCreateRoom() {
     sponsoredPrize: string,
     maxPlayers: number,
     payoutMode: PayoutMode = PayoutMode.SingleWinner,
-    customSplits: number[] = [],
     seedHash?: `0x${string}`
   ) => {
     if (!TRIVIA_GAME_ADDRESS) return
@@ -326,7 +336,6 @@ export function useCreateRoom() {
         parseUSDC(sponsoredPrize),
         maxPlayers,
         payoutMode,
-        customSplits,
         defaultSeed,
       ],
     })

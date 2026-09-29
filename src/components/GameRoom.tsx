@@ -6,7 +6,15 @@ import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2, Zap } fro
 import { buildJoinUrl } from '@/App'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
-import { useStartGame, useDeclareWinner, useRoomInfo, formatUSDCRaw } from '@/hooks/useTriviaContract'
+import {
+  useStartGame,
+  useDeclareWinners,
+  useDeclareWinner,
+  useRoomInfo,
+  useRoomWinners,
+  formatUSDCRaw,
+  type RoomTuple,
+} from '@/hooks/useTriviaContract'
 import { getQuestions, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
 import { getRoomCategory, getRoomDuration, getRoomPayout, calculatePayoutSplits, saveActiveGame, clearActiveGame } from '@/lib/roomStorage'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
@@ -60,8 +68,20 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
   // Auto-polls onchain every 1.5s
   const { data: roomInfo, refetch: refetchRoomInfo } = useRoomInfo(roomCode, 1500)
-  type RoomTuple = readonly [`0x${string}`, bigint, bigint, number, number, number, `0x${string}`]
-  const [host, _buyIn, prizePool, maxP, playerCount, status, winner] = (roomInfo as RoomTuple) ?? []
+  const { data: winnersList } = useRoomWinners(roomCode)
+
+  const [
+    host,
+    _buyIn,
+    prizePool,
+    maxP,
+    playerCount,
+    status,
+    payoutMode,
+    questionSeedHash,
+    createdAt,
+    startedAt,
+  ] = (roomInfo as RoomTuple) ?? []
   const prizeHuman = prizePool !== undefined ? formatUSDCRaw(prizePool) : '0'
 
   const isHost = Boolean(
@@ -115,14 +135,15 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
   // Winner payout synchronization (for host who triggered payout or guest receiving finished status)
   useEffect(() => {
+    const winningAddress = (winnersList && winnersList.length > 0) ? winnersList[0] : null
     if (declared && activeAddress) {
       clearActiveGame()
       onGameEnd(activeAddress, prizeHuman, declareHash)
-    } else if (status === 2 && winner && winner !== '0x0000000000000000000000000000000000000000' && phase === 'finished') {
+    } else if (status === 2 && winningAddress && winningAddress !== '0x0000000000000000000000000000000000000000' && phase === 'finished') {
       clearActiveGame()
-      onGameEnd(winner, prizeHuman)
+      onGameEnd(winningAddress, prizeHuman)
     }
-  }, [declared, activeAddress, prizeHuman, declareHash, status, winner, phase, onGameEnd])
+  }, [declared, activeAddress, prizeHuman, declareHash, status, winnersList, phase, onGameEnd])
 
   function advanceQuestion(currentIndex: number, qs: TriviaQuestion[]) {
     const next = currentIndex + 1
@@ -332,7 +353,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                   const qs = getQuestions(resolvedCategory, 10, roomCode)
                   setQuestions(qs)
                   setQIndex(0)
-                  setTimeLeft(QUESTION_TIME)
+                  setTimeLeft(roomDuration)
                   setAnswered(false)
                   setSelectedIndex(null)
                   setScore(0)
