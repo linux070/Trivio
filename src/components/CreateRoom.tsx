@@ -12,10 +12,12 @@ import {
   useRoomExists,
   generateRoomCode,
   formatUSDCRaw,
+  PayoutMode,
+  parseUSDC,
 } from '@/hooks/useTriviaContract'
+import { keccak256, toBytes } from 'viem'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { type Category, CATEGORY_GROUPS } from '@/lib/questions'
-import { parseUSDC } from '@/hooks/useTriviaContract'
 import {
   saveRoomCategory,
   saveRoomDuration,
@@ -208,11 +210,24 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
       toast.error('Custom payout split must equal exactly 10,000 basis points (100%)')
       return
     }
+
+    let modeEnum = PayoutMode.SingleWinner
+    if (payoutPreset === 'top2') modeEnum = PayoutMode.Top2Split
+    else if (payoutPreset === 'top3') modeEnum = PayoutMode.Top3Podium
+    else if (payoutPreset === 'top5') modeEnum = PayoutMode.Top5Split
+    else if (payoutPreset === 'custom') modeEnum = PayoutMode.CustomSplits
+
+    const splitsBps = payoutPreset === 'custom' ? customSplits.map(s => s.bps) : []
+    const seed = keccak256(toBytes(roomCode + category + Date.now().toString()))
+
     createRoom(
       roomCode,
       mode === 'buyin' ? buyIn : '0',
       mode === 'sponsored' ? sponsoredPrize : '0',
-      maxPlayers
+      maxPlayers,
+      modeEnum,
+      splitsBps,
+      seed
     )
   }
 

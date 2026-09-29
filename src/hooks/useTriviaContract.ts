@@ -7,8 +7,23 @@ import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 const usdcFact = getUsdc(ARC_TESTNET_CHAIN_ID)
 const USDC_ADDRESS = usdcFact?.address as `0x${string}` | undefined
 
-// ── TriviaGame ABI (minimal — only functions used by the frontend) ─────────────
-const TRIVIA_ABI = [
+export enum PayoutMode {
+  SingleWinner = 0,
+  Top2Split = 1,
+  Top3Podium = 2,
+  Top5Split = 3,
+  CustomSplits = 4,
+}
+
+export interface PlayerScoreProof {
+  player: `0x${string}`
+  score: number
+  timestamp: number
+  signature: `0x${string}`
+}
+
+// ── TriviaGame ABI ────────────────────────────────────────────────────────────
+export const TRIVIA_ABI = [
   {
     name: 'createRoom',
     type: 'function',
@@ -18,6 +33,9 @@ const TRIVIA_ABI = [
       { name: 'usdcBuyIn', type: 'uint256' },
       { name: 'sponsoredPrize', type: 'uint256' },
       { name: 'maxPlayers', type: 'uint8' },
+      { name: 'payoutMode', type: 'uint8' },
+      { name: 'customSplits', type: 'uint16[]' },
+      { name: 'questionSeedHash', type: 'bytes32' },
     ],
     outputs: [],
   },
@@ -36,13 +54,44 @@ const TRIVIA_ABI = [
     outputs: [],
   },
   {
-    name: 'declareWinner',
+    name: 'declareWinners',
     type: 'function',
     stateMutability: 'nonpayable',
     inputs: [
       { name: 'roomId', type: 'bytes32' },
-      { name: 'winner', type: 'address' },
+      { name: 'winners', type: 'address[]' },
+      {
+        name: 'proofs',
+        type: 'tuple[]',
+        components: [
+          { name: 'player', type: 'address' },
+          { name: 'score', type: 'uint32' },
+          { name: 'timestamp', type: 'uint32' },
+          { name: 'signature', type: 'bytes' },
+        ],
+      },
     ],
+    outputs: [],
+  },
+  {
+    name: 'cancelRoom',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'roomId', type: 'bytes32' }],
+    outputs: [],
+  },
+  {
+    name: 'emergencyCancel',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'roomId', type: 'bytes32' }],
+    outputs: [],
+  },
+  {
+    name: 'claimRefund',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'roomId', type: 'bytes32' }],
     outputs: [],
   },
   {
@@ -57,8 +106,32 @@ const TRIVIA_ABI = [
       { name: 'maxPlayers', type: 'uint8' },
       { name: 'playerCount', type: 'uint8' },
       { name: 'status', type: 'uint8' },
-      { name: 'winner', type: 'address' },
+      { name: 'payoutMode', type: 'uint8' },
+      { name: 'questionSeedHash', type: 'bytes32' },
+      { name: 'createdAt', type: 'uint256' },
+      { name: 'startedAt', type: 'uint256' },
     ],
+  },
+  {
+    name: 'getRoomSplits',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'roomId', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'uint16[]' }],
+  },
+  {
+    name: 'getRoomWinners',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'roomId', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'address[]' }],
+  },
+  {
+    name: 'getRoomPlayers',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'roomId', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'address[]' }],
   },
   {
     name: 'roomExists',
@@ -133,6 +206,30 @@ export function useRoomExists(code: string) {
   })
 }
 
+export function useRoomSplits(code: string | null) {
+  const roomId = code ? roomCodeToBytes32(code) : undefined
+  return useReadContract({
+    address: TRIVIA_GAME_ADDRESS ?? undefined,
+    abi: TRIVIA_ABI,
+    functionName: 'getRoomSplits',
+    args: roomId ? [roomId] : undefined,
+    chainId: ARC_TESTNET_CHAIN_ID,
+    query: { enabled: Boolean(TRIVIA_GAME_ADDRESS) && Boolean(roomId) },
+  })
+}
+
+export function useRoomWinners(code: string | null) {
+  const roomId = code ? roomCodeToBytes32(code) : undefined
+  return useReadContract({
+    address: TRIVIA_GAME_ADDRESS ?? undefined,
+    abi: TRIVIA_ABI,
+    functionName: 'getRoomWinners',
+    args: roomId ? [roomId] : undefined,
+    chainId: ARC_TESTNET_CHAIN_ID,
+    query: { enabled: Boolean(TRIVIA_GAME_ADDRESS) && Boolean(roomId) },
+  })
+}
+
 export function useUsdcBalance(
   address: `0x${string}` | undefined,
   chainId: number = ARC_TESTNET_CHAIN_ID
@@ -185,7 +282,6 @@ export function formatUSDCRaw(raw: bigint): string {
   }
 }
 
-
 // ── Writes ────────────────────────────────────────────────────────────────────
 
 export function useApproveUsdc() {
@@ -213,9 +309,13 @@ export function useCreateRoom() {
     code: string,
     buyIn: string,
     sponsoredPrize: string,
-    maxPlayers: number
+    maxPlayers: number,
+    payoutMode: PayoutMode = PayoutMode.SingleWinner,
+    customSplits: number[] = [],
+    seedHash?: `0x${string}`
   ) => {
     if (!TRIVIA_GAME_ADDRESS) return
+    const defaultSeed = seedHash ?? keccak256(toBytes(code + Date.now().toString()))
     writeContract({
       address: TRIVIA_GAME_ADDRESS,
       abi: TRIVIA_ABI,
@@ -225,6 +325,9 @@ export function useCreateRoom() {
         parseUSDC(buyIn),
         parseUSDC(sponsoredPrize),
         maxPlayers,
+        payoutMode,
+        customSplits,
+        defaultSeed,
       ],
     })
   }
@@ -266,19 +369,84 @@ export function useStartGame() {
   return { startGame, isPending, isConfirming, isSuccess, error, hash }
 }
 
-export function useDeclareWinner() {
+export function useDeclareWinners() {
   const { writeContract, data: hash, isPending, error } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
 
-  const declareWinner = (code: string, winner: `0x${string}`) => {
+  const declareWinners = (
+    code: string,
+    winners: `0x${string}`[],
+    proofs: PlayerScoreProof[] = []
+  ) => {
     if (!TRIVIA_GAME_ADDRESS) return
     writeContract({
       address: TRIVIA_GAME_ADDRESS,
       abi: TRIVIA_ABI,
-      functionName: 'declareWinner',
-      args: [roomCodeToBytes32(code), winner],
+      functionName: 'declareWinners',
+      args: [roomCodeToBytes32(code), winners, proofs],
     })
   }
 
+  return { declareWinners, isPending, isConfirming, isSuccess, error, hash }
+}
+
+export function useDeclareWinner() {
+  const { declareWinners, isPending, isConfirming, isSuccess, error, hash } = useDeclareWinners()
+
+  const declareWinner = (code: string, winner: `0x${string}`) => {
+    declareWinners(code, [winner], [])
+  }
+
   return { declareWinner, isPending, isConfirming, isSuccess, error, hash }
+}
+
+export function useCancelRoom() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+
+  const cancelRoom = (code: string) => {
+    if (!TRIVIA_GAME_ADDRESS) return
+    writeContract({
+      address: TRIVIA_GAME_ADDRESS,
+      abi: TRIVIA_ABI,
+      functionName: 'cancelRoom',
+      args: [roomCodeToBytes32(code)],
+    })
+  }
+
+  return { cancelRoom, isPending, isConfirming, isSuccess, error, hash }
+}
+
+export function useEmergencyCancel() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+
+  const emergencyCancel = (code: string) => {
+    if (!TRIVIA_GAME_ADDRESS) return
+    writeContract({
+      address: TRIVIA_GAME_ADDRESS,
+      abi: TRIVIA_ABI,
+      functionName: 'emergencyCancel',
+      args: [roomCodeToBytes32(code)],
+    })
+  }
+
+  return { emergencyCancel, isPending, isConfirming, isSuccess, error, hash }
+}
+
+export function useClaimRefund() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+
+  const claimRefund = (code: string) => {
+    if (!TRIVIA_GAME_ADDRESS) return
+    writeContract({
+      address: TRIVIA_GAME_ADDRESS,
+      abi: TRIVIA_ABI,
+      functionName: 'claimRefund',
+      args: [roomCodeToBytes32(code)],
+    })
+  }
+
+  return { claimRefund, isPending, isConfirming, isSuccess, error, hash }
 }

@@ -1,4 +1,4 @@
-# TRIVIO — Having Fun Onchain
+# trivio — Having Fun Onchain
 
 
 ## Deployed Contracts
@@ -6,8 +6,7 @@
 | Contract | Chain | Address | Explorer |
 |---|---|---|---|
 | TrivioProfileRegistry | Arc Testnet | `0xd69522761493ce3fc74fc07ae99d5cbd6de5f480` | [View](https://explorer.testnet.arc.io/address/0xd69522761493ce3fc74fc07ae99d5cbd6de5f480) |
-| TriviaGame v2 | Arc Testnet | `0x11b30d080135bdb746adf2bdfb9754605fb9b171` | [View](https://explorer.testnet.arc.io/address/0x11b30d080135bdb746adf2bdfb9754605fb9b171) |
-| TriviaGame v1 (deprecated) | Arc Testnet | `0x68c0f6749a656f6effb7f702026c113cce7b0ed3` | [View](https://explorer.testnet.arc.io/address/0x68c0f6749a656f6effb7f702026c113cce7b0ed3) |
+| TriviaGame | Arc Testnet | `0x523e320aFdABcfE330c1edB1Fd9FC94Dc7326B7f` | [View](https://explorer.testnet.arc.io/address/0x523e320aFdABcfE330c1edB1Fd9FC94Dc7326B7f) |
 
 USDC constructor arg (Arc Testnet): `0x3600000000000000000000000000000000000000`
 
@@ -17,9 +16,20 @@ This is the **project memory** - what Arc Studio remembers about building this a
 
 ---
 
-## What This App Does
+## What trivio Does :
 
-[Brief description of what the app does and its primary use case]
+**trivio** is a high-speed, competitive onchain trivia platform built on Arc Network where players test their knowledge, compete in real-time multiplayer rooms, and win USDC prize pools.
+
+### Key Features & Capabilities:
+- **Frictionless Web3 Onboarding**: Instant zero-gas play powered by Privy (Google, Email, Passkeys, and Injected Web3 Wallets).
+- **Onchain Identity & Profiles**: Verifiable usernames and customizable avatars registered onchain via `TrivioProfileRegistry`.
+- **Dynamic Game Modes & Infinite Categories**: Diverse trivia arenas (Crypto & Web3, Candle Rush chart patterns, Pop Culture, Science, Word Blitz, and procedural Logic & Math puzzles) with live OpenTDB integration.
+- **Customizable Prize Pools & Multi-Winner Payouts**: Support for both Buy-in (entry fee) and Sponsored (free-to-play) rooms with onchain customizable prize splits:
+  - 🥇 Winner Takes All (100%)
+  - 🥈 Top 2 Split (70% / 30%)
+  - 🥉 Top 3 Podium (50% / 30% / 20%)
+  - 🏅 Top 5 Split (40% / 25% / 15% / 10% / 10%)
+- **Anti-Cheat & Player Protection**: Non-custodial escrow with EIP-712 cryptographic score validation, question seed hash commitments, in-progress cancellation locks, and emergency inactivity timeout refunds.
 
 ## Tech Stack
 

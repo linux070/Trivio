@@ -344,7 +344,7 @@ export default function Results({
         </motion.button>
 
         <p className="mt-4 text-center text-xs" style={{ color: 'var(--subtle)' }}>
-          TRIVIO · having fun onchain
+          trivio · having fun onchain
         </p>
       </div>
     </div>

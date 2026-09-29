@@ -33,7 +33,7 @@ export const ARC_TESTNET_CHAIN_ID = arcTestnet.id
 export const ARC_MAINNET_CHAIN_ID = arcMainnet.id
 
 // Deployed TriviaGame contract — Arc Testnet
-export const TRIVIA_GAME_ADDRESS: `0x${string}` = '0x11b30d080135bdb746adf2bdfb9754605fb9b171'
+export const TRIVIA_GAME_ADDRESS: `0x${string}` = '0x523e320aFdABcfE330c1edB1Fd9FC94Dc7326B7f'
 
 // Deployed TrivioProfileRegistry contract — Arc Testnet
 export const TRIVIO_PROFILE_REGISTRY_ADDRESS: `0x${string}` = '0xd69522761493ce3fc74fc07ae99d5cbd6de5f480'
