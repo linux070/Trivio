@@ -106,23 +106,47 @@ export function saveRoomPayout(roomCode: string, payout: PayoutStructure): void 
   }
 }
 
-/** Retrieve host-configured payout structure for a room code (defaults to Single Winner 100%) */
-export function getRoomPayout(roomCode: string | null | undefined): PayoutStructure {
-  if (!roomCode) return PAYOUT_PRESETS.single
-  const code = roomCode.trim().toUpperCase()
-  try {
-    const saved =
-      sessionStorage.getItem(`${STORAGE_ROOM_PAYOUT_PREFIX}${code}`) ||
-      localStorage.getItem(`${STORAGE_ROOM_PAYOUT_PREFIX}${code}`)
-    if (saved) {
-      const parsed = JSON.parse(saved) as PayoutStructure
-      if (parsed?.splits && Array.isArray(parsed.splits) && parsed.splits.length > 0) {
-        return parsed
-      }
-    }
-  } catch {
-    // ignore
+/** Resolve payout structure directly from onchain PayoutMode enum (0=Single, 1=Top2, 2=Top3, 3=Top5) */
+export function resolvePayoutFromMode(payoutMode: number | undefined | null): PayoutStructure {
+  if (payoutMode === 1) return PAYOUT_PRESETS.top2
+  if (payoutMode === 2) return PAYOUT_PRESETS.top3
+  if (payoutMode === 3) return PAYOUT_PRESETS.top5
+  return PAYOUT_PRESETS.single
+}
+
+/** Retrieve host-configured payout structure for a room code (supported by onchain PayoutMode) */
+export function getRoomPayout(
+  roomCode: string | null | undefined,
+  onchainPayoutMode?: number
+): PayoutStructure {
+  // 1. If onchain payoutMode is passed and > 0, prioritize onchain truth
+  if (typeof onchainPayoutMode === 'number' && onchainPayoutMode > 0) {
+    return resolvePayoutFromMode(onchainPayoutMode)
   }
+
+  // 2. Check local/session storage if available
+  if (roomCode) {
+    const code = roomCode.trim().toUpperCase()
+    try {
+      const saved =
+        sessionStorage.getItem(`${STORAGE_ROOM_PAYOUT_PREFIX}${code}`) ||
+        localStorage.getItem(`${STORAGE_ROOM_PAYOUT_PREFIX}${code}`)
+      if (saved) {
+        const parsed = JSON.parse(saved) as PayoutStructure
+        if (parsed?.splits && Array.isArray(parsed.splits) && parsed.splits.length > 0) {
+          return parsed
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Fallback to onchain payoutMode (including 0=single)
+  if (typeof onchainPayoutMode === 'number') {
+    return resolvePayoutFromMode(onchainPayoutMode)
+  }
+
   return PAYOUT_PRESETS.single
 }
 
@@ -273,7 +297,9 @@ export function clearActiveGame(): void {
 export function setPendingJoin(roomCode: string, category?: Category): void {
   try {
     const data = { roomCode: roomCode.trim().toUpperCase(), category }
-    sessionStorage.setItem(STORAGE_PENDING_JOIN_KEY, JSON.stringify(data))
+    const json = JSON.stringify(data)
+    sessionStorage.setItem(STORAGE_PENDING_JOIN_KEY, json)
+    localStorage.setItem(STORAGE_PENDING_JOIN_KEY, json)
   } catch {
     // ignore
   }
@@ -282,9 +308,12 @@ export function setPendingJoin(roomCode: string, category?: Category): void {
 /** Retrieve and consume pending join details */
 export function consumePendingJoin(): { roomCode: string; category?: Category } | null {
   try {
-    const raw = sessionStorage.getItem(STORAGE_PENDING_JOIN_KEY)
+    const raw =
+      sessionStorage.getItem(STORAGE_PENDING_JOIN_KEY) ||
+      localStorage.getItem(STORAGE_PENDING_JOIN_KEY)
     if (raw) {
       sessionStorage.removeItem(STORAGE_PENDING_JOIN_KEY)
+      localStorage.removeItem(STORAGE_PENDING_JOIN_KEY)
       // Check if it's JSON or legacy raw string
       if (raw.startsWith('{')) {
         const parsed = JSON.parse(raw)
@@ -302,4 +331,68 @@ export function consumePendingJoin(): { roomCode: string; category?: Category } 
     // ignore
   }
   return null
+}
+
+const STORAGE_LIVE_ROOMS_KEY = 'trivio_registered_live_rooms'
+
+export interface RegisteredLiveRoom {
+  roomCode: string
+  category: Category
+  hostName: string
+  hostAddress: string
+  maxPlayers: number
+  buyIn: string
+  isSponsored: boolean
+  prizePool: string
+  createdAt: number
+}
+
+/** Save an actual created room so it displays dynamically in the Live Rooms list */
+export function registerLiveRoom(room: RegisteredLiveRoom): void {
+  try {
+    const existing = getRegisteredLiveRooms()
+    const code = room.roomCode.trim().toUpperCase()
+    const filtered = existing.filter(r => r.roomCode.toUpperCase() !== code)
+    const updated = [{ ...room, roomCode: code }, ...filtered].slice(0, 50)
+    const json = JSON.stringify(updated)
+    localStorage.setItem(STORAGE_LIVE_ROOMS_KEY, json)
+    sessionStorage.setItem(STORAGE_LIVE_ROOMS_KEY, json)
+  } catch {
+    // ignore
+  }
+}
+
+/** Retrieve all actively registered live rooms */
+export function getRegisteredLiveRooms(): RegisteredLiveRoom[] {
+  try {
+    const raw =
+      sessionStorage.getItem(STORAGE_LIVE_ROOMS_KEY) ||
+      localStorage.getItem(STORAGE_LIVE_ROOMS_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as RegisteredLiveRoom[]
+      if (Array.isArray(parsed)) {
+        // Keep rooms created within the last 24 hours
+        return parsed.filter(
+          r => r?.roomCode && Date.now() - (r.createdAt || 0) < 24 * 60 * 60 * 1000
+        )
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return []
+}
+
+/** Remove a live room once completed, cancelled, or closed */
+export function removeLiveRoom(roomCode: string): void {
+  try {
+    const existing = getRegisteredLiveRooms()
+    const code = roomCode.trim().toUpperCase()
+    const filtered = existing.filter(r => r.roomCode.toUpperCase() !== code)
+    const json = JSON.stringify(filtered)
+    localStorage.setItem(STORAGE_LIVE_ROOMS_KEY, json)
+    sessionStorage.setItem(STORAGE_LIVE_ROOMS_KEY, json)
+  } catch {
+    // ignore
+  }
 }

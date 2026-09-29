@@ -85,6 +85,12 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     startedAt,
   ] = (roomInfo as RoomTuple) ?? []
   const prizeHuman = prizePool !== undefined ? formatUSDCRaw(prizePool) : '0'
+  const buyInHuman = _buyIn !== undefined ? formatUSDCRaw(_buyIn) : '0'
+  const buyInNum = parseFloat(buyInHuman) || 0
+  const maxPlayersNum = maxP || 4
+  const currentPrizeNum = parseFloat(prizeHuman) || 0
+  const estimatedTotalPrize = buyInNum > 0 ? (buyInNum * maxPlayersNum).toFixed(2) : prizeHuman
+  const prizeForPayouts = currentPrizeNum > 0 ? prizeHuman : (parseFloat(estimatedTotalPrize) > 0 ? estimatedTotalPrize : prizeHuman)
   const effectivePlayerCount = Math.max(playerCount ?? 0, (rawPlayersList as `0x${string}`[] | undefined)?.length ?? 0)
 
   const isHost = Boolean(
@@ -239,10 +245,14 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                 </p>
               </div>
               <div className="rounded-2xl p-3 text-center" style={glass.inner}>
-                <p className="text-xs" style={{ color: 'var(--subtle)' }}>Prize Pool</p>
+                <p className="text-xs" style={{ color: 'var(--subtle)' }}>
+                  {buyInNum > 0 && currentPrizeNum === 0 ? 'Est. Prize Pool' : 'Prize Pool'}
+                </p>
                 <div className="flex items-center justify-center gap-1">
                   <TokenUSDC variant="branded" size={16} />
-                  <p className="display text-2xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>{prizeHuman}</p>
+                  <p className="display text-2xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
+                    {currentPrizeNum > 0 ? prizeHuman : estimatedTotalPrize}
+                  </p>
                 </div>
               </div>
             </div>
@@ -302,7 +312,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
               </div>
 
               {(() => {
-                const splits = calculatePayoutSplits(prizeHuman, getRoomPayout(roomCode).splits)
+                const splits = calculatePayoutSplits(prizeForPayouts, getRoomPayout(roomCode, payoutMode).splits)
                 if (splits.length === 1) {
                   return (
                     <div className="flex items-center justify-between rounded-xl bg-white/90 px-3 py-2 border border-slate-200/70 shadow-2xs">
@@ -641,12 +651,12 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
               <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
                 <span className="flex items-center gap-1">
                   <Trophy size={13} className="text-amber-500" />
-                  Payout: {getRoomPayout(roomCode).label}
+                  Payout: {getRoomPayout(roomCode, payoutMode).label}
                 </span>
-                <span className="text-purple-700 font-semibold">{getRoomPayout(roomCode).splits.length} {getRoomPayout(roomCode).splits.length === 1 ? 'Winner' : 'Winners'}</span>
+                <span className="text-purple-700 font-semibold">{getRoomPayout(roomCode, payoutMode).splits.length} {getRoomPayout(roomCode, payoutMode).splits.length === 1 ? 'Winner' : 'Winners'}</span>
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1">
-                {calculatePayoutSplits(prizeHuman, getRoomPayout(roomCode).splits).map((s, idx) => (
+                {calculatePayoutSplits(prizeHuman, getRoomPayout(roomCode, payoutMode).splits).map((s, idx) => (
                   <div key={idx} className="flex items-center justify-between bg-white/90 rounded-xl px-2.5 py-1.5 border border-slate-200/70 text-xs">
                     <span className="font-semibold text-slate-700">
                       {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🏅'} {s.label}

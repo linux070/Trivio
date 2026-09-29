@@ -23,12 +23,14 @@ import {
   saveRoomDuration,
   saveRoomPayout,
   saveActiveGame,
+  registerLiveRoom,
   PAYOUT_PRESETS,
   calculatePayoutSplits,
   type PayoutPreset,
   type PayoutSplitItem,
   type PayoutStructure,
 } from '@/lib/roomStorage'
+import { getUserProfile } from '@/lib/userProfile'
 
 const glass = {
   card: {
@@ -121,9 +123,29 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
       saveRoomDuration(roomCode, roundDuration)
       saveRoomPayout(roomCode, activePayoutStructure)
       saveActiveGame(roomCode, category, true)
+
+      const myProfile = getUserProfile(activeAddress)
+      const hostName = myProfile?.username || (activeAddress ? `${activeAddress.slice(0, 6)}...${activeAddress.slice(-4)}` : 'Host')
+
+      const totalEstimatedPool = mode === 'sponsored'
+        ? (parseFloat(sponsoredPrize) || 5).toFixed(2)
+        : ((parseFloat(buyIn) || 1) * maxPlayers).toFixed(2)
+
+      registerLiveRoom({
+        roomCode,
+        category,
+        hostName,
+        hostAddress: activeAddress || '',
+        maxPlayers,
+        buyIn: mode === 'buyin' ? (parseFloat(buyIn) || 1).toFixed(2) : '0.00',
+        isSponsored: mode === 'sponsored',
+        prizePool: totalEstimatedPool,
+        createdAt: Date.now(),
+      })
+
       onRoomCreated(roomCode, category)
     }
-  }, [created, roomCode, category, roundDuration, activePayoutStructure, onRoomCreated])
+  }, [created, roomCode, category, roundDuration, activePayoutStructure, maxPlayers, mode, buyIn, sponsoredPrize, activeAddress, onRoomCreated])
 
   const isWrongChain = chainId !== ARC_TESTNET_CHAIN_ID
 
@@ -280,7 +302,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
             <p className="mt-2 text-xs" style={{ color: 'var(--subtle)' }}>
               {mode === 'buyin'
                 ? 'Each player pays an entry fee. The full pot goes to the winner.'
-                : 'You fund the prize pool upfront. Players compete for free.'}
+                : 'You fund the prize pool upfront. Players join with 0 USDC entry.'}
             </p>
           </div>
 

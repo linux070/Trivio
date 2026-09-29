@@ -5,6 +5,7 @@ import { TokenUSDC } from '@web3icons/react'
 import { buildTxExplorerUrl } from '@/onchain-facts'
 import { ARC_TESTNET_CHAIN_ID } from '@/config'
 import { getRoomPayout, calculatePayoutSplits } from '@/lib/roomStorage'
+import { useRoomInfo, type RoomTuple } from '@/hooks/useTriviaContract'
 import { getDiceBearAvatarUrl } from '@/lib/userProfile'
 
 const spectral = 'linear-gradient(90deg, #5fbeff, #af8ff4, #f05c6b, #ffcd83, #7ef1b3)'
@@ -56,10 +57,13 @@ export default function Results({
   onPlayAgain,
 }: ResultsProps) {
   const [tab, setTab] = useState<'result' | 'leaderboard'>('result')
-  const txUrl = txHash ? buildTxExplorerUrl(ARC_TESTNET_CHAIN_ID, txHash) : null
+  const { data: roomInfo } = useRoomInfo(roomCode || null)
+  const [_host, _buyIn, _prizePool, _maxPlayers, _playerCount, _status, payoutMode] = (roomInfo as RoomTuple) ?? []
 
-  // Retrieve room payout structure and calculate exact monetary splits
-  const payout = getRoomPayout(roomCode)
+  const txUrl = txHash ? buildTxExplorerUrl(ARC_TESTNET_CHAIN_ID, txHash) : undefined
+
+  // Retrieve room payout structure and calculate exact monetary splits (respecting onchain payoutMode)
+  const payout = getRoomPayout(roomCode, payoutMode)
   const splits = calculatePayoutSplits(prizeAmount, payout.splits)
 
   // Build a demo leaderboard if none passed in

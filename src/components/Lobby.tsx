@@ -51,8 +51,9 @@ import {
   prefetchCategoryQuestions,
 } from '@/lib/questions'
 import { getActiveGame, clearActiveGame, type ActiveGameSession } from '@/lib/roomStorage'
+import { useLiveRooms } from '@/hooks/useLiveRooms'
 import SoloPracticeModal from '@/components/SoloPracticeModal'
-import { INITIAL_PUBLIC_ROOMS, TOP_LEADERBOARD, RECENT_WINNERS_FEED } from '@/lib/lobbyData'
+import { TOP_LEADERBOARD, RECENT_WINNERS_FEED } from '@/lib/lobbyData'
 
 interface LobbyProps {
   initialCategory?: Category | null
@@ -769,6 +770,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
   const [selected, setSelected] = useState<Category | null>(() => initialCategory ?? 'General Knowledge')
   const [activeSession, setActiveSession] = useState<ActiveGameSession | null>(() => getActiveGame())
   const [practiceOpen, setPracticeOpen] = useState(false)
+  const { liveRooms, totalCount } = useLiveRooms(2500)
 
   // Find the group that contains the initial/selected category
   const [activeGroupId, setActiveGroupId] = useState<string>(() => {
@@ -1087,8 +1089,8 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                       Live Rooms
                     </h2>
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200/80 px-2 py-0.5 text-[10px] font-bold text-slate-700">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      {INITIAL_PUBLIC_ROOMS.length} Active
+                      <span className={`h-1.5 w-1.5 rounded-full ${totalCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                      {totalCount} Active
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 font-medium">
@@ -1098,80 +1100,100 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
               </div>
             </div>
 
-            {/* Room List */}
-            <div className="space-y-2 pt-1">
-              {INITIAL_PUBLIC_ROOMS.map((room) => {
-                const emoji = getCategoryEmoji(room.category)
-                const isFull = room.playerCount >= room.maxPlayers
+            {/* Room List or Empty State */}
+            {liveRooms.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-6 px-4 text-center rounded-2xl bg-slate-50/70 border border-slate-200/80">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600 mb-2.5 shadow-2xs">
+                  <Sparkles size={20} />
+                </div>
+                <p className="text-xs font-bold text-slate-800">No active rooms open right now</p>
+                <p className="text-[11px] text-slate-500 mt-0.5 max-w-xs">
+                  Create a room to start playing with others, or enter a room code directly to join a private match.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onCreateRoom(selected || 'General Knowledge')}
+                  className="mt-3.5 inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold text-white bg-[#7c3aed] hover:bg-[#6d28d9] shadow-xs active:scale-95 transition-all cursor-pointer"
+                >
+                  <Plus size={14} />
+                  <span>Create Live Room</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2 pt-1">
+                {liveRooms.map((room) => {
+                  const emoji = getCategoryEmoji(room.category)
+                  const isFull = room.playerCount >= room.maxPlayers
 
-                return (
-                  <div
-                    key={room.roomCode}
-                    className="group relative flex items-center justify-between p-2.5 sm:p-3.5 rounded-2xl bg-slate-50/70 hover:bg-white border border-slate-200/80 hover:border-slate-300 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-md transition-all duration-150 gap-2 sm:gap-4"
-                  >
-                    {/* Left: Info */}
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                      <span className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-white border border-slate-200/80 text-lg sm:text-xl shadow-xs">
-                        {emoji}
-                      </span>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                          <span className="text-xs sm:text-sm font-extrabold text-slate-900 tracking-tight truncate">
-                            {room.category}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              navigator.clipboard.writeText(room.roomCode)
-                              toast.success(`Copied room code ${room.roomCode}`)
-                            }}
-                            className="font-mono text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 hover:border-slate-300 cursor-pointer shadow-2xs transition-colors shrink-0"
-                            title="Click to copy room code"
-                          >
-                            #{room.roomCode}
-                          </button>
+                  return (
+                    <div
+                      key={room.roomCode}
+                      className="group relative flex items-center justify-between p-2.5 sm:p-3.5 rounded-2xl bg-slate-50/70 hover:bg-white border border-slate-200/80 hover:border-slate-300 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-md transition-all duration-150 gap-2 sm:gap-4"
+                    >
+                      {/* Left: Info */}
+                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                        <span className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-white border border-slate-200/80 text-lg sm:text-xl shadow-xs">
+                          {emoji}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                            <span className="text-xs sm:text-sm font-extrabold text-slate-900 tracking-tight truncate">
+                              {room.category}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                navigator.clipboard.writeText(room.roomCode)
+                                toast.success(`Copied room code ${room.roomCode}`)
+                              }}
+                              className="font-mono text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 hover:border-slate-300 cursor-pointer shadow-2xs transition-colors shrink-0"
+                              title="Click to copy room code"
+                            >
+                              #{room.roomCode}
+                            </button>
+                          </div>
+                          <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium truncate mt-0.5">
+                            Host: <span className="text-slate-700 font-semibold">{room.hostName}</span>
+                            <span className="mx-1 text-slate-300">·</span>
+                            {room.buyIn === '0.00' || room.isSponsored ? (
+                              <span>0 USDC (+ gas)</span>
+                            ) : (
+                              <span>{room.buyIn} USDC</span>
+                            )}
+                          </p>
                         </div>
-                        <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium truncate mt-0.5">
-                          Host: <span className="text-slate-700 font-semibold">{room.hostName}</span>
-                          <span className="mx-1 text-slate-300">·</span>
-                          {room.buyIn === '0.00' ? (
-                            <span className="text-emerald-600 font-bold">Free</span>
-                          ) : (
-                            <span>{room.buyIn} USDC</span>
-                          )}
-                        </p>
+                      </div>
+
+                      {/* Right: Stats & Join Button */}
+                      <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+                        {/* Player count pill */}
+                        <div className="hidden xs:flex sm:flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-xl bg-white border border-slate-200/70 text-[10px] font-bold text-slate-700 shadow-2xs">
+                          <Users size={11} className="text-slate-500" />
+                          <span>{room.playerCount}/{room.maxPlayers}</span>
+                        </div>
+
+                        {/* Prize Pool pill */}
+                        <div className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-xl bg-white border border-slate-200/70 text-[10px] font-bold text-slate-700 shadow-2xs">
+                          <TokenUSDC variant="branded" size={11} />
+                          <span>${room.prizePool}</span>
+                        </div>
+
+                        {/* Join Action */}
+                        <button
+                          type="button"
+                          disabled={isFull}
+                          onClick={() => onJoinRoom(room.category, room.roomCode)}
+                          className="inline-flex items-center justify-center rounded-xl px-3 sm:px-3.5 py-1.5 sm:py-2 text-xs font-extrabold text-gray-900 bg-white active:scale-95 border-2 border-purple-100 shadow-xs transition-transform cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 hover:border-purple-300 hover:bg-purple-50/50"
+                        >
+                          <span>Join</span>
+                        </button>
                       </div>
                     </div>
-
-                    {/* Right: Stats & Join Button */}
-                    <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-                      {/* Player count pill */}
-                      <div className="hidden xs:flex sm:flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-xl bg-white border border-slate-200/70 text-[10px] font-bold text-slate-700 shadow-2xs">
-                        <Users size={11} className="text-slate-500" />
-                        <span>{room.playerCount}/{room.maxPlayers}</span>
-                      </div>
-
-                      {/* Prize Pool pill (styled matching the player count pill) */}
-                      <div className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-xl bg-white border border-slate-200/70 text-[10px] font-bold text-slate-700 shadow-2xs">
-                        <TokenUSDC variant="branded" size={11} />
-                        <span>${room.prizePool}</span>
-                      </div>
-
-                      {/* Join Action (styled cleanly with static appearance and tactile press) */}
-                      <button
-                        type="button"
-                        disabled={isFull}
-                        onClick={() => onJoinRoom(room.category, room.roomCode)}
-                        className="inline-flex items-center justify-center rounded-xl px-3 sm:px-3.5 py-1.5 sm:py-2 text-xs font-extrabold text-gray-900 bg-white active:scale-95 border-2 border-purple-100 shadow-xs transition-transform cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-                      >
-                        <span>Join</span>
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+            )}
           </section>
 
           {/* ── Feature: 🏆 Top Daily Winners ── */}

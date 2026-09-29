@@ -70,7 +70,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   const { data: roomInfo, isLoading: roomLoading, error: roomError } = useRoomInfo(checkedCode)
   const { data: isPlayerOnchain } = useIsPlayer(checkedCode, activeAddress)
 
-  const [host, buyIn, prizePool, maxPlayers, playerCount, status] = (roomInfo as RoomTuple) ?? []
+  const [host, buyIn, prizePool, maxPlayers, playerCount, status, payoutMode] = (roomInfo as RoomTuple) ?? []
 
   const isHost = Boolean(
     host && activeAddress && host.toLowerCase() === activeAddress.toLowerCase()
@@ -79,6 +79,11 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
 
   const buyInHuman = buyIn !== undefined ? formatUSDCRaw(buyIn) : null
   const prizePoolHuman = prizePool !== undefined ? formatUSDCRaw(prizePool) : null
+  const buyInNum = parseFloat(buyInHuman ?? '0') || 0
+  const maxPlayersNum = maxPlayers || 4
+  const currentPrizeNum = parseFloat(prizePoolHuman ?? '0') || 0
+  const estimatedPrize = buyInNum > 0 ? (buyInNum * maxPlayersNum).toFixed(2) : (prizePoolHuman ?? '0')
+  const prizeForPayouts = currentPrizeNum > 0 ? (prizePoolHuman ?? '0') : estimatedPrize
 
   const { data: rawBalance } = useUsdcBalance(activeAddress)
   const balanceHuman = rawBalance !== undefined ? formatUSDCRaw(rawBalance) : null
@@ -234,17 +239,17 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                       <span className="text-xs" style={{ color: 'var(--muted)' }}>Players</span>
                       <span className="flex items-center gap-1.5 text-xs font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>
                         <Users size={13} style={{ color: 'var(--subtle)' }} />
-                        {playerCount} / {maxPlayers}
+                        {playerCount ?? 0} / {maxPlayers ?? 4}
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5" style={glass.inner}>
                       <span className="text-xs" style={{ color: 'var(--muted)' }}>
-                        {buyIn !== undefined && buyIn > 0n ? 'Buy-in' : 'Prize pool'}
+                        {buyIn !== undefined && buyIn > 0n ? 'Buy-in' : 'Entry Fee'}
                       </span>
                       <span className="flex items-center gap-1 text-xs font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>
                         <TokenUSDC variant="branded" size={13} />
-                        {buyIn !== undefined && buyIn > 0n ? buyInHuman : prizePoolHuman} USDC
+                        {buyIn !== undefined && buyIn > 0n ? `${buyInHuman} USDC` : '0 USDC (+ gas)'}
                       </span>
                     </div>
 
@@ -258,7 +263,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                       </div>
 
                       {(() => {
-                        const splits = getRoomPayout(checkedCode).splits
+                        const splits = calculatePayoutSplits(prizeForPayouts, getRoomPayout(checkedCode, payoutMode).splits)
                         if (splits.length === 1) {
                           return (
                             <div className="flex items-center justify-between rounded-xl bg-white/90 px-3 py-2 border border-slate-200/70 shadow-2xs">
@@ -268,7 +273,12 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                                 </span>
                                 <span className="text-xs font-medium text-slate-700">Winner Takes All</span>
                               </div>
-                              <span className="text-[10px] font-semibold text-slate-400">100%</span>
+                              <div className="flex items-baseline gap-1">
+                                <span className="text-xs font-bold text-slate-900 tabular-nums">
+                                  ${splits[0].amount}
+                                </span>
+                                <span className="text-[10px] font-semibold text-slate-400">100%</span>
+                              </div>
                             </div>
                           )
                         }
@@ -285,14 +295,22 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                               return (
                                 <div
                                   key={idx}
-                                  className="flex items-center justify-between rounded-xl bg-white/90 p-2.5 border border-slate-200/70 shadow-2xs transition-all hover:bg-white hover:border-slate-300"
+                                  className="flex flex-col justify-between rounded-xl bg-white/90 p-2.5 border border-slate-200/70 shadow-2xs transition-all hover:bg-white hover:border-slate-300"
                                 >
-                                  <span className={`inline-flex items-center justify-center text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${badge.bg}`}>
-                                    {badge.rankText}
-                                  </span>
-                                  <span className="text-xs font-bold text-slate-900 tabular-nums">
-                                    {s.percent}%
-                                  </span>
+                                  <div className="flex items-center justify-between gap-1 mb-1.5">
+                                    <span className={`inline-flex items-center justify-center text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${badge.bg}`}>
+                                      {badge.rankText}
+                                    </span>
+                                    <span className="text-[10px] font-semibold text-slate-500 bg-slate-100/90 px-1.5 py-0.5 rounded-md tabular-nums">
+                                      {s.percent}%
+                                    </span>
+                                  </div>
+                                  <div className="flex items-baseline gap-1">
+                                    <span className="text-xs font-bold text-slate-900 tabular-nums">
+                                      ${s.amount}
+                                    </span>
+                                    <span className="text-[10px] font-medium text-slate-400">USDC</span>
+                                  </div>
                                 </div>
                               )
                             })}
@@ -367,14 +385,21 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                   )}
 
                   {!isAlreadyJoined && isRoomOpen && (
-                    <button
-                      onClick={isWrongChain ? () => switchChain({ chainId: ARC_TESTNET_CHAIN_ID }) : handleJoin}
-                      disabled={joinPending || joinConfirming || (requiresApproval && !approved)}
-                      className="mt-3 w-full rounded-2xl py-4 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
-                      style={{ background: 'var(--accent)', color: 'white' }}
-                    >
-                      {isWrongChain ? 'Switch to Arc' : joinPending || joinConfirming ? 'Joining...' : `Join Room${buyIn !== undefined && buyIn > 0n ? ` · ${buyInHuman} USDC` : ''}`}
-                    </button>
+                    <>
+                      <button
+                        onClick={isWrongChain ? () => switchChain({ chainId: ARC_TESTNET_CHAIN_ID }) : handleJoin}
+                        disabled={joinPending || joinConfirming || (requiresApproval && !approved)}
+                        className="mt-3 w-full rounded-2xl py-4 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
+                        style={{ background: 'var(--accent)', color: 'white' }}
+                      >
+                        {isWrongChain ? 'Switch to Arc' : joinPending || joinConfirming ? 'Joining...' : `Join Room${buyIn !== undefined && buyIn > 0n ? ` · ${buyInHuman} USDC` : ''}`}
+                      </button>
+                      <p className="mt-2 text-center text-[11px] font-medium text-slate-500">
+                        {buyIn !== undefined && buyIn > 0n
+                          ? `${buyInHuman} USDC entry, gas fee required`
+                          : '0 USDC entry, gas fee required'}
+                      </p>
+                    </>
                   )}
                 </motion.div>
               )}
