@@ -249,25 +249,56 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                     </div>
 
                     {/* Payout Structure Row */}
-                    <div className="flex flex-col gap-1.5 rounded-xl px-3.5 py-2.5" style={glass.inner}>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs flex items-center gap-1" style={{ color: 'var(--muted)' }}>
-                          <Trophy size={13} className="text-amber-500" />
-                          Payout Structure
-                        </span>
-                        <span className="text-[11px] font-bold text-slate-800 bg-white px-2.5 py-0.5 rounded-lg border border-slate-200 shadow-2xs">
-                          {getRoomPayout(checkedCode).label}
+                    <div className="flex flex-col gap-2 rounded-2xl p-3 sm:p-3.5" style={glass.inner}>
+                      <div className="flex items-center gap-1.5">
+                        <Trophy size={13} className="text-amber-500 stroke-[2.25]" />
+                        <span className="text-xs font-medium" style={{ color: 'var(--subtle)' }}>
+                          Payout Distribution
                         </span>
                       </div>
-                      {getRoomPayout(checkedCode).splits.length > 1 && (
-                        <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-slate-200/60">
-                          {getRoomPayout(checkedCode).splits.map((s, idx) => (
-                            <span key={idx} className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
-                              {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🏅'} {s.label}: <strong>{s.percent}%</strong>
-                            </span>
-                          ))}
-                        </div>
-                      )}
+
+                      {(() => {
+                        const splits = getRoomPayout(checkedCode).splits
+                        if (splits.length === 1) {
+                          return (
+                            <div className="flex items-center justify-between rounded-xl bg-white/90 px-3 py-2 border border-slate-200/70 shadow-2xs">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center justify-center text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/80">
+                                  1st
+                                </span>
+                                <span className="text-xs font-medium text-slate-700">Winner Takes All</span>
+                              </div>
+                              <span className="text-[10px] font-semibold text-slate-400">100%</span>
+                            </div>
+                          )
+                        }
+                        return (
+                          <div className={`grid gap-2 ${splits.length === 2 ? 'grid-cols-2' : splits.length === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-3'}`}>
+                            {splits.map((s, idx) => {
+                              const tierBadges = [
+                                { rankText: '1st', bg: 'bg-amber-50 text-amber-700 border-amber-200/70' },
+                                { rankText: '2nd', bg: 'bg-slate-100 text-slate-700 border-slate-200' },
+                                { rankText: '3rd', bg: 'bg-orange-50 text-orange-800 border-orange-200/70' },
+                              ]
+                              const badge = tierBadges[idx] ?? { rankText: `${idx + 1}th`, bg: 'bg-slate-100 text-slate-600 border-slate-200' }
+
+                              return (
+                                <div
+                                  key={idx}
+                                  className="flex items-center justify-between rounded-xl bg-white/90 p-2.5 border border-slate-200/70 shadow-2xs transition-all hover:bg-white hover:border-slate-300"
+                                >
+                                  <span className={`inline-flex items-center justify-center text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${badge.bg}`}>
+                                    {badge.rankText}
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-900 tabular-nums">
+                                    {s.percent}%
+                                  </span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
 

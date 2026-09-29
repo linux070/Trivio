@@ -11,6 +11,7 @@ import {
   useDeclareWinners,
   useDeclareWinner,
   useRoomInfo,
+  useRoomPlayers,
   useRoomWinners,
   formatUSDCRaw,
   type RoomTuple,
@@ -69,6 +70,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   // Auto-polls onchain every 1.5s
   const { data: roomInfo, refetch: refetchRoomInfo } = useRoomInfo(roomCode, 1500)
   const { data: winnersList } = useRoomWinners(roomCode)
+  const { data: rawPlayersList } = useRoomPlayers(roomCode, 1500)
 
   const [
     host,
@@ -83,6 +85,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     startedAt,
   ] = (roomInfo as RoomTuple) ?? []
   const prizeHuman = prizePool !== undefined ? formatUSDCRaw(prizePool) : '0'
+  const effectivePlayerCount = Math.max(playerCount ?? 0, (rawPlayersList as `0x${string}`[] | undefined)?.length ?? 0)
 
   const isHost = Boolean(
     activeAddress && host && host.toLowerCase() === activeAddress.toLowerCase()
@@ -232,7 +235,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                   <p className="text-xs" style={{ color: 'var(--subtle)' }}>Players</p>
                 </div>
                 <p className="display text-2xl font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
-                  {playerCount ?? '—'}<span className="text-base font-medium" style={{ color: 'var(--muted)' }}>/{maxP ?? '—'}</span>
+                  {effectivePlayerCount}<span className="text-base font-medium" style={{ color: 'var(--muted)' }}>/{maxP ?? '—'}</span>
                 </p>
               </div>
               <div className="rounded-2xl p-3 text-center" style={glass.inner}>
@@ -244,26 +247,115 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
               </div>
             </div>
 
+            {/* Live Lobby Players List (if any players joined) */}
+            {rawPlayersList && rawPlayersList.length > 0 && (
+              <div className="mb-4 rounded-2xl p-3" style={glass.inner}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold flex items-center gap-1.5 text-slate-700">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    Joined Players ({rawPlayersList.length})
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(rawPlayersList as `0x${string}`[]).map((pAddr, i) => {
+                    const isCurrent = Boolean(activeAddress && pAddr.toLowerCase() === activeAddress.toLowerCase())
+                    const isRoomHost = Boolean(host && pAddr.toLowerCase() === host.toLowerCase())
+                    return (
+                      <div
+                        key={pAddr + i}
+                        className={`flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs border ${
+                          isCurrent
+                            ? 'bg-purple-50 text-purple-900 border-purple-200 font-semibold shadow-2xs'
+                            : 'bg-white/90 text-slate-700 border-slate-200/80 font-medium'
+                        }`}
+                      >
+                        <span className="font-mono text-[11px]">
+                          {pAddr.slice(0, 6)}...{pAddr.slice(-4)}
+                        </span>
+                        {isRoomHost && (
+                          <span className="text-[9px] uppercase font-bold bg-amber-100 text-amber-800 px-1 py-0.5 rounded">
+                            Host
+                          </span>
+                        )}
+                        {isCurrent && (
+                          <span className="text-[9px] uppercase font-bold bg-purple-200 text-purple-800 px-1 py-0.5 rounded">
+                            You
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Payout Distribution Banner */}
-            <div className="mb-4 flex flex-col gap-1 rounded-2xl p-3" style={glass.inner}>
-              <div className="flex items-center justify-between">
-                <span className="text-xs flex items-center gap-1 font-medium" style={{ color: 'var(--muted)' }}>
-                  <Trophy size={13} className="text-amber-500" />
+            <div className="mb-4 rounded-2xl p-3 sm:p-3.5" style={glass.inner}>
+              <div className="flex items-center gap-1.5 mb-2.5">
+                <Trophy size={13} className="text-amber-500 stroke-[2.25]" />
+                <span className="text-xs font-medium" style={{ color: 'var(--subtle)' }}>
                   Payout Distribution
                 </span>
-                <span className="text-[11px] font-bold text-slate-800 bg-white px-2.5 py-0.5 rounded-lg border border-slate-200 shadow-2xs">
-                  {getRoomPayout(roomCode).label}
-                </span>
               </div>
-              {getRoomPayout(roomCode).splits.length > 1 && (
-                <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-slate-200/60">
-                  {calculatePayoutSplits(prizeHuman, getRoomPayout(roomCode).splits).map((s, idx) => (
-                    <span key={idx} className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
-                      {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🏅'} {s.label}: <strong>${s.amount} ({s.percent}%)</strong>
-                    </span>
-                  ))}
-                </div>
-              )}
+
+              {(() => {
+                const splits = calculatePayoutSplits(prizeHuman, getRoomPayout(roomCode).splits)
+                if (splits.length === 1) {
+                  return (
+                    <div className="flex items-center justify-between rounded-xl bg-white/90 px-3 py-2 border border-slate-200/70 shadow-2xs">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/80">
+                          1st
+                        </span>
+                        <span className="text-xs font-medium text-slate-700">Winner Takes All</span>
+                      </div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-sm font-bold tracking-tight text-slate-900 tabular-nums">
+                          ${splits[0].amount}
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-400">100%</span>
+                      </div>
+                    </div>
+                  )
+                }
+                return (
+                  <div className={`grid gap-2 ${splits.length === 2 ? 'grid-cols-2' : splits.length === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-3'}`}>
+                    {splits.map((s, idx) => {
+                      const tierBadges = [
+                        { rankText: '1st', bg: 'bg-amber-50 text-amber-700 border-amber-200/70' },
+                        { rankText: '2nd', bg: 'bg-slate-100 text-slate-700 border-slate-200' },
+                        { rankText: '3rd', bg: 'bg-orange-50 text-orange-800 border-orange-200/70' },
+                      ]
+                      const badge = tierBadges[idx] ?? { rankText: `${idx + 1}th`, bg: 'bg-slate-100 text-slate-600 border-slate-200' }
+
+                      return (
+                        <div
+                          key={idx}
+                          className="flex flex-col justify-between rounded-xl bg-white/90 p-2.5 border border-slate-200/70 shadow-2xs transition-all hover:bg-white hover:border-slate-300"
+                        >
+                          <div className="flex items-center justify-between gap-1 mb-1.5">
+                            <span className={`inline-flex items-center justify-center text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${badge.bg}`}>
+                              {badge.rankText}
+                            </span>
+                            <span className="text-[10px] font-semibold text-slate-500 bg-slate-100/90 px-1.5 py-0.5 rounded-md tabular-nums">
+                              {s.percent}%
+                            </span>
+                          </div>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-sm font-bold tracking-tight text-slate-900 tabular-nums">
+                              ${s.amount}
+                            </span>
+                            <span className="text-[10px] font-medium text-slate-400">USDC</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* ── Modern Invite Players Box (Slim, Clean Theme) ── */}
@@ -307,7 +399,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                     setTimeout(() => setCopiedLink(false), 2000)
                     toast.success('Invite link copied!')
                   }}
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-all duration-150 active:scale-95 bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6]"
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-all duration-150 active:scale-95 cursor-pointer bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6]"
                 >
                   {copiedLink ? <Check size={13} className="stroke-[2.5]" /> : <Copy size={13} />}
                   <span>{copiedLink ? 'Copied!' : 'Copy Link'}</span>

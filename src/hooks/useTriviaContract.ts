@@ -241,6 +241,21 @@ export function useRoomWinners(code: string | null) {
   })
 }
 
+export function useRoomPlayers(code: string | null, pollInterval: number = 1500) {
+  const roomId = code ? roomCodeToBytes32(code) : undefined
+  return useReadContract({
+    address: TRIVIA_GAME_ADDRESS ?? undefined,
+    abi: TRIVIA_ABI,
+    functionName: 'getRoomPlayers',
+    args: roomId ? [roomId] : undefined,
+    chainId: ARC_TESTNET_CHAIN_ID,
+    query: {
+      enabled: Boolean(TRIVIA_GAME_ADDRESS) && Boolean(roomId),
+      refetchInterval: pollInterval,
+    },
+  })
+}
+
 export function useUsdcBalance(
   address: `0x${string}` | undefined,
   chainId: number = ARC_TESTNET_CHAIN_ID
