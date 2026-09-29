@@ -44,7 +44,7 @@ contract TriviaGame is ReentrancyGuard {
     function createRoom(bytes32 roomId, uint256 usdcBuyIn, uint256 sponsoredPrize, uint8 maxPlayers) external nonReentrant {
         require(roomId != bytes32(0), "Invalid roomId");
         require(rooms[roomId].host == address(0), "Room exists");
-        require(maxPlayers >= 2 && maxPlayers <= 20, "maxPlayers out of range");
+        require(maxPlayers >= 2 && maxPlayers <= 30, "maxPlayers out of range");
 
         bool sponsoredMode = usdcBuyIn == 0;
         if (sponsoredMode) {

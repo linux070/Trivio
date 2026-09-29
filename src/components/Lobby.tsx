@@ -921,7 +921,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
               </div>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-bold bg-slate-100 text-slate-900 border border-slate-200/70 whitespace-nowrap shrink-0">
                 <Users size={12} className="text-slate-800 shrink-0" />
-                <span className="whitespace-nowrap">10–50 Players</span>
+                <span className="whitespace-nowrap">2–30 Players</span>
               </span>
             </div>
 

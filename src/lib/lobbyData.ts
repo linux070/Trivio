@@ -29,7 +29,7 @@ export const INITIAL_PUBLIC_ROOMS: PublicRoom[] = [
     hostName: 'SatoshiFan',
     hostAddress: '0x1a2b...3c4d',
     playerCount: 6,
-    maxPlayers: 50,
+    maxPlayers: 30,
     buyIn: '1.00',
     isSponsored: false,
     prizePool: '6.00',

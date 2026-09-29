@@ -1,4 +1,4 @@
-﻿export type Category =
+export type Category =
   | 'General Knowledge'
   | 'Crypto'
   | 'Word Blitz'
@@ -46,8 +46,8 @@ export const CATEGORY_GROUPS: CategoryGroup[] = [
         tagline: 'Bitcoin, Ethereum, DeFi & Smart Contracts',
         badge: 'High Stakes',
         roundDuration: '10s rounds',
-        playerCapacity: 'Up to 50 players',
-        maxPlayers: 50,
+        playerCapacity: 'Up to 30 players',
+        maxPlayers: 30,
       },
       {
         id: 'Candle Rush',
@@ -132,8 +132,8 @@ export const CATEGORY_GROUPS: CategoryGroup[] = [
         tagline: 'World geography, records, nature & civilization',
         badge: 'Classic',
         roundDuration: '10s rounds',
-        playerCapacity: 'Up to 50 players',
-        maxPlayers: 50,
+        playerCapacity: 'Up to 30 players',
+        maxPlayers: 30,
       },
       {
         id: 'Science',
@@ -162,8 +162,8 @@ export const CATEGORY_GROUPS: CategoryGroup[] = [
         tagline: 'Blockbuster movies, hit music, gaming & streaming',
         badge: 'Entertainment',
         roundDuration: '10s rounds',
-        playerCapacity: 'Up to 40 players',
-        maxPlayers: 40,
+        playerCapacity: 'Up to 30 players',
+        maxPlayers: 30,
       },
       {
         id: 'Sports',
