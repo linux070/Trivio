@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useReadContracts } from 'wagmi'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { TRIVIA_ABI, roomCodeToBytes32, formatUSDCRaw, type RoomTuple } from '@/hooks/useTriviaContract'
-import { getRegisteredLiveRooms, removeLiveRoom, type RegisteredLiveRoom } from '@/lib/roomStorage'
+import { getRegisteredLiveRooms, removeLiveRoom, EVENT_LIVE_ROOMS_UPDATED, type RegisteredLiveRoom } from '@/lib/roomStorage'
 import type { Category } from '@/lib/questions'
 
 export interface LiveRoomItem {
@@ -19,16 +19,33 @@ export interface LiveRoomItem {
   createdAt: number
 }
 
-export function useLiveRooms(pollInterval: number = 2500) {
+export function useLiveRooms(pollInterval: number = 1500) {
   const [registered, setRegistered] = useState<RegisteredLiveRoom[]>(() => getRegisteredLiveRooms())
 
-  // Keep registered rooms list refreshed from storage
+  const syncRegistered = useCallback(() => {
+    setRegistered(getRegisteredLiveRooms())
+  }, [])
+
+  // Keep registered rooms list refreshed with real-time events + fast interval
   useEffect(() => {
-    const update = () => setRegistered(getRegisteredLiveRooms())
-    update()
-    const interval = setInterval(update, pollInterval)
-    return () => clearInterval(interval)
-  }, [pollInterval])
+    syncRegistered()
+    const interval = setInterval(syncRegistered, pollInterval)
+
+    const handleRealtimeUpdate = () => {
+      syncRegistered()
+    }
+
+    window.addEventListener(EVENT_LIVE_ROOMS_UPDATED, handleRealtimeUpdate)
+    window.addEventListener('storage', handleRealtimeUpdate)
+    window.addEventListener('focus', handleRealtimeUpdate)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener(EVENT_LIVE_ROOMS_UPDATED, handleRealtimeUpdate)
+      window.removeEventListener('storage', handleRealtimeUpdate)
+      window.removeEventListener('focus', handleRealtimeUpdate)
+    }
+  }, [pollInterval, syncRegistered])
 
   // Build batch contracts query for all registered rooms
   const contracts = useMemo(() => {

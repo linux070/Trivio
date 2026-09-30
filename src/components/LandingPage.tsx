@@ -1,11 +1,13 @@
 import { useState, useEffect, startTransition } from 'react'
 import { usePrivy, useLogin } from '@privy-io/react-auth'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users, Zap, Trophy, X, Sparkles, ArrowRight, ShieldCheck } from 'lucide-react'
+import { Users, Zap, Trophy, X, Sparkles, ArrowRight, ShieldCheck, HelpCircle } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
+import { toast } from 'sonner'
 import { getDiceBearAvatarUrl } from '@/lib/userProfile'
 import { useLiveWinners } from '@/hooks/useLiveWinners'
 import { formatTimeAgo } from '@/lib/winnersStorage'
+import { setPendingJoin, getRoomCategory, extractRoomCode } from '@/lib/roomStorage'
 
 /* ── Typewriter hook ─────────────────────────────────────────────────────── */
 function useTypewriter(text: string, speed = 52, startDelay = 800) {
@@ -226,9 +228,8 @@ function HowToPlayModal({ open, onClose }: { open: boolean; onClose: () => void 
 function LiveWinnersTicker({ onWinnerClick }: { onWinnerClick: () => void }) {
   const { payouts } = useLiveWinners()
 
-  // If we have real recorded winner payouts, prepare an seamless loop
+  // If we have real recorded winner payouts, prepare a seamless loop
   if (payouts && payouts.length > 0) {
-    // Repeat enough times to fill the continuous marquee comfortably
     const repeatCount = Math.max(2, Math.ceil(8 / payouts.length))
     const continuousList = Array.from({ length: repeatCount }, () => payouts).flat()
 
@@ -323,6 +324,7 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
   })
   const [modalOpen, setModalOpen] = useState(false)
 
+  const [roomCode, setRoomCode] = useState('')
   const { displayed, done } = useTypewriter('having fun onchain', 52, 800)
 
   // If already authenticated via Privy, immediately notify parent
@@ -334,6 +336,36 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
 
   const handleGetStarted = () => {
     login()
+  }
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pastedText = e.clipboardData.getData('text')
+    if (!pastedText) return
+    const extracted = extractRoomCode(pastedText)
+    if (extracted && extracted.roomCode) {
+      e.preventDefault()
+      setRoomCode(extracted.roomCode)
+      toast.success(`Room code detected: ${extracted.roomCode}`)
+    }
+  }
+
+  const handleJoinWithCode = (e: React.FormEvent) => {
+    e.preventDefault()
+    const extracted = extractRoomCode(roomCode)
+    if (!extracted || !extracted.roomCode) {
+      toast.error('Please enter a valid 4 to 8-character room code or invite link')
+      return
+    }
+
+    const code = extracted.roomCode
+    const category = extracted.category || getRoomCategory(code) || undefined
+    setPendingJoin(code, category)
+
+    if (authenticated) {
+      onConnected()
+    } else {
+      login()
+    }
   }
 
   return (
@@ -388,34 +420,74 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
             </div>
           </motion.div>
 
-          {/* ── Start Playing Call-To-Action & How to play ──────────────────── */}
+          {/* ── Start Playing Call-To-Action & Fast-Track Join (Option 1 Hierarchy) ── */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.24, duration: 0.52, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-3 sm:mt-5 flex flex-col items-center gap-2 sm:gap-2.5 w-full mb-3 sm:mb-4"
+            className="mt-3.5 sm:mt-6 flex flex-col items-center gap-2.5 sm:gap-3 w-full mb-3 sm:mb-4"
           >
+            {/* 1. Primary Hero Action (Squircle Rounded Rectangle) */}
             <button
               onClick={handleGetStarted}
-              className="relative inline-flex items-center justify-center rounded-full bg-white px-8 py-3 sm:px-11 sm:py-3.5 text-xs sm:text-sm font-black uppercase tracking-wider text-[#1e1b2e] shadow-xl transition-all duration-200 hover:scale-105 hover:bg-slate-50 active:scale-95 cursor-pointer"
+              className="relative inline-flex items-center justify-center rounded-2xl bg-white px-9 py-3.5 sm:px-12 sm:py-4 text-xs sm:text-sm font-black uppercase tracking-wider text-[#1e1b2e] border border-white/60 shadow-[0_8px_25px_rgba(0,0,0,0.24)] transition-all duration-200 hover:scale-105 hover:bg-slate-50 hover:shadow-[0_10px_30px_rgba(0,0,0,0.3)] active:scale-95 cursor-pointer"
               style={{
-                boxShadow: '0 8px 30px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.12)',
                 letterSpacing: '0.07em',
               }}
             >
               GET STARTED
             </button>
 
-            {/* How to play pill */}
+            {/* 2. Direct Room Code / Invite Link Fast-Track Input */}
+            <form
+              onSubmit={handleJoinWithCode}
+              className="w-full max-w-[280px] sm:max-w-[315px]"
+            >
+              <div
+                className="relative flex items-center w-full rounded-2xl p-1 pl-3.5 pr-1 transition-all duration-200 focus-within:border-white/60 focus-within:bg-black/35 focus-within:ring-2 focus-within:ring-white/20 shadow-md group"
+                style={{
+                  background: 'rgba(0, 0, 0, 0.22)',
+                  border: '1px solid rgba(255, 255, 255, 0.24)',
+                  backdropFilter: 'blur(10px)',
+                }}
+              >
+                <input
+                  type="text"
+                  value={roomCode}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    const extracted = extractRoomCode(val)
+                    if (extracted && (val.includes('http') || val.includes('join=') || val.includes('?'))) {
+                      setRoomCode(extracted.roomCode)
+                    } else {
+                      setRoomCode(val.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))
+                    }
+                  }}
+                  onPaste={handlePaste}
+                  placeholder="Enter room code (e.g. CRYP99)"
+                  maxLength={100}
+                  aria-label="Room Code"
+                  className="w-full bg-transparent text-xs sm:text-sm font-mono font-bold tracking-wider text-white placeholder:font-sans placeholder:tracking-normal placeholder:font-medium placeholder:text-white/50 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={!roomCode.trim()}
+                  className="flex h-7 w-7 sm:h-7.5 sm:w-7.5 shrink-0 items-center justify-center rounded-xl bg-white text-[#1e0a3c] transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-30 disabled:scale-100 disabled:cursor-not-allowed cursor-pointer shadow-xs"
+                  title="Join Room"
+                  aria-label="Join Room"
+                >
+                  <ArrowRight size={13} className="stroke-[2.5]" />
+                </button>
+              </div>
+            </form>
+
+            {/* 3. Subtle Helper Link below */}
             <button
               onClick={() => setModalOpen(true)}
-              className="rounded-full px-4 py-1 text-[11px] sm:text-xs font-medium text-white/80 transition-all duration-200 hover:bg-black/40 hover:text-white hover:scale-105 active:scale-95 cursor-pointer"
-              style={{
-                background: 'rgba(0, 0, 0, 0.25)',
-                backdropFilter: 'blur(8px)',
-              }}
+              type="button"
+              className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-white/75 hover:text-white transition-colors cursor-pointer py-1 px-2.5 rounded-lg hover:bg-white/10 active:scale-95 mt-0.5"
             >
-              How to play?
+              <span>How to play trivio?</span>
             </button>
           </motion.div>
 

@@ -589,8 +589,8 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                           handleSaveName()
                         }}
                         className={`flex items-center gap-1 pb-0.5 border-b ${isReservedUsername(nameInput)
-                            ? 'border-amber-400 focus-within:border-amber-500'
-                            : 'border-purple-300/80 focus-within:border-purple-500/70'
+                          ? 'border-amber-400 focus-within:border-amber-500'
+                          : 'border-purple-300/80 focus-within:border-purple-500/70'
                           } transition-colors`}
                       >
                         <span className="text-gray-400 font-medium text-sm select-none">@</span>
@@ -773,7 +773,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
   const [activeSession, setActiveSession] = useState<ActiveGameSession | null>(() => getActiveGame())
   const [practiceOpen, setPracticeOpen] = useState(false)
   const [howToPlayOpen, setHowToPlayOpen] = useState(false)
-  const { liveRooms, totalCount } = useLiveRooms(2500)
+  const { liveRooms, totalCount } = useLiveRooms(1500)
   const { leaderboard: liveLeaderboard, totalToday, latestPayout } = useLiveWinners()
 
   // Find the group that contains the initial/selected category
@@ -899,8 +899,8 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                     {activeSession.phase === 'finished'
                       ? (activeSession.isHost ? 'Game completed · Return to pay out winners' : 'Game completed · View final results')
                       : activeSession.isHost
-                      ? 'Waiting for players · Return to manage your game'
-                      : 'Game in progress · Return anytime to continue'}
+                        ? 'Waiting for players · Return to manage your game'
+                        : 'Game in progress · Return anytime to continue'}
                   </p>
                 </div>
               </div>
@@ -955,8 +955,8 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                     type="button"
                     onClick={() => handleSelectGroup(group.id)}
                     className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-2 sm:px-3 text-xs transition-all duration-150 cursor-pointer select-none text-center ${isGroupActive
-                        ? 'bg-white text-slate-900 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] border border-slate-200/60 font-bold'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/50 font-semibold'
+                      ? 'bg-white text-slate-900 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] border border-slate-200/60 font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/50 font-semibold'
                       }`}
                   >
                     <span className="text-sm shrink-0 leading-none">{group.emoji}</span>
@@ -988,8 +988,8 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                         type="button"
                         onClick={() => handleSelectCategory(sub.id)}
                         className={`group w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl text-left transition-all duration-150 cursor-pointer active:scale-[0.99] ${isSubSelected
-                            ? 'bg-violet-50/40 border-[1.5px] border-violet-600 shadow-[0_2px_8px_-2px_rgba(124,58,237,0.12)]'
-                            : 'bg-slate-50/60 hover:bg-white border border-slate-200/75 hover:border-slate-300 shadow-[0_1px_2px_rgba(0,0,0,0.02)]'
+                          ? 'bg-violet-50/40 border-[1.5px] border-violet-600 shadow-[0_2px_8px_-2px_rgba(124,58,237,0.12)]'
+                          : 'bg-slate-50/60 hover:bg-white border border-slate-200/75 hover:border-slate-300 shadow-[0_1px_2px_rgba(0,0,0,0.02)]'
                           }`}
                       >
                         {/* Mode Info */}

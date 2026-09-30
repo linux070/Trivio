@@ -318,6 +318,51 @@ export function setPendingJoin(roomCode: string, category?: Category): void {
   }
 }
 
+/**
+ * Smart extractor for room codes from raw input or full invite URLs
+ * Handles:
+ * - "CRYP99" -> { roomCode: "CRYP99" }
+ * - "https://trivio.io/?join=CRYP99&cat=Crypto" -> { roomCode: "CRYP99", category: "Crypto" }
+ * - "trivio.io/?join=BLITZ4" -> { roomCode: "BLITZ4" }
+ * - "#/join?code=BOMB01" or "#BOMB01" -> { roomCode: "BOMB01" }
+ */
+export function extractRoomCode(input: string): { roomCode: string; category?: Category } | null {
+  if (!input) return null
+  const text = input.trim()
+
+  // 1. If it looks like a URL or query string containing 'join=' or 'code='
+  if (text.includes('join=') || text.includes('code=') || text.includes('?')) {
+    try {
+      const fullUrl = text.startsWith('http://') || text.startsWith('https://') ? text : `https://${text}`
+      const url = new URL(fullUrl)
+      const code = url.searchParams.get('join') || url.searchParams.get('code')
+      if (code) {
+        const cleanCode = code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
+        const rawCat = url.searchParams.get('cat') || url.searchParams.get('category')
+        const category = isValidCategory(rawCat) ? rawCat : undefined
+        if (cleanCode.length >= 4) {
+          return { roomCode: cleanCode, category }
+        }
+      }
+    } catch {
+      // fallback to regex extraction
+    }
+    const match = text.match(/(?:join|code)=([A-Za-z0-9]{4,8})/i)
+    if (match && match[1]) {
+      return { roomCode: match[1].toUpperCase() }
+    }
+  }
+
+  // 2. Direct code extraction (stripping #, spaces, punctuation)
+  const clean = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8)
+  if (clean.length >= 4 && clean.length <= 8) {
+    const category = getRoomCategory(clean) || undefined
+    return { roomCode: clean, category }
+  }
+
+  return null
+}
+
 /** Retrieve and consume pending join details */
 export function consumePendingJoin(): { roomCode: string; category?: Category } | null {
   try {
@@ -346,7 +391,8 @@ export function consumePendingJoin(): { roomCode: string; category?: Category } 
   return null
 }
 
-const STORAGE_LIVE_ROOMS_KEY = 'trivio_registered_live_rooms'
+export const STORAGE_LIVE_ROOMS_KEY = 'trivio_registered_live_rooms'
+export const EVENT_LIVE_ROOMS_UPDATED = 'trivio_live_rooms_updated'
 
 export interface RegisteredLiveRoom {
   roomCode: string
@@ -370,6 +416,11 @@ export function registerLiveRoom(room: RegisteredLiveRoom): void {
     const json = JSON.stringify(updated)
     localStorage.setItem(STORAGE_LIVE_ROOMS_KEY, json)
     sessionStorage.setItem(STORAGE_LIVE_ROOMS_KEY, json)
+
+    // Dispatch custom event for real-time reactivity in current tab & cross-component sync
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(EVENT_LIVE_ROOMS_UPDATED, { detail: { room, action: 'registered' } }))
+    }
   } catch {
     // ignore
   }
@@ -405,6 +456,11 @@ export function removeLiveRoom(roomCode: string): void {
     const json = JSON.stringify(filtered)
     localStorage.setItem(STORAGE_LIVE_ROOMS_KEY, json)
     sessionStorage.setItem(STORAGE_LIVE_ROOMS_KEY, json)
+
+    // Dispatch custom event for real-time reactivity in current tab & cross-component sync
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(EVENT_LIVE_ROOMS_UPDATED, { detail: { roomCode: code, action: 'removed' } }))
+    }
   } catch {
     // ignore
   }
