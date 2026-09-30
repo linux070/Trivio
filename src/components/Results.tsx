@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Trophy, ExternalLink, RotateCcw, Medal, Sparkles, Award } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { buildTxExplorerUrl } from '@/onchain-facts'
 import { ARC_TESTNET_CHAIN_ID } from '@/config'
-import { getRoomPayout, calculatePayoutSplits } from '@/lib/roomStorage'
+import { getRoomPayout, calculatePayoutSplits, getRoomCategory } from '@/lib/roomStorage'
+import { recordWinnerPayout } from '@/lib/winnersStorage'
 import { useRoomInfo, type RoomTuple } from '@/hooks/useTriviaContract'
 import { getDiceBearAvatarUrl } from '@/lib/userProfile'
 
@@ -59,6 +60,19 @@ export default function Results({
   const [tab, setTab] = useState<'result' | 'leaderboard'>('result')
   const { data: roomInfo } = useRoomInfo(roomCode || null)
   const [_host, _buyIn, _prizePool, _maxPlayers, _playerCount, _status, payoutMode] = (roomInfo as RoomTuple) ?? []
+
+  // Ensure this winning result is recorded into live winners storage
+  useEffect(() => {
+    if (winnerAddress && winnerAddress !== '0x0000000000000000000000000000000000000000') {
+      recordWinnerPayout({
+        roomCode: roomCode || 'TRIVIA',
+        winnerAddress,
+        amount: prizeAmount || '0.00',
+        category: getRoomCategory(roomCode) || 'General Knowledge',
+        txHash,
+      })
+    }
+  }, [winnerAddress, prizeAmount, roomCode, txHash])
 
   const txUrl = txHash ? buildTxExplorerUrl(ARC_TESTNET_CHAIN_ID, txHash) : undefined
 

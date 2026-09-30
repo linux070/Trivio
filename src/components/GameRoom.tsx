@@ -17,7 +17,8 @@ import {
   type RoomTuple,
 } from '@/hooks/useTriviaContract'
 import { getQuestions, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
-import { getRoomCategory, getRoomDuration, getRoomPayout, calculatePayoutSplits, saveActiveGame, clearActiveGame } from '@/lib/roomStorage'
+import { getRoomCategory, getRoomDuration, getRoomPayout, calculatePayoutSplits, saveActiveGame, clearActiveGame, getActiveGame } from '@/lib/roomStorage'
+import { recordWinnerPayout } from '@/lib/winnersStorage'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { QuestionCard } from '@/components/QuestionCard'
 
@@ -55,13 +56,23 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const resolvedCategory = category || getRoomCategory(roomCode) || 'General Knowledge'
   const roomDuration = getRoomDuration(roomCode, 15)
 
-  const [phase, setPhase] = useState<GamePhase>('lobby')
-  const [questions, setQuestions] = useState<TriviaQuestion[]>([])
+  const savedSession = getActiveGame()
+  const isMatchRoom = savedSession?.roomCode === roomCode.trim().toUpperCase()
+  const initialPhase: GamePhase = (isMatchRoom && savedSession?.phase) ? savedSession.phase : 'lobby'
+  const initialScore: number = (isMatchRoom && typeof savedSession?.score === 'number') ? savedSession.score : 0
+
+  const [phase, setPhase] = useState<GamePhase>(initialPhase)
+  const [questions, setQuestions] = useState<TriviaQuestion[]>(() => {
+    if (initialPhase === 'finished' || initialPhase === 'playing') {
+      return getQuestions(resolvedCategory, 10, roomCode)
+    }
+    return []
+  })
   const [qIndex, setQIndex] = useState(0)
   const [timeLeft, setTimeLeft] = useState(roomDuration)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [answered, setAnswered] = useState(false)
-  const [score, setScore] = useState(0)
+  const [score, setScore] = useState<number>(initialScore)
   const [lastPts, setLastPts] = useState<number | null>(null)
   const [lastCorrect, setLastCorrect] = useState<boolean | null>(null)
   const [copiedLink, setCopiedLink] = useState(false)
@@ -97,13 +108,13 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     activeAddress && host && host.toLowerCase() === activeAddress.toLowerCase()
   )
 
-  // Keep active game persisted for smooth resume/rejoin
+  // Keep active game persisted with current phase and score for smooth resume/rejoin
   useEffect(() => {
-    saveActiveGame(roomCode, resolvedCategory, isHost)
-  }, [roomCode, resolvedCategory, isHost])
+    saveActiveGame(roomCode, resolvedCategory, isHost, phase, score)
+  }, [roomCode, resolvedCategory, isHost, phase, score])
 
   const { startGame, isPending: startPending, isConfirming: startConfirming, isSuccess: gameStarted } = useStartGame()
-  const { declareWinner, isPending: declarePending, isConfirming: declareConfirming, isSuccess: declared, hash: declareHash } = useDeclareWinner()
+  const { declareWinners, isPending: declarePending, isConfirming: declareConfirming, isSuccess: declared, hash: declareHash } = useDeclareWinners()
 
   const isWrongChain = chainId !== ARC_TESTNET_CHAIN_ID
 
@@ -147,12 +158,26 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     const winningAddress = (winnersList && winnersList.length > 0) ? winnersList[0] : null
     if (declared && activeAddress) {
       clearActiveGame()
-      onGameEnd(activeAddress, prizeHuman, declareHash)
+      const primaryWinner = (rawPlayersList && rawPlayersList.length > 0) ? (rawPlayersList[0] as string) : activeAddress
+      recordWinnerPayout({
+        roomCode,
+        winnerAddress: primaryWinner,
+        amount: prizeHuman,
+        category: resolvedCategory,
+        txHash: declareHash,
+      })
+      onGameEnd(primaryWinner, prizeHuman, declareHash)
     } else if (status === 2 && winningAddress && winningAddress !== '0x0000000000000000000000000000000000000000' && phase === 'finished') {
       clearActiveGame()
+      recordWinnerPayout({
+        roomCode,
+        winnerAddress: winningAddress,
+        amount: prizeHuman,
+        category: resolvedCategory,
+      })
       onGameEnd(winningAddress, prizeHuman)
     }
-  }, [declared, activeAddress, prizeHuman, declareHash, status, winnersList, phase, onGameEnd])
+  }, [declared, activeAddress, prizeHuman, declareHash, status, winnersList, phase, onGameEnd, rawPlayersList, roomCode, resolvedCategory])
 
   function advanceQuestion(currentIndex: number, qs: TriviaQuestion[]) {
     const next = currentIndex + 1
@@ -196,7 +221,30 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
   const handleDeclareWinner = () => {
     if (!activeAddress || isWrongChain) { switchChain({ chainId: ARC_TESTNET_CHAIN_ID }); return }
-    declareWinner(roomCode, activeAddress as `0x${string}`)
+
+    const players = ((rawPlayersList as `0x${string}`[] | undefined) || []).filter(
+      (addr) => Boolean(addr) && addr !== '0x0000000000000000000000000000000000000000'
+    )
+
+    if (players.length === 0) {
+      toast.error('No registered onchain players found in this room.')
+      return
+    }
+
+    const maxSplits = payoutMode === 1 ? 2 : payoutMode === 2 ? 3 : payoutMode === 3 ? 5 : 1
+    // Deduplicate and take up to the configured split capacity
+    const uniquePlayers: `0x${string}`[] = []
+    const seen = new Set<string>()
+    for (const p of players) {
+      const lower = p.toLowerCase()
+      if (!seen.has(lower)) {
+        seen.add(lower)
+        uniquePlayers.push(p)
+      }
+    }
+
+    const winnersToDeclare = uniquePlayers.slice(0, maxSplits)
+    declareWinners(roomCode, winnersToDeclare)
   }
 
   const currentQ = questions[qIndex]

@@ -52,8 +52,8 @@ import {
 } from '@/lib/questions'
 import { getActiveGame, clearActiveGame, type ActiveGameSession } from '@/lib/roomStorage'
 import { useLiveRooms } from '@/hooks/useLiveRooms'
+import { useLiveWinners } from '@/hooks/useLiveWinners'
 import SoloPracticeModal from '@/components/SoloPracticeModal'
-import { TOP_LEADERBOARD, RECENT_WINNERS_FEED } from '@/lib/lobbyData'
 
 interface LobbyProps {
   initialCategory?: Category | null
@@ -771,6 +771,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
   const [activeSession, setActiveSession] = useState<ActiveGameSession | null>(() => getActiveGame())
   const [practiceOpen, setPracticeOpen] = useState(false)
   const { liveRooms, totalCount } = useLiveRooms(2500)
+  const { leaderboard: liveLeaderboard, totalToday, latestPayout } = useLiveWinners()
 
   // Find the group that contains the initial/selected category
   const [activeGroupId, setActiveGroupId] = useState<string>(() => {
@@ -880,7 +881,9 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                     </span>
                   </div>
                   <p className="text-[11px] sm:text-xs text-gray-500 truncate mt-0.5">
-                    {activeSession.isHost
+                    {activeSession.phase === 'finished'
+                      ? (activeSession.isHost ? 'Game completed · Return to pay out winners' : 'Game completed · View final results')
+                      : activeSession.isHost
                       ? 'Waiting for players · Return to manage your game'
                       : 'Game in progress · Return anytime to continue'}
                   </p>
@@ -1103,9 +1106,6 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
             {/* Room List or Empty State */}
             {liveRooms.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-6 px-4 text-center rounded-2xl bg-slate-50/70 border border-slate-200/80">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600 mb-2.5 shadow-2xs">
-                  <Sparkles size={20} />
-                </div>
                 <p className="text-xs font-bold text-slate-800">No active rooms open right now</p>
                 <p className="text-[11px] text-slate-500 mt-0.5 max-w-xs">
                   Create a room to start playing with others, or enter a room code directly to join a private match.
@@ -1113,10 +1113,9 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                 <button
                   type="button"
                   onClick={() => onCreateRoom(selected || 'General Knowledge')}
-                  className="mt-3.5 inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold text-white bg-[#7c3aed] hover:bg-[#6d28d9] shadow-xs active:scale-95 transition-all cursor-pointer"
+                  className="mt-3.5 inline-flex items-center justify-center rounded-xl px-4 py-2 text-xs font-bold text-white bg-[#7c3aed] hover:bg-[#6d28d9] shadow-xs active:scale-95 transition-all cursor-pointer"
                 >
-                  <Plus size={14} />
-                  <span>Create Live Room</span>
+                  Create Live Room
                 </button>
               </div>
             ) : (
@@ -1211,7 +1210,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                     </h2>
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200/60 px-2 py-0.5 text-[10px] font-bold text-amber-800">
                       <Flame size={11} className="text-amber-600 fill-amber-500" />
-                      $1,230 Today
+                      {totalToday}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 font-medium">
@@ -1221,116 +1220,133 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
               </div>
             </div>
 
-            {/* Podium (Top 3) */}
-            <div className="grid grid-cols-3 gap-2 pt-1">
-              {TOP_LEADERBOARD.slice(0, 3).map((winner, idx) => {
-                const podiumColors = [
-                  {
-                    border: 'border-amber-300',
-                    bg: 'bg-gradient-to-b from-amber-500/10 via-amber-50/50 to-white',
-                    badge: 'bg-amber-400 text-amber-950',
-                    medal: '🥇',
-                  },
-                  {
-                    border: 'border-slate-300',
-                    bg: 'bg-gradient-to-b from-slate-200/40 via-slate-50/50 to-white',
-                    badge: 'bg-slate-300 text-slate-900',
-                    medal: '🥈',
-                  },
-                  {
-                    border: 'border-amber-700/30',
-                    bg: 'bg-gradient-to-b from-amber-700/10 via-amber-50/30 to-white',
-                    badge: 'bg-amber-700/30 text-amber-950',
-                    medal: '🥉',
-                  },
-                ]
-                const style = podiumColors[idx]
-                const avatar = getDiceBearAvatarUrl('bottts-neutral', winner.avatarSeed)
+            {/* Leaderboard content: empty state or real live podium & runners up */}
+            {liveLeaderboard.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-7 px-4 text-center rounded-2xl bg-slate-50/70 border border-slate-200/80">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 mb-2 shadow-2xs">
+                  <Trophy size={20} />
+                </div>
+                <p className="text-xs font-bold text-slate-800">No daily winners yet today</p>
+                <p className="text-[11px] text-slate-500 mt-0.5 max-w-xs">
+                  Join or create a live trivia match and win USDC to claim your spot on the podium!
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Podium (Top 3) */}
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  {liveLeaderboard.slice(0, 3).map((winner, idx) => {
+                    const podiumColors = [
+                      {
+                        border: 'border-amber-300',
+                        bg: 'bg-gradient-to-b from-amber-500/10 via-amber-50/50 to-white',
+                        badge: 'bg-amber-400 text-amber-950',
+                        medal: '🥇',
+                      },
+                      {
+                        border: 'border-slate-300',
+                        bg: 'bg-gradient-to-b from-slate-200/40 via-slate-50/50 to-white',
+                        badge: 'bg-slate-300 text-slate-900',
+                        medal: '🥈',
+                      },
+                      {
+                        border: 'border-amber-700/30',
+                        bg: 'bg-gradient-to-b from-amber-700/10 via-amber-50/30 to-white',
+                        badge: 'bg-amber-700/30 text-amber-950',
+                        medal: '🥉',
+                      },
+                    ]
+                    const style = podiumColors[idx] || podiumColors[2]
+                    const avatar = getDiceBearAvatarUrl('bottts-neutral', winner.avatarSeed || winner.username)
 
-                return (
-                  <div
-                    key={winner.username}
-                    className={`relative flex flex-col items-center text-center p-3 rounded-2xl border ${style.border} ${style.bg} shadow-xs transition-all hover:scale-[1.02]`}
-                  >
-                    {/* Rank Badge */}
-                    <div className="absolute -top-2.5 flex items-center justify-center">
-                      <span className={`text-[10px] font-black px-2 py-0.2 rounded-full shadow-2xs ${style.badge}`}>
-                        #{winner.rank}
-                      </span>
-                    </div>
+                    return (
+                      <div
+                        key={winner.username + idx}
+                        className={`relative flex flex-col items-center text-center p-3 rounded-2xl border ${style.border} ${style.bg} shadow-xs transition-all hover:scale-[1.02]`}
+                      >
+                        {/* Rank Badge */}
+                        <div className="absolute -top-2.5 flex items-center justify-center">
+                          <span className={`text-[10px] font-black px-2 py-0.2 rounded-full shadow-2xs ${style.badge}`}>
+                            #{winner.rank}
+                          </span>
+                        </div>
 
-                    {/* Avatar */}
-                    <div className="mt-1 relative">
-                      <img
-                        src={avatar}
-                        alt={winner.username}
-                        className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-white border border-slate-200/80 shadow-xs object-cover p-0.5"
-                      />
-                      <span className="absolute -bottom-1 -right-1 text-xs">
-                        {style.medal}
-                      </span>
-                    </div>
+                        {/* Avatar */}
+                        <div className="mt-1 relative">
+                          <img
+                            src={avatar}
+                            alt={winner.username}
+                            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-white border border-slate-200/80 shadow-xs object-cover p-0.5"
+                          />
+                          <span className="absolute -bottom-1 -right-1 text-xs">
+                            {style.medal}
+                          </span>
+                        </div>
 
-                    {/* Username */}
-                    <span className="text-xs font-bold text-slate-900 tracking-tight mt-1.5 truncate max-w-[90%]">
-                      {winner.username}
-                    </span>
+                        {/* Username */}
+                        <span className="text-xs font-bold text-slate-900 tracking-tight mt-1.5 truncate max-w-[90%]">
+                          {winner.username}
+                        </span>
 
-                    {/* USDC Won (increased icon size) */}
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <TokenUSDC variant="branded" size={17} className="shrink-0" />
-                      <span className="text-xs sm:text-sm font-black text-slate-950 tabular-nums">
-                        ${winner.totalWinnings}
-                      </span>
-                    </div>
+                        {/* USDC Won */}
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <TokenUSDC variant="branded" size={17} className="shrink-0" />
+                          <span className="text-xs sm:text-sm font-black text-slate-950 tabular-nums">
+                            ${winner.totalWinnings}
+                          </span>
+                        </div>
 
-                    {/* Wins count without streak */}
-                    <span className="text-[10px] font-semibold text-slate-500 mt-0.5">
-                      {winner.winCount} wins
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Runners Up (Ranks 4 & 5) */}
-            <div className="space-y-1.5 pt-1">
-              {TOP_LEADERBOARD.slice(3, 5).map((entry) => {
-                const avatar = getDiceBearAvatarUrl('bottts-neutral', entry.avatarSeed)
-                return (
-                  <div
-                    key={entry.username}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 border border-slate-200/70 hover:bg-white transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-xs font-black text-slate-400 w-4 text-center">
-                        #{entry.rank}
-                      </span>
-                      <img
-                        src={avatar}
-                        alt={entry.username}
-                        className="h-7 w-7 rounded-full bg-white border border-slate-200 shadow-2xs object-cover p-0.5 shrink-0"
-                      />
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-900 truncate">
-                          {entry.username}
-                        </p>
-                        <p className="text-[10px] text-slate-500 font-medium">
-                          {entry.winCount} wins
-                        </p>
+                        {/* Wins count */}
+                        <span className="text-[10px] font-semibold text-slate-500 mt-0.5">
+                          {winner.winCount} {winner.winCount === 1 ? 'win' : 'wins'}
+                        </span>
                       </div>
-                    </div>
+                    )
+                  })}
+                </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <TokenUSDC variant="branded" size={15} className="shrink-0" />
-                      <span className="text-xs font-extrabold text-slate-900 tabular-nums">
-                        ${entry.totalWinnings}
-                      </span>
-                    </div>
+                {/* Runners Up (Ranks 4 & 5 if present) */}
+                {liveLeaderboard.length > 3 && (
+                  <div className="space-y-1.5 pt-1">
+                    {liveLeaderboard.slice(3, 5).map((entry, idx) => {
+                      const avatar = getDiceBearAvatarUrl('bottts-neutral', entry.avatarSeed || entry.username)
+                      return (
+                        <div
+                          key={entry.username + idx}
+                          className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 border border-slate-200/70 hover:bg-white transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="text-xs font-black text-slate-400 w-4 text-center">
+                              #{entry.rank}
+                            </span>
+                            <img
+                              src={avatar}
+                              alt={entry.username}
+                              className="h-7 w-7 rounded-full bg-white border border-slate-200 shadow-2xs object-cover p-0.5 shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-900 truncate">
+                                {entry.username}
+                              </p>
+                              <p className="text-[10px] text-slate-500 font-medium">
+                                {entry.winCount} {entry.winCount === 1 ? 'win' : 'wins'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <TokenUSDC variant="branded" size={15} className="shrink-0" />
+                            <span className="text-xs font-extrabold text-slate-900 tabular-nums">
+                              ${entry.totalWinnings}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                )
-              })}
-            </div>
+                )}
+              </>
+            )}
 
             {/* Recent Winners Live Stream Ticker */}
             <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
@@ -1339,8 +1355,16 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                 Latest Payout:
               </span>
               <span className="text-slate-600 truncate ml-2 text-right">
-                <strong className="text-slate-900">{RECENT_WINNERS_FEED[0]?.username}</strong> won{' '}
-                <strong className="text-emerald-700 font-bold">${RECENT_WINNERS_FEED[0]?.amount} USDC</strong> in {RECENT_WINNERS_FEED[0]?.category} ({RECENT_WINNERS_FEED[0]?.timeAgo})
+                {latestPayout ? (
+                  <>
+                    <strong className="text-slate-900">{latestPayout.username}</strong> won{' '}
+                    <strong className="text-emerald-700 font-bold">${latestPayout.amount} USDC</strong> in {latestPayout.category} ({latestPayout.timeAgo})
+                  </>
+                ) : (
+                  <span className="text-slate-400 italic">
+                    No payouts yet today · Win a room to appear here live!
+                  </span>
+                )}
               </span>
             </div>
           </section>

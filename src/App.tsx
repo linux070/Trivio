@@ -461,12 +461,12 @@ export default function App() {
     setScreen({ name: 'landing' })
   }
 
-  // Check if we have an active stored user session with a valid profile for this active address
-  const hasValidProfile = Boolean(activeAddress ? hasUserProfile(activeAddress) : false)
+  // Check if we have an active stored user session with a valid profile
+  const hasValidProfile = Boolean(activeAddress ? hasUserProfile(activeAddress) : hasUserProfile())
   const isStoredAuth =
     typeof window !== 'undefined' &&
     localStorage.getItem(STORAGE_AUTH_KEY) === 'true' &&
-    hasValidProfile
+    hasUserProfile()
 
   // Auth & Onboarding guard:
   // If showOnboarding is active, or screen is landing, or session is not authenticated,

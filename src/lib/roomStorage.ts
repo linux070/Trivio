@@ -239,18 +239,31 @@ export interface ActiveGameSession {
   roomCode: string
   category: Category
   isHost?: boolean
+  phase?: 'lobby' | 'playing' | 'finished'
+  score?: number
   savedAt: number
 }
 
 /** Save an active game session so the user can easily continue / rejoin from the lobby */
-export function saveActiveGame(roomCode: string, category: Category, isHost?: boolean): void {
+export function saveActiveGame(
+  roomCode: string,
+  category: Category,
+  isHost?: boolean,
+  phase?: 'lobby' | 'playing' | 'finished',
+  score?: number
+): void {
   if (!roomCode) return
   const code = roomCode.trim().toUpperCase()
   saveRoomCategory(code, category)
+  const existing = getActiveGame()
+  const resolvedPhase = phase ?? (existing?.roomCode === code ? existing.phase : undefined)
+  const resolvedScore = score ?? (existing?.roomCode === code ? existing.score : undefined)
   const session: ActiveGameSession = {
     roomCode: code,
     category,
     isHost,
+    phase: resolvedPhase,
+    score: resolvedScore,
     savedAt: Date.now(),
   }
   try {

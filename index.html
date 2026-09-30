@@ -20,6 +20,25 @@
   </head>
   <body>
     <!-- Built with Arc Studio — https://studio.arc.io -->
+    <script>
+      // Instant background — runs before React to prevent purple flash on refresh
+      (function(){
+        try {
+          var isAuth = localStorage.getItem('trivio_authenticated') === 'true';
+          var hasProfile = !!localStorage.getItem('trivio_user_profile');
+          if (isAuth && hasProfile) {
+            document.documentElement.style.background = '#fafafa';
+            document.documentElement.style.backgroundColor = '#fafafa';
+          } else {
+            var g = 'linear-gradient(160deg,#7c3aed 0%,#6d28d9 30%,#5b21b6 65%,#4c1d95 100%)';
+            document.documentElement.style.background = g;
+            document.documentElement.style.backgroundColor = '#5b21b6';
+          }
+        } catch(e) {
+          document.documentElement.style.backgroundColor = '#5b21b6';
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
