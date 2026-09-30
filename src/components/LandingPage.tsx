@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Users, Zap, Trophy, X, Sparkles, ArrowRight, ShieldCheck } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { getDiceBearAvatarUrl } from '@/lib/userProfile'
-import { RECENT_WINNERS_FEED } from '@/lib/lobbyData'
+import { useLiveWinners } from '@/hooks/useLiveWinners'
+import { formatTimeAgo } from '@/lib/winnersStorage'
 
 /* ── Typewriter hook ─────────────────────────────────────────────────────── */
 function useTypewriter(text: string, speed = 52, startDelay = 800) {
@@ -101,7 +102,7 @@ const HOW_TO_PLAY = [
   {
     icon: Users,
     label: 'Join or host',
-    desc: 'Create a room and invite friends, or join with a 6-digit code.',
+    desc: 'Create a room and invite friends, or join with a 6 or 8-digit code.',
     iconBg: '#ede9fe',
     iconColor: '#6d28d9',
   },
@@ -121,7 +122,7 @@ const HOW_TO_PLAY = [
   },
 ]
 
-/* ── HowToPlayModal ───────────────────────────────────────────────────────── */
+/* ── HowToPlayModal (Landing Quick Preview) ────────────────────────────────── */
 function HowToPlayModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   useEffect(() => {
     if (!open) return
@@ -131,44 +132,43 @@ function HowToPlayModal({ open, onClose }: { open: boolean; onClose: () => void 
   }, [open, onClose])
 
   useEffect(() => {
-    document.body.style.overflow = open ? 'hidden' : ''
-    return () => { document.body.style.overflow = '' }
+    if (!open) return
+    const prevOverflow = document.body.style.overflow
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`
+    }
+    document.body.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = prevOverflow
+      document.body.style.paddingRight = ''
+    }
   }, [open])
 
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          key="backdrop"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.22 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
-          style={{
-            background: 'rgba(15, 5, 40, 0.72)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            paddingTop: 'max(16px, env(safe-area-inset-top, 16px))',
-            paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))',
-            paddingLeft: 'max(16px, env(safe-area-inset-left, 16px))',
-            paddingRight: 'max(16px, env(safe-area-inset-right, 16px))',
-          }}
-          onClick={onClose}
-        >
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-6 overflow-hidden">
+          {/* Smooth Backdrop */}
+          <motion.div
+            key="backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            className="fixed inset-0 bg-[#0f0528]/70 backdrop-blur-xs cursor-pointer transform-gpu"
+            onClick={onClose}
+          />
+
           <motion.div
             key="modal"
-            initial={{ opacity: 0, y: 32, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 24, scale: 0.95 }}
-            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            initial={{ opacity: 0, scale: 0.96, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             onClick={e => e.stopPropagation()}
-            className="relative w-full max-w-lg sm:max-w-2xl rounded-[28px] my-auto flex flex-col overflow-hidden"
-            style={{
-              background: '#f5f3ff',
-              boxShadow: '0 28px 90px rgba(30,10,60,0.38)',
-              maxHeight: 'min(88dvh, 88vh)',
-            }}
+            className="relative w-full max-w-lg sm:max-w-2xl rounded-[28px] my-auto flex flex-col overflow-hidden max-h-[90dvh] bg-[#f5f3ff] shadow-[0_28px_90px_rgba(30,10,60,0.38)] z-10 transform-gpu"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-5 pb-3 shrink-0">
@@ -211,12 +211,12 @@ function HowToPlayModal({ open, onClose }: { open: boolean; onClose: () => void 
               <div className="mt-3.5 flex items-center gap-2 rounded-xl px-4 py-3" style={{ background: '#ede9fe' }}>
                 <TokenUSDC variant="branded" size={15} />
                 <p className="text-xs" style={{ color: '#5b21b6' }}>
-                  All prizes paid in <strong>USDC</strong> on Arc — instant, verifiable, zero ETH needed.
+                  All prizes paid in <strong>USDC</strong> on Arc — instant onchain payouts straight to your wallet.
                 </p>
               </div>
             </div>
           </motion.div>
-        </motion.div>
+        </div>
       )}
     </AnimatePresence>
   )
@@ -224,43 +224,83 @@ function HowToPlayModal({ open, onClose }: { open: boolean; onClose: () => void 
 
 /* ── Live Winners Marquee ─────────────────────────────────────────────────── */
 function LiveWinnersTicker({ onWinnerClick }: { onWinnerClick: () => void }) {
-  // Duplicate array for a seamless infinite loop where items follow each other
-  const continuousList = [...RECENT_WINNERS_FEED, ...RECENT_WINNERS_FEED]
+  const { payouts } = useLiveWinners()
+
+  // If we have real recorded winner payouts, prepare an seamless loop
+  if (payouts && payouts.length > 0) {
+    // Repeat enough times to fill the continuous marquee comfortably
+    const repeatCount = Math.max(2, Math.ceil(8 / payouts.length))
+    const continuousList = Array.from({ length: repeatCount }, () => payouts).flat()
+
+    return (
+      <div className="w-full max-w-full overflow-hidden select-none relative py-1 trivio-ticker-mask">
+        <div className="animate-marquee flex items-center gap-2 sm:gap-3 py-0.5">
+          {continuousList.map((item, idx) => (
+            <button
+              key={`${item.roomCode}-${item.timestamp}-${idx}`}
+              onClick={onWinnerClick}
+              type="button"
+              className="group flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:px-3.5 py-1 sm:py-1.5 text-[11px] sm:text-xs text-white transition-all duration-200 hover:bg-white/25 hover:scale-105 active:scale-95 cursor-pointer shrink-0"
+              style={{
+                background: 'rgba(255, 255, 255, 0.16)',
+                border: '1px solid rgba(255, 255, 255, 0.26)',
+                boxShadow: '0 4px 18px rgba(0, 0, 0, 0.08)',
+              }}
+            >
+              <img
+                src={getDiceBearAvatarUrl('bottts-neutral', item.avatarSeed || item.username || item.winnerAddress)}
+                alt={item.username || 'Winner'}
+                className="h-4 w-4 sm:h-5 sm:w-5 rounded-full bg-white/20 border border-white/40 shrink-0 object-cover"
+              />
+              <span className="font-semibold text-white/90 tracking-tight">@{item.username || `${item.winnerAddress.slice(0, 6)}...`}</span>
+              <span className="font-black text-white tracking-tight inline-flex items-center gap-0.5 sm:gap-1">
+                +${item.amount}
+              </span>
+              <span className="inline-flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-white/95 uppercase tracking-wide leading-none">
+                <TokenUSDC variant="branded" size={14} className="shrink-0" />
+                <span>USDC</span>
+              </span>
+              <span className="text-[10px] sm:text-[11px] text-white/70 font-medium truncate max-w-[110px] sm:max-w-none">
+                · {item.category}
+              </span>
+              <span className="text-[9px] sm:text-[10px] font-mono text-purple-200/90 ml-0.5">
+                {formatTimeAgo(item.timestamp)}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Live onchain platform ticker when no payouts are recorded yet
+  const platformHighlights = [
+    { label: '⚡ Zero-Gas USDC Trivia on Arc Network', action: 'Play Now' },
+    { label: '🏆 Instant Onchain Payouts to Your Wallet', action: 'Join' },
+    { label: '🛡️ Non-Custodial Smart Escrow & EIP-712 Anti-Cheat', action: 'Learn' },
+    { label: '🎮 Real-Time Multiplayer Rooms & Solo Practice', action: 'Enter' },
+    { label: '🥇 100% USDC Prize Pools & Multi-Winner Splits', action: 'Compete' },
+  ]
+  const continuousHighlights = [...platformHighlights, ...platformHighlights]
 
   return (
     <div className="w-full max-w-full overflow-hidden select-none relative py-1 trivio-ticker-mask">
-      {/* Single continuous line where items follow each other */}
       <div className="animate-marquee flex items-center gap-2 sm:gap-3 py-0.5">
-        {continuousList.map((item, idx) => (
+        {continuousHighlights.map((item, idx) => (
           <button
-            key={`${item.id}-${idx}`}
+            key={`highlight-${idx}`}
             onClick={onWinnerClick}
             type="button"
-            className="group flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:px-3.5 py-1 sm:py-1.5 text-[11px] sm:text-xs text-white transition-all duration-200 hover:bg-white/25 hover:scale-105 active:scale-95 cursor-pointer shrink-0"
+            className="group flex items-center gap-1.5 sm:gap-2 rounded-full px-3 sm:px-4 py-1 sm:py-1.5 text-[11px] sm:text-xs text-white transition-all duration-200 hover:bg-white/25 hover:scale-105 active:scale-95 cursor-pointer shrink-0"
             style={{
               background: 'rgba(255, 255, 255, 0.16)',
               border: '1px solid rgba(255, 255, 255, 0.26)',
               boxShadow: '0 4px 18px rgba(0, 0, 0, 0.08)',
             }}
           >
-            <img
-              src={getDiceBearAvatarUrl('bottts-neutral', item.avatarSeed)}
-              alt={item.username}
-              className="h-4 w-4 sm:h-5 sm:w-5 rounded-full bg-white/20 border border-white/40 shrink-0"
-            />
-            <span className="font-semibold text-white/90 tracking-tight">@{item.username}</span>
-            <span className="font-black text-white tracking-tight inline-flex items-center gap-0.5 sm:gap-1">
-              +${item.amount}
-            </span>
-            <span className="inline-flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-white/95 uppercase tracking-wide leading-none">
-              <TokenUSDC variant="branded" size={14} className="shrink-0" />
-              <span>USDC</span>
-            </span>
-            <span className="text-[10px] sm:text-[11px] text-white/70 font-medium truncate max-w-[110px] sm:max-w-none">
-              · {item.category}
-            </span>
-            <span className="text-[9px] sm:text-[10px] font-mono text-purple-200/90 ml-0.5">
-              {item.timeAgo}
+            <span className="font-semibold text-white/95 tracking-tight">{item.label}</span>
+            <span className="text-[10px] font-bold text-purple-200 bg-white/15 px-2 py-0.5 rounded-full uppercase tracking-wider group-hover:bg-white/25 transition-colors">
+              {item.action}
             </span>
           </button>
         ))}

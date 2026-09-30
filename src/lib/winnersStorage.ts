@@ -131,6 +131,7 @@ export function computeLeaderboard(
   leaderboard: LiveLeaderboardEntry[]
   totalToday: string
   latestPayout: LatestPayoutInfo | null
+  payouts: WinnerPayoutRecord[]
 } {
   const now = Date.now()
   const oneDayAgo = now - 24 * 60 * 60 * 1000
@@ -210,5 +211,6 @@ export function computeLeaderboard(
     leaderboard: realLeaderboard,
     totalToday: totalTodayFormatted,
     latestPayout: latest,
+    payouts: realPayouts,
   }
 }

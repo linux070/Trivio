@@ -10,6 +10,7 @@ import {
   useStartGame,
   useDeclareWinners,
   useDeclareWinner,
+  useCancelRoom,
   useRoomInfo,
   useRoomPlayers,
   useRoomWinners,
@@ -115,8 +116,28 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
   const { startGame, isPending: startPending, isConfirming: startConfirming, isSuccess: gameStarted } = useStartGame()
   const { declareWinners, isPending: declarePending, isConfirming: declareConfirming, isSuccess: declared, hash: declareHash } = useDeclareWinners()
+  const { cancelRoom, isPending: cancelPending, isConfirming: cancelConfirming, isSuccess: cancelSuccess } = useCancelRoom()
 
   const isWrongChain = chainId !== ARC_TESTNET_CHAIN_ID
+
+  useEffect(() => {
+    if (cancelSuccess) {
+      toast.success('Room cancelled and funds refunded!')
+      clearActiveGame()
+      onBack()
+    }
+  }, [cancelSuccess, onBack])
+
+  const handleCancelRoom = () => {
+    if (!confirm('Are you sure you want to cancel this room? All joined players and sponsored prize funds will be refunded 100% onchain.')) {
+      return
+    }
+    if (isWrongChain) {
+      switchChain({ chainId: ARC_TESTNET_CHAIN_ID })
+      return
+    }
+    cancelRoom(roomCode)
+  }
 
   // When game starts onchain (either via host tx confirmation OR polled status === 1), move all players to playing phase
   useEffect(() => {
@@ -472,21 +493,37 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
             )}
 
             {isHost && (
-              <>
+              <div className="space-y-2">
                 {(startPending || startConfirming) && (
-                  <p className="mb-2 text-center text-sm" style={{ color: 'var(--muted)' }}>
+                  <p className="text-center text-sm" style={{ color: 'var(--muted)' }}>
                     {startPending ? 'Confirm in wallet...' : 'Starting game onchain...'}
                   </p>
                 )}
                 <button
                   onClick={handleStartGame}
-                  disabled={startPending || startConfirming}
-                  className="w-full rounded-2xl py-4 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
+                  disabled={startPending || startConfirming || cancelPending || cancelConfirming}
+                  className="w-full rounded-2xl py-4 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40 shadow-xs cursor-pointer active:scale-98"
                   style={{ background: 'var(--accent)', color: 'white' }}
                 >
                   {isWrongChain ? 'Switch to Arc' : startPending || startConfirming ? 'Starting...' : 'Start Game'}
                 </button>
-              </>
+
+                <button
+                  type="button"
+                  onClick={handleCancelRoom}
+                  disabled={startPending || startConfirming || cancelPending || cancelConfirming}
+                  className="w-full rounded-2xl py-2.5 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50/70 hover:bg-rose-100/80 border border-rose-200/70 transition-all disabled:opacity-40 cursor-pointer active:scale-98 flex items-center justify-center gap-1.5"
+                >
+                  {cancelPending || cancelConfirming ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin text-rose-600" />
+                      <span>Refunding & Cancelling...</span>
+                    </>
+                  ) : (
+                    <span>Cancel Room & Refund Escrow</span>
+                  )}
+                </button>
+              </div>
             )}
 
             {!isHost && (

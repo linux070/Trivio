@@ -28,6 +28,7 @@ import {
   KeyRound,
   AlertCircle,
   Loader2,
+  HelpCircle,
 } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
@@ -54,6 +55,7 @@ import { getActiveGame, clearActiveGame, type ActiveGameSession } from '@/lib/ro
 import { useLiveRooms } from '@/hooks/useLiveRooms'
 import { useLiveWinners } from '@/hooks/useLiveWinners'
 import SoloPracticeModal from '@/components/SoloPracticeModal'
+import HowToPlayModal from '@/components/HowToPlayModal'
 
 interface LobbyProps {
   initialCategory?: Category | null
@@ -770,6 +772,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
   const [selected, setSelected] = useState<Category | null>(() => initialCategory ?? 'General Knowledge')
   const [activeSession, setActiveSession] = useState<ActiveGameSession | null>(() => getActiveGame())
   const [practiceOpen, setPracticeOpen] = useState(false)
+  const [howToPlayOpen, setHowToPlayOpen] = useState(false)
   const { liveRooms, totalCount } = useLiveRooms(2500)
   const { leaderboard: liveLeaderboard, totalToday, latestPayout } = useLiveWinners()
 
@@ -840,7 +843,19 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <button
+            type="button"
+            onClick={() => setHowToPlayOpen(true)}
+            title="How to Play"
+            aria-label="How to Play"
+            className="flex items-center justify-center gap-1.5 h-8 w-8 sm:h-auto sm:w-auto sm:px-3 sm:py-1.5 rounded-full text-slate-600 hover:text-slate-900 hover:bg-slate-100/90 active:bg-slate-200/80 transition-all cursor-pointer active:scale-95"
+          >
+            <HelpCircle size={16} className="text-slate-500 shrink-0" />
+            <span className="hidden sm:inline text-xs font-semibold text-slate-600">
+              How to Play
+            </span>
+          </button>
           <WalletProfile onDisconnect={onDisconnect} />
         </div>
       </header>
@@ -1372,7 +1387,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
           {/* ── Footer onchain info badge ── */}
           <div className="flex items-center justify-center gap-1.5 sm:gap-2 text-center text-[11px] sm:text-xs font-semibold text-gray-500 pt-1 px-2">
             <TokenUSDC variant="branded" size={14} />
-            <span>Prizes paid in USDC on Arc · instant, zero gas fee</span>
+            <span>All prizes paid in USDC on Arc — instant onchain payouts straight to your wallet.</span>
           </div>
         </motion.div>
       </main>
@@ -1386,6 +1401,12 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
           setPracticeOpen(false)
           onCreateRoom(cat)
         }}
+      />
+
+      {/* ── How to Play Guide Modal ── */}
+      <HowToPlayModal
+        open={howToPlayOpen}
+        onClose={() => setHowToPlayOpen(false)}
       />
     </div>
   )
