@@ -86,7 +86,7 @@ export default function HowToPlayModal({ open, onClose }: HowToPlayModalProps) {
                 </div>
                 <div>
                   <h2 className="text-sm sm:text-base md:text-lg font-bold text-slate-900 tracking-tight">
-                    How to Play & Win
+                    How to Play
                   </h2>
                   <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
                     Simple guide to games, speed scoring & prizes

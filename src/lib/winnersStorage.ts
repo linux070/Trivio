@@ -3,7 +3,7 @@
  * Aggregates onchain payout events with local verified results
  */
 
-import { getUserProfile } from './userProfile'
+import { getUserProfile, generateRandomUsername } from './userProfile'
 
 export interface WinnerPayoutRecord {
   roomId?: string
@@ -53,7 +53,7 @@ export function recordWinnerPayout(payout: {
 
   try {
     const profile = getUserProfile(payout.winnerAddress)
-    const username = profile?.username || `${payout.winnerAddress.slice(0, 6)}...${payout.winnerAddress.slice(-4)}`
+    const username = profile?.username || generateRandomUsername(payout.winnerAddress)
     const avatarSeed = profile?.avatarSeed || username
 
     const record: WinnerPayoutRecord = {
@@ -158,17 +158,16 @@ export function computeLeaderboard(
 
   for (const p of realPayouts) {
     const addr = p.winnerAddress.toLowerCase()
+    const freshProfile = getUserProfile(p.winnerAddress)
     const current = userMap.get(addr) || {
-      username: p.username || `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+      username: freshProfile?.username || (p.username && !p.username.startsWith('0x') ? p.username : generateRandomUsername(p.winnerAddress)),
       address: p.winnerAddress,
-      avatarSeed: p.avatarSeed || p.username || addr,
+      avatarSeed: freshProfile?.avatarSeed || p.avatarSeed || p.username || addr,
       total: 0,
       wins: 0,
     }
     current.total += parseFloat(p.amount) || 0
     current.wins += 1
-    // Update profile if available
-    const freshProfile = getUserProfile(p.winnerAddress)
     if (freshProfile?.username) {
       current.username = freshProfile.username
       current.avatarSeed = freshProfile.avatarSeed || freshProfile.username
@@ -191,8 +190,14 @@ export function computeLeaderboard(
   let latest: LatestPayoutInfo | null = null
   if (realPayouts.length > 0) {
     const mostRecent = realPayouts[0]
+    const freshProfile = getUserProfile(mostRecent.winnerAddress)
+    const resolvedUsername =
+      freshProfile?.username ||
+      (mostRecent.username && !mostRecent.username.startsWith('0x')
+        ? mostRecent.username
+        : generateRandomUsername(mostRecent.winnerAddress))
     latest = {
-      username: mostRecent.username || `${mostRecent.winnerAddress.slice(0, 6)}...${mostRecent.winnerAddress.slice(-4)}`,
+      username: resolvedUsername,
       address: mostRecent.winnerAddress,
       amount: mostRecent.amount,
       category: mostRecent.category,

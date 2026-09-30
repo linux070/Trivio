@@ -61,6 +61,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const isMatchRoom = savedSession?.roomCode === roomCode.trim().toUpperCase()
   const initialPhase: GamePhase = (isMatchRoom && savedSession?.phase) ? savedSession.phase : 'lobby'
   const initialScore: number = (isMatchRoom && typeof savedSession?.score === 'number') ? savedSession.score : 0
+  const initialQIndex: number = (isMatchRoom && typeof savedSession?.qIndex === 'number' && savedSession.qIndex >= 0) ? savedSession.qIndex : 0
 
   const [phase, setPhase] = useState<GamePhase>(initialPhase)
   const [questions, setQuestions] = useState<TriviaQuestion[]>(() => {
@@ -69,7 +70,12 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     }
     return []
   })
-  const [qIndex, setQIndex] = useState(0)
+  const [qIndex, setQIndex] = useState<number>(() => {
+    if (initialPhase === 'playing' && initialQIndex >= 10) {
+      return 9
+    }
+    return initialQIndex
+  })
   const [timeLeft, setTimeLeft] = useState(roomDuration)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [answered, setAnswered] = useState(false)
@@ -77,7 +83,15 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const [lastPts, setLastPts] = useState<number | null>(null)
   const [lastCorrect, setLastCorrect] = useState<boolean | null>(null)
   const [copiedLink, setCopiedLink] = useState(false)
-  const answerStartRef = useRef(0)
+  const answerStartRef = useRef(Date.now())
+
+  // Ensure questions are populated if resuming into playing phase
+  useEffect(() => {
+    if (phase === 'playing' && questions.length === 0) {
+      const qs = getQuestions(resolvedCategory, 10, roomCode)
+      setQuestions(qs)
+    }
+  }, [phase, questions.length, resolvedCategory, roomCode])
 
   // Auto-polls onchain every 1.5s
   const { data: roomInfo, refetch: refetchRoomInfo } = useRoomInfo(roomCode, 1500)
@@ -109,10 +123,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     activeAddress && host && host.toLowerCase() === activeAddress.toLowerCase()
   )
 
-  // Keep active game persisted with current phase and score for smooth resume/rejoin
+  // Keep active game persisted with current phase, score, and question index for smooth resume/rejoin on refresh
   useEffect(() => {
-    saveActiveGame(roomCode, resolvedCategory, isHost, phase, score)
-  }, [roomCode, resolvedCategory, isHost, phase, score])
+    saveActiveGame(roomCode, resolvedCategory, isHost, phase, score, qIndex)
+  }, [roomCode, resolvedCategory, isHost, phase, score, qIndex])
 
   const { startGame, isPending: startPending, isConfirming: startConfirming, isSuccess: gameStarted } = useStartGame()
   const { declareWinners, isPending: declarePending, isConfirming: declareConfirming, isSuccess: declared, hash: declareHash } = useDeclareWinners()
@@ -155,8 +169,9 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
         setPhase('playing')
       })
       answerStartRef.current = Date.now()
+      saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', 0, 0)
     }
-  }, [gameStarted, status, phase, resolvedCategory, roomCode, roomDuration])
+  }, [gameStarted, status, phase, resolvedCategory, roomCode, roomDuration, isHost])
 
   // Timer for questions
   useEffect(() => {
@@ -179,9 +194,11 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     const winningAddress = (winnersList && winnersList.length > 0) ? winnersList[0] : null
     if (declared && activeAddress) {
       clearActiveGame()
-      const primaryWinner = (rawPlayersList && rawPlayersList.length > 0)
-        ? (rawPlayersList[0] as string)
-        : (isHost ? '0xDE7534A0e8549C6b0e8b2b95b451000000009AF7' : activeAddress)
+      const primaryWinner = (winnersList && winnersList.length > 0)
+        ? (winnersList[0] as string)
+        : (rawPlayersList && rawPlayersList.length > 0)
+          ? (rawPlayersList[0] as string)
+          : activeAddress
       recordWinnerPayout({
         roomCode,
         winnerAddress: primaryWinner,
@@ -206,6 +223,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     const next = currentIndex + 1
     if (next >= qs.length) {
       setPhase('finished')
+      saveActiveGame(roomCode, resolvedCategory, isHost, 'finished', score, next)
     } else {
       setQIndex(next)
       setTimeLeft(roomDuration)
@@ -214,19 +232,23 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       setLastCorrect(null)
       setLastPts(null)
       answerStartRef.current = Date.now()
+      saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', score, next)
     }
   }
 
   const handleAnswer = (idx: number) => {
     if (answered) return
     const q = questions[qIndex]
+    if (!q) return
     const elapsed = Date.now() - answerStartRef.current
     setSelectedIndex(idx)
     setAnswered(true)
 
+    let newScore = score
     if (idx === q.correctIndex) {
       const pts = Math.max(10, 100 - Math.floor((elapsed / 1000) * 5))
-      setScore(s => s + pts)
+      newScore = score + pts
+      setScore(newScore)
       setLastPts(pts)
       setLastCorrect(true)
     } else {
@@ -234,6 +256,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       setLastCorrect(false)
     }
 
+    saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', newScore, qIndex)
     setTimeout(() => advanceQuestion(qIndex, questions), 2500)
   }
 
@@ -249,21 +272,32 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       (addr) => Boolean(addr) && addr !== '0x0000000000000000000000000000000000000000'
     )
 
-    if (players.length === 0) {
+    if (players.length === 0 && !activeAddress) {
       toast.error('No registered onchain players found in this room.')
       return
     }
 
     const maxSplits = payoutMode === 1 ? 2 : payoutMode === 2 ? 3 : payoutMode === 3 ? 5 : 1
-    // Deduplicate and take up to the configured split capacity
+    // Deduplicate and prioritize active winner / players
     const uniquePlayers: `0x${string}`[] = []
     const seen = new Set<string>()
+
+    // Prioritize active address if present in players list or solo room
+    if (activeAddress && players.some(p => p.toLowerCase() === activeAddress.toLowerCase())) {
+      uniquePlayers.push(activeAddress as `0x${string}`)
+      seen.add(activeAddress.toLowerCase())
+    }
+
     for (const p of players) {
       const lower = p.toLowerCase()
       if (!seen.has(lower)) {
         seen.add(lower)
         uniquePlayers.push(p)
       }
+    }
+
+    if (uniquePlayers.length === 0 && activeAddress) {
+      uniquePlayers.push(activeAddress as `0x${string}`)
     }
 
     const winnersToDeclare = uniquePlayers.slice(0, maxSplits)
@@ -347,11 +381,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                     return (
                       <div
                         key={pAddr + i}
-                        className={`flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs border ${
-                          isCurrent
-                            ? 'bg-purple-50 text-purple-900 border-purple-200 font-semibold shadow-2xs'
-                            : 'bg-white/90 text-slate-700 border-slate-200/80 font-medium'
-                        }`}
+                        className={`flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs border ${isCurrent
+                          ? 'bg-purple-50 text-purple-900 border-purple-200 font-semibold shadow-2xs'
+                          : 'bg-white/90 text-slate-700 border-slate-200/80 font-medium'
+                          }`}
                       >
                         <span className="font-mono text-[11px]">
                           {pAddr.slice(0, 6)}...{pAddr.slice(-4)}
@@ -614,85 +647,51 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             {currentQ.options.map((opt, i) => {
               const isSelected = selectedIndex === i
+              const isCorrect = i === currentQ.correctIndex
+              const isWrong = isSelected && !isCorrect
+
+              let btnStyle = 'bg-white/80 hover:bg-white border border-slate-200/80 hover:border-slate-300 hover:shadow-sm cursor-pointer text-slate-800'
+              let badgeStyle = 'bg-slate-100 text-slate-500 group-hover:bg-slate-200/80 group-hover:text-slate-800'
+              let textStyle = 'text-slate-800'
+
+              if (answered) {
+                if (isCorrect) {
+                  btnStyle = 'bg-emerald-50/95 border-emerald-500 text-emerald-950 ring-1 ring-emerald-500/30 shadow-xs font-semibold cursor-default'
+                  badgeStyle = 'bg-emerald-600 text-white'
+                  textStyle = 'text-emerald-950 font-bold'
+                } else if (isWrong) {
+                  btnStyle = 'bg-rose-50/95 border-rose-400 text-rose-950 ring-1 ring-rose-500/30 shadow-xs font-semibold cursor-default'
+                  badgeStyle = 'bg-rose-600 text-white'
+                  textStyle = 'text-rose-950 font-semibold'
+                } else {
+                  btnStyle = 'bg-white/30 border border-slate-200/40 text-slate-400 opacity-40 cursor-default'
+                  badgeStyle = 'bg-slate-100/60 text-slate-400'
+                  textStyle = 'text-slate-400'
+                }
+              }
+
               return (
                 <button
                   key={i}
                   type="button"
                   onClick={() => handleAnswer(i)}
                   disabled={answered}
-                  className={`group relative flex items-center gap-3.5 w-full rounded-2xl p-4 text-left text-sm font-medium transition-all duration-150 ${
-                    !answered
-                      ? 'bg-white/80 hover:bg-white border border-slate-200/80 hover:border-slate-300 hover:shadow-sm cursor-pointer'
-                      : isSelected
-                      ? 'bg-white border-slate-900 ring-1 ring-slate-900/10 shadow-sm text-slate-900 font-semibold cursor-default'
-                      : 'bg-white/30 border border-slate-200/40 text-slate-400 opacity-40 cursor-default'
-                  }`}
+                  className={`group relative flex items-center gap-3.5 w-full rounded-2xl p-4 text-left text-sm font-medium transition-all duration-150 ${btnStyle}`}
                   style={{
                     backdropFilter: 'blur(20px)',
                     WebkitBackdropFilter: 'blur(20px)',
                   }}
                 >
                   <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg font-mono text-xs font-semibold transition-colors ${
-                      !answered
-                        ? 'bg-slate-100 text-slate-500 group-hover:bg-slate-200/80 group-hover:text-slate-800'
-                        : isSelected
-                        ? 'bg-slate-900 text-white'
-                        : 'bg-slate-100/60 text-slate-400'
-                    }`}
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg font-mono text-xs font-semibold transition-colors ${badgeStyle}`}
                   >
                     {String.fromCharCode(65 + i)}
                   </span>
-                  <span className="flex-1 leading-snug break-words text-balance">{opt}</span>
+                  <span className={`flex-1 leading-snug break-words text-balance ${textStyle}`}>{opt}</span>
                 </button>
               )
             })}
           </div>
-
-          {/* Ultra-Clean Modern Resolution Strip */}
-          {answered && (
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="mt-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 p-3 sm:p-3.5 backdrop-blur-xl shadow-xs"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
-                {/* Left: Clear Status Badge & Answer Reveal */}
-                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 min-w-0">
-                  {lastCorrect ? (
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white tracking-wide shrink-0 shadow-2xs">
-                      Correct
-                    </span>
-                  ) : selectedIndex === null ? (
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500 text-white tracking-wide shrink-0 shadow-2xs">
-                      Time's Up
-                    </span>
-                  ) : (
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-600 text-white tracking-wide shrink-0 shadow-2xs">
-                      Wrong
-                    </span>
-                  )}
-
-                  {!lastCorrect && (
-                    <div className="flex items-center gap-1.5 text-xs text-slate-600 min-w-0">
-                      <span className="text-slate-500 font-medium shrink-0">Correct:</span>
-                      <span className="font-bold font-mono text-slate-900 bg-white border border-slate-200/90 px-2 py-0.5 rounded-md shadow-2xs">
-                        Option {String.fromCharCode(65 + currentQ.correctIndex)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Right: Score Delta (Matches exact added score) */}
-                {lastCorrect && lastPts !== null && (
-                  <div className="flex items-center gap-1 font-mono text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg self-end sm:self-center shrink-0 shadow-2xs">
-                    +{lastPts} pts
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          )}
         </div>
       </div>
     )
@@ -776,14 +775,21 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
           )}
 
           {!isHost && TRIVIA_GAME_ADDRESS && (
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl p-4 text-center" style={glass.inner}>
-              <div className="flex items-center justify-center gap-2 mb-1 text-purple-700">
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl p-4 text-center space-y-3" style={glass.inner}>
+              <div className="flex items-center justify-center gap-2 text-purple-700">
                 <Loader2 size={16} className="animate-spin" />
                 <p className="text-sm font-bold">Game Completed!</p>
               </div>
-              <p className="text-xs" style={{ color: 'var(--muted)' }}>
+              <p className="text-xs text-slate-500">
                 Waiting for host to finalize the game and distribute the prize...
               </p>
+              <button
+                type="button"
+                onClick={onBack}
+                className="w-full rounded-xl py-2.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200/90 shadow-2xs transition-all active:scale-98 cursor-pointer"
+              >
+                Return to Lobby
+              </button>
             </motion.div>
           )}
 

@@ -1,12 +1,13 @@
 import { useState, useEffect, startTransition } from 'react'
 import { usePrivy, useLogin } from '@privy-io/react-auth'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users, Zap, Trophy, X, Sparkles, ArrowRight, ShieldCheck, HelpCircle } from 'lucide-react'
+import { Users, Zap, Trophy, X, Sparkles, ShieldCheck, HelpCircle } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
-import { getDiceBearAvatarUrl } from '@/lib/userProfile'
+import { getDiceBearAvatarUrl, getUserProfile, generateRandomUsername } from '@/lib/userProfile'
+import { useOnchainProfile } from '@/hooks/useTrivioProfileRegistry'
 import { useLiveWinners } from '@/hooks/useLiveWinners'
-import { formatTimeAgo } from '@/lib/winnersStorage'
+import { formatTimeAgo, type WinnerPayoutRecord } from '@/lib/winnersStorage'
 import { setPendingJoin, getRoomCategory, extractRoomCode } from '@/lib/roomStorage'
 
 /* ── Typewriter hook ─────────────────────────────────────────────────────── */
@@ -225,6 +226,71 @@ function HowToPlayModal({ open, onClose }: { open: boolean; onClose: () => void 
 }
 
 /* ── Live Winners Marquee ─────────────────────────────────────────────────── */
+function TickerWinnerButton({
+  item,
+  onClick,
+}: {
+  item: WinnerPayoutRecord
+  onClick: () => void
+}) {
+  const { profile: onchainProfile } = useOnchainProfile(item.winnerAddress)
+  const localProfile = getUserProfile(item.winnerAddress)
+
+  const rawUsername =
+    onchainProfile?.username ||
+    localProfile?.username ||
+    (item.username && !item.username.startsWith('0x')
+      ? item.username
+      : generateRandomUsername(item.winnerAddress))
+
+  const formattedUsername = rawUsername.startsWith('@')
+    ? rawUsername
+    : `@${rawUsername}`
+
+  const resolvedAvatar =
+    onchainProfile?.avatarUrl ||
+    localProfile?.avatarUrl ||
+    (item.avatarSeed
+      ? getDiceBearAvatarUrl(localProfile?.avatarStyle || 'bottts-neutral', item.avatarSeed)
+      : getDiceBearAvatarUrl('bottts-neutral', item.winnerAddress || rawUsername))
+
+  return (
+    <button
+      onClick={onClick}
+      type="button"
+      className="group flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:px-3.5 py-1 sm:py-1.5 text-[11px] sm:text-xs text-white transition-all duration-200 hover:bg-white/25 hover:scale-105 active:scale-95 cursor-pointer shrink-0"
+      style={{
+        background: 'rgba(255, 255, 255, 0.16)',
+        border: '1px solid rgba(255, 255, 255, 0.26)',
+        boxShadow: '0 4px 18px rgba(0, 0, 0, 0.08)',
+      }}
+    >
+      <img
+        src={resolvedAvatar}
+        alt={rawUsername}
+        className="h-4 w-4 sm:h-5 sm:w-5 rounded-full bg-white/20 border border-white/40 shrink-0 object-cover"
+        onError={(e) => {
+          e.currentTarget.src = getDiceBearAvatarUrl('bottts-neutral', item.winnerAddress || rawUsername)
+        }}
+      />
+      <span className="font-semibold text-white/90 tracking-tight">{formattedUsername}</span>
+      <span className="font-black text-white tracking-tight inline-flex items-center gap-0.5 sm:gap-1">
+        +${item.amount}
+      </span>
+      <span className="inline-flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-white/95 uppercase tracking-wide leading-none">
+        <TokenUSDC variant="branded" size={14} className="shrink-0" />
+        <span>USDC</span>
+      </span>
+      <span className="text-[10px] sm:text-[11px] text-white/70 font-medium truncate max-w-[110px] sm:max-w-none">
+        · {item.category}
+      </span>
+      <span className="text-[9px] sm:text-[10px] font-mono text-purple-200/90 ml-0.5">
+        {formatTimeAgo(item.timestamp)}
+      </span>
+    </button>
+  )
+}
+
 function LiveWinnersTicker({ onWinnerClick }: { onWinnerClick: () => void }) {
   const { payouts } = useLiveWinners()
 
@@ -237,37 +303,11 @@ function LiveWinnersTicker({ onWinnerClick }: { onWinnerClick: () => void }) {
       <div className="w-full max-w-full overflow-hidden select-none relative py-1 trivio-ticker-mask">
         <div className="animate-marquee flex items-center gap-2 sm:gap-3 py-0.5">
           {continuousList.map((item, idx) => (
-            <button
+            <TickerWinnerButton
               key={`${item.roomCode}-${item.timestamp}-${idx}`}
+              item={item}
               onClick={onWinnerClick}
-              type="button"
-              className="group flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:px-3.5 py-1 sm:py-1.5 text-[11px] sm:text-xs text-white transition-all duration-200 hover:bg-white/25 hover:scale-105 active:scale-95 cursor-pointer shrink-0"
-              style={{
-                background: 'rgba(255, 255, 255, 0.16)',
-                border: '1px solid rgba(255, 255, 255, 0.26)',
-                boxShadow: '0 4px 18px rgba(0, 0, 0, 0.08)',
-              }}
-            >
-              <img
-                src={getDiceBearAvatarUrl('bottts-neutral', item.avatarSeed || item.username || item.winnerAddress)}
-                alt={item.username || 'Winner'}
-                className="h-4 w-4 sm:h-5 sm:w-5 rounded-full bg-white/20 border border-white/40 shrink-0 object-cover"
-              />
-              <span className="font-semibold text-white/90 tracking-tight">@{item.username || `${item.winnerAddress.slice(0, 6)}...`}</span>
-              <span className="font-black text-white tracking-tight inline-flex items-center gap-0.5 sm:gap-1">
-                +${item.amount}
-              </span>
-              <span className="inline-flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-white/95 uppercase tracking-wide leading-none">
-                <TokenUSDC variant="branded" size={14} className="shrink-0" />
-                <span>USDC</span>
-              </span>
-              <span className="text-[10px] sm:text-[11px] text-white/70 font-medium truncate max-w-[110px] sm:max-w-none">
-                · {item.category}
-              </span>
-              <span className="text-[9px] sm:text-[10px] font-mono text-purple-200/90 ml-0.5">
-                {formatTimeAgo(item.timestamp)}
-              </span>
-            </button>
+            />
           ))}
         </div>
       </div>
@@ -441,14 +481,15 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
             {/* 2. Direct Room Code / Invite Link Fast-Track Input */}
             <form
               onSubmit={handleJoinWithCode}
-              className="w-full max-w-[280px] sm:max-w-[315px]"
+              className="w-full max-w-[290px] sm:max-w-[325px] px-1 sm:px-0"
             >
               <div
-                className="relative flex items-center w-full rounded-2xl p-1 pl-3.5 pr-1 transition-all duration-200 focus-within:border-white/60 focus-within:bg-black/35 focus-within:ring-2 focus-within:ring-white/20 shadow-md group"
+                className="relative flex items-center w-full rounded-2xl p-1 pl-3.5 pr-1.5 transition-all duration-200 focus-within:border-white/60 focus-within:bg-black/35 focus-within:ring-2 focus-within:ring-white/20 shadow-md group"
                 style={{
                   background: 'rgba(0, 0, 0, 0.22)',
                   border: '1px solid rgba(255, 255, 255, 0.24)',
                   backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
                 }}
               >
                 <input
@@ -466,17 +507,21 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
                   onPaste={handlePaste}
                   placeholder="Enter room code (e.g. CRYP99)"
                   maxLength={100}
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="go"
                   aria-label="Room Code"
-                  className="w-full bg-transparent text-xs sm:text-sm font-mono font-bold tracking-wider text-white placeholder:font-sans placeholder:tracking-normal placeholder:font-medium placeholder:text-white/50 focus:outline-none"
+                  className="flex-1 min-w-0 bg-transparent text-xs sm:text-sm font-mono font-bold tracking-wider text-white placeholder:font-sans placeholder:tracking-normal placeholder:font-medium placeholder:text-white/50 focus:outline-none placeholder:text-[11px] sm:placeholder:text-xs"
                 />
                 <button
                   type="submit"
                   disabled={!roomCode.trim()}
-                  className="flex h-7 w-7 sm:h-7.5 sm:w-7.5 shrink-0 items-center justify-center rounded-xl bg-white text-[#1e0a3c] transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-30 disabled:scale-100 disabled:cursor-not-allowed cursor-pointer shadow-xs"
+                  className="flex h-7 px-2.5 sm:h-7.5 sm:px-3 shrink-0 items-center justify-center rounded-xl bg-white text-[#1e0a3c] font-black text-[11px] sm:text-xs tracking-wider uppercase transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-30 disabled:scale-100 disabled:cursor-not-allowed cursor-pointer shadow-xs select-none"
                   title="Join Room"
                   aria-label="Join Room"
                 >
-                  <ArrowRight size={13} className="stroke-[2.5]" />
+                  GO
                 </button>
               </div>
             </form>

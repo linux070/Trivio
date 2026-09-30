@@ -36,6 +36,7 @@ import {
   getUserProfile,
   saveUserProfile,
   getDiceBearAvatarUrl,
+  generateRandomUsername,
   DICEBEAR_STYLES,
   isReservedUsername,
   validateUsername,
@@ -54,6 +55,7 @@ import {
 import { getActiveGame, clearActiveGame, type ActiveGameSession } from '@/lib/roomStorage'
 import { useLiveRooms } from '@/hooks/useLiveRooms'
 import { useLiveWinners } from '@/hooks/useLiveWinners'
+import { type LiveLeaderboardEntry, type LatestPayoutInfo } from '@/lib/winnersStorage'
 import SoloPracticeModal from '@/components/SoloPracticeModal'
 import HowToPlayModal from '@/components/HowToPlayModal'
 
@@ -63,6 +65,213 @@ interface LobbyProps {
   onJoinRoom: (category: Category, prefillCode?: string) => void
   onContinueGame?: (roomCode: string, category: Category) => void
   onDisconnect?: () => void
+}
+
+function PodiumWinnerCard({
+  winner,
+  rankIndex,
+}: {
+  winner: LiveLeaderboardEntry
+  rankIndex: number
+}) {
+  const podiumColors = [
+    {
+      border: 'border-amber-300',
+      bg: 'bg-gradient-to-b from-amber-500/10 via-amber-50/50 to-white',
+      badge: 'bg-amber-400 text-amber-950',
+      medal: '🥇',
+    },
+    {
+      border: 'border-slate-300',
+      bg: 'bg-gradient-to-b from-slate-200/40 via-slate-50/50 to-white',
+      badge: 'bg-slate-300 text-slate-900',
+      medal: '🥈',
+    },
+    {
+      border: 'border-amber-700/30',
+      bg: 'bg-gradient-to-b from-amber-700/10 via-amber-50/30 to-white',
+      badge: 'bg-amber-700/30 text-amber-950',
+      medal: '🥉',
+    },
+  ]
+  const style = podiumColors[rankIndex] || podiumColors[2]
+
+  const { profile: onchainProfile } = useOnchainProfile(winner.address)
+  const localProfile = getUserProfile(winner.address)
+
+  const rawUsername =
+    onchainProfile?.username ||
+    localProfile?.username ||
+    (winner.username && !winner.username.startsWith('0x')
+      ? winner.username
+      : generateRandomUsername(winner.address))
+
+  const formattedUsername = rawUsername.startsWith('@')
+    ? rawUsername
+    : `@${rawUsername}`
+
+  const resolvedAvatar =
+    onchainProfile?.avatarUrl ||
+    localProfile?.avatarUrl ||
+    (winner.avatarSeed
+      ? getDiceBearAvatarUrl(localProfile?.avatarStyle || 'bottts-neutral', winner.avatarSeed)
+      : getDiceBearAvatarUrl('bottts-neutral', winner.address || rawUsername))
+
+  return (
+    <div
+      className={`relative flex flex-col items-center text-center p-3 rounded-2xl border ${style.border} ${style.bg} shadow-xs transition-all hover:scale-[1.02]`}
+    >
+      {/* Rank Badge */}
+      <div className="absolute -top-2.5 flex items-center justify-center">
+        <span className={`text-[10px] font-black px-2 py-0.2 rounded-full shadow-2xs ${style.badge}`}>
+          #{winner.rank}
+        </span>
+      </div>
+
+      {/* Avatar */}
+      <div className="mt-1 relative">
+        <img
+          src={resolvedAvatar}
+          alt={rawUsername}
+          className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-white border border-slate-200/80 shadow-xs object-cover p-0.5"
+          onError={(e) => {
+            e.currentTarget.src = getDiceBearAvatarUrl('bottts-neutral', winner.address || rawUsername)
+          }}
+        />
+        <span className="absolute -bottom-1 -right-1 text-xs">
+          {style.medal}
+        </span>
+      </div>
+
+      {/* Username */}
+      <span
+        className="text-xs font-bold text-slate-900 tracking-tight mt-1.5 truncate max-w-[90%]"
+        title={formattedUsername}
+      >
+        {formattedUsername}
+      </span>
+
+      {/* USDC Won */}
+      <div className="flex items-center gap-1.5 mt-0.5">
+        <TokenUSDC variant="branded" size={17} className="shrink-0" />
+        <span className="text-xs sm:text-sm font-black text-slate-950 tabular-nums">
+          ${winner.totalWinnings}
+        </span>
+      </div>
+
+      {/* Wins count */}
+      <span className="text-[10px] font-semibold text-slate-500 mt-0.5">
+        {winner.winCount} {winner.winCount === 1 ? 'win' : 'wins'}
+      </span>
+    </div>
+  )
+}
+
+function RunnerUpRow({ entry }: { entry: LiveLeaderboardEntry }) {
+  const { profile: onchainProfile } = useOnchainProfile(entry.address)
+  const localProfile = getUserProfile(entry.address)
+
+  const rawUsername =
+    onchainProfile?.username ||
+    localProfile?.username ||
+    (entry.username && !entry.username.startsWith('0x')
+      ? entry.username
+      : generateRandomUsername(entry.address))
+
+  const formattedUsername = rawUsername.startsWith('@')
+    ? rawUsername
+    : `@${rawUsername}`
+
+  const resolvedAvatar =
+    onchainProfile?.avatarUrl ||
+    localProfile?.avatarUrl ||
+    (entry.avatarSeed
+      ? getDiceBearAvatarUrl(localProfile?.avatarStyle || 'bottts-neutral', entry.avatarSeed)
+      : getDiceBearAvatarUrl('bottts-neutral', entry.address || rawUsername))
+
+  return (
+    <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 border border-slate-200/70 hover:bg-white transition-colors">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className="text-xs font-black text-slate-400 w-4 text-center">
+          #{entry.rank}
+        </span>
+        <img
+          src={resolvedAvatar}
+          alt={rawUsername}
+          className="h-7 w-7 rounded-full bg-white border border-slate-200 shadow-2xs object-cover p-0.5 shrink-0"
+          onError={(e) => {
+            e.currentTarget.src = getDiceBearAvatarUrl('bottts-neutral', entry.address || rawUsername)
+          }}
+        />
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-slate-900 truncate">
+            {formattedUsername}
+          </p>
+          <p className="text-[10px] text-slate-500 font-medium">
+            {entry.winCount} {entry.winCount === 1 ? 'win' : 'wins'}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        <TokenUSDC variant="branded" size={15} className="shrink-0" />
+        <span className="text-xs font-extrabold text-slate-900 tabular-nums">
+          ${entry.totalWinnings}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function LatestPayoutTicker({ latestPayout }: { latestPayout: LatestPayoutInfo | null }) {
+  if (!latestPayout) {
+    return (
+      <span className="text-slate-400 italic truncate ml-2 text-right">
+        No payouts yet today · Win a room to appear here live!
+      </span>
+    )
+  }
+
+  return <LatestPayoutItem latestPayout={latestPayout} />
+}
+
+function LatestPayoutItem({ latestPayout }: { latestPayout: LatestPayoutInfo }) {
+  const { profile: onchainProfile } = useOnchainProfile(latestPayout.address)
+  const localProfile = getUserProfile(latestPayout.address)
+
+  const rawUsername =
+    onchainProfile?.username ||
+    localProfile?.username ||
+    (latestPayout.username && !latestPayout.username.startsWith('0x')
+      ? latestPayout.username
+      : generateRandomUsername(latestPayout.address))
+
+  const formattedUsername = rawUsername.startsWith('@')
+    ? rawUsername
+    : `@${rawUsername}`
+
+  const resolvedAvatar =
+    onchainProfile?.avatarUrl ||
+    localProfile?.avatarUrl ||
+    getDiceBearAvatarUrl('bottts-neutral', latestPayout.address || rawUsername)
+
+  return (
+    <span className="inline-flex items-center gap-1.5 text-slate-600 truncate ml-2 text-right min-w-0">
+      <img
+        src={resolvedAvatar}
+        alt={rawUsername}
+        className="h-4 w-4 rounded-full border border-slate-200 bg-white object-cover inline-block shrink-0"
+        onError={(e) => {
+          e.currentTarget.src = getDiceBearAvatarUrl('bottts-neutral', latestPayout.address || rawUsername)
+        }}
+      />
+      <strong className="text-slate-900 truncate">{formattedUsername}</strong>
+      <span>won</span>
+      <strong className="text-emerald-700 font-bold shrink-0">${latestPayout.amount} USDC</strong>
+      <span className="text-slate-500 truncate hidden sm:inline">in {latestPayout.category}</span>
+      <span className="text-slate-400 shrink-0">({latestPayout.timeAgo})</span>
+    </span>
+  )
 }
 
 function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
@@ -102,7 +311,7 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
 
   const privyWalletAddress = user?.wallet?.address as `0x${string}` | undefined
   const activeAddress = wagmiAddress || privyWalletAddress || '0x0000000000000000000000000000000000000000'
-  const [profile, setProfile] = useState<UserProfile | null>(() => getUserProfile(activeAddress))
+  const [profile, setProfile] = useState<UserProfile | null>(() => getUserProfile(activeAddress) || getUserProfile())
   const [avatarImgError, setAvatarImgError] = useState(false)
 
   useEffect(() => {
@@ -111,7 +320,7 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
 
   useEffect(() => {
     if (activeAddress && activeAddress !== '0x0000000000000000000000000000000000000000') {
-      const p = getUserProfile(activeAddress)
+      const p = getUserProfile(activeAddress) || getUserProfile()
       if (p) {
         if (!p.avatarUrl) {
           const fixed: UserProfile = {
@@ -403,7 +612,9 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
   const shortAddr = activeAddress && activeAddress !== '0x0000000000000000000000000000000000000000'
     ? `${activeAddress.slice(0, 6)}...${activeAddress.slice(-4)}`
     : ''
-  const displayName = profile?.username ? `@${profile.username}` : (shortAddr || 'player')
+  const effectiveProfile = profile || (onchainProfile ? { username: onchainProfile.username, avatarUrl: onchainProfile.avatarUrl } : null) || getUserProfile(activeAddress) || getUserProfile()
+  const displayName = effectiveProfile?.username ? `@${effectiveProfile.username.replace(/^@/, '')}` : (shortAddr || 'player')
+  const effectiveAvatar = effectiveProfile?.avatarUrl || profile?.avatarUrl || (effectiveProfile?.username ? getDiceBearAvatarUrl('bottts-neutral', effectiveProfile.username) : '')
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -415,10 +626,10 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
         title={isProfileVerified ? 'Onchain Verified Handle' : 'Handle Unclaimed Onchain - Click to claim'}
       >
         <div className="relative flex h-6 w-6 sm:h-7 sm:w-7 shrink-0 items-center justify-center rounded-full bg-purple-50 ring-1 ring-black/5">
-          {profile?.avatarUrl && !avatarImgError ? (
+          {effectiveAvatar && !avatarImgError ? (
             <img
-              src={profile.avatarUrl}
-              alt={profile.username}
+              src={effectiveAvatar}
+              alt={effectiveProfile?.username || 'Profile'}
               className="h-full w-full rounded-full object-cover"
               onError={() => setAvatarImgError(true)}
             />
@@ -1250,114 +1461,17 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
               <>
                 {/* Podium (Top 3) */}
                 <div className="grid grid-cols-3 gap-2 pt-1">
-                  {liveLeaderboard.slice(0, 3).map((winner, idx) => {
-                    const podiumColors = [
-                      {
-                        border: 'border-amber-300',
-                        bg: 'bg-gradient-to-b from-amber-500/10 via-amber-50/50 to-white',
-                        badge: 'bg-amber-400 text-amber-950',
-                        medal: '🥇',
-                      },
-                      {
-                        border: 'border-slate-300',
-                        bg: 'bg-gradient-to-b from-slate-200/40 via-slate-50/50 to-white',
-                        badge: 'bg-slate-300 text-slate-900',
-                        medal: '🥈',
-                      },
-                      {
-                        border: 'border-amber-700/30',
-                        bg: 'bg-gradient-to-b from-amber-700/10 via-amber-50/30 to-white',
-                        badge: 'bg-amber-700/30 text-amber-950',
-                        medal: '🥉',
-                      },
-                    ]
-                    const style = podiumColors[idx] || podiumColors[2]
-                    const avatar = getDiceBearAvatarUrl('bottts-neutral', winner.avatarSeed || winner.username)
-
-                    return (
-                      <div
-                        key={winner.username + idx}
-                        className={`relative flex flex-col items-center text-center p-3 rounded-2xl border ${style.border} ${style.bg} shadow-xs transition-all hover:scale-[1.02]`}
-                      >
-                        {/* Rank Badge */}
-                        <div className="absolute -top-2.5 flex items-center justify-center">
-                          <span className={`text-[10px] font-black px-2 py-0.2 rounded-full shadow-2xs ${style.badge}`}>
-                            #{winner.rank}
-                          </span>
-                        </div>
-
-                        {/* Avatar */}
-                        <div className="mt-1 relative">
-                          <img
-                            src={avatar}
-                            alt={winner.username}
-                            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-white border border-slate-200/80 shadow-xs object-cover p-0.5"
-                          />
-                          <span className="absolute -bottom-1 -right-1 text-xs">
-                            {style.medal}
-                          </span>
-                        </div>
-
-                        {/* Username */}
-                        <span className="text-xs font-bold text-slate-900 tracking-tight mt-1.5 truncate max-w-[90%]">
-                          {winner.username}
-                        </span>
-
-                        {/* USDC Won */}
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <TokenUSDC variant="branded" size={17} className="shrink-0" />
-                          <span className="text-xs sm:text-sm font-black text-slate-950 tabular-nums">
-                            ${winner.totalWinnings}
-                          </span>
-                        </div>
-
-                        {/* Wins count */}
-                        <span className="text-[10px] font-semibold text-slate-500 mt-0.5">
-                          {winner.winCount} {winner.winCount === 1 ? 'win' : 'wins'}
-                        </span>
-                      </div>
-                    )
-                  })}
+                  {liveLeaderboard.slice(0, 3).map((winner, idx) => (
+                    <PodiumWinnerCard key={winner.address + idx} winner={winner} rankIndex={idx} />
+                  ))}
                 </div>
 
                 {/* Runners Up (Ranks 4 & 5 if present) */}
                 {liveLeaderboard.length > 3 && (
                   <div className="space-y-1.5 pt-1">
-                    {liveLeaderboard.slice(3, 5).map((entry, idx) => {
-                      const avatar = getDiceBearAvatarUrl('bottts-neutral', entry.avatarSeed || entry.username)
-                      return (
-                        <div
-                          key={entry.username + idx}
-                          className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 border border-slate-200/70 hover:bg-white transition-colors"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="text-xs font-black text-slate-400 w-4 text-center">
-                              #{entry.rank}
-                            </span>
-                            <img
-                              src={avatar}
-                              alt={entry.username}
-                              className="h-7 w-7 rounded-full bg-white border border-slate-200 shadow-2xs object-cover p-0.5 shrink-0"
-                            />
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-slate-900 truncate">
-                                {entry.username}
-                              </p>
-                              <p className="text-[10px] text-slate-500 font-medium">
-                                {entry.winCount} {entry.winCount === 1 ? 'win' : 'wins'}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1.5">
-                            <TokenUSDC variant="branded" size={15} className="shrink-0" />
-                            <span className="text-xs font-extrabold text-slate-900 tabular-nums">
-                              ${entry.totalWinnings}
-                            </span>
-                          </div>
-                        </div>
-                      )
-                    })}
+                    {liveLeaderboard.slice(3, 5).map((entry, idx) => (
+                      <RunnerUpRow key={entry.address + idx} entry={entry} />
+                    ))}
                   </div>
                 )}
               </>
@@ -1369,18 +1483,7 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                 <Sparkles size={12} className="text-violet-600" />
                 Latest Payout:
               </span>
-              <span className="text-slate-600 truncate ml-2 text-right">
-                {latestPayout ? (
-                  <>
-                    <strong className="text-slate-900">{latestPayout.username}</strong> won{' '}
-                    <strong className="text-emerald-700 font-bold">${latestPayout.amount} USDC</strong> in {latestPayout.category} ({latestPayout.timeAgo})
-                  </>
-                ) : (
-                  <span className="text-slate-400 italic">
-                    No payouts yet today · Win a room to appear here live!
-                  </span>
-                )}
-              </span>
+              <LatestPayoutTicker latestPayout={latestPayout} />
             </div>
           </section>
 

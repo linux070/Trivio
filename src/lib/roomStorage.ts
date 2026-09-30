@@ -241,6 +241,7 @@ export interface ActiveGameSession {
   isHost?: boolean
   phase?: 'lobby' | 'playing' | 'finished'
   score?: number
+  qIndex?: number
   savedAt: number
 }
 
@@ -250,7 +251,8 @@ export function saveActiveGame(
   category: Category,
   isHost?: boolean,
   phase?: 'lobby' | 'playing' | 'finished',
-  score?: number
+  score?: number,
+  qIndex?: number
 ): void {
   if (!roomCode) return
   const code = roomCode.trim().toUpperCase()
@@ -258,12 +260,14 @@ export function saveActiveGame(
   const existing = getActiveGame()
   const resolvedPhase = phase ?? (existing?.roomCode === code ? existing.phase : undefined)
   const resolvedScore = score ?? (existing?.roomCode === code ? existing.score : undefined)
+  const resolvedQIndex = qIndex ?? (existing?.roomCode === code ? existing.qIndex : undefined)
   const session: ActiveGameSession = {
     roomCode: code,
     category,
     isHost,
     phase: resolvedPhase,
     score: resolvedScore,
+    qIndex: resolvedQIndex,
     savedAt: Date.now(),
   }
   try {

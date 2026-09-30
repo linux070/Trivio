@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Clock, Zap, Trophy } from 'lucide-react'
+import { X, Check, Clock, Zap, Trophy } from 'lucide-react'
 import { getQuestions, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
 import { QuestionCard } from '@/components/QuestionCard'
 
@@ -208,81 +208,72 @@ export default function SoloPracticeModal({
               <div className="grid grid-cols-1 gap-2 pt-1">
                 {currentQ.options.map((opt, idx) => {
                   const isSelected = selectedIndex === idx
+                  const isCorrect = idx === currentQ.correctIndex
+                  const isWrong = isSelected && !isCorrect
+
+                  let cardStyle =
+                    'bg-white hover:bg-slate-50/80 border border-slate-200/90 hover:border-purple-300 hover:shadow-xs shadow-[0_2px_6px_-2px_rgba(0,0,0,0.03)] cursor-pointer text-slate-800 active:scale-[0.99]'
+                  let badgeStyle =
+                    'bg-slate-100 text-slate-700 border border-slate-200 group-hover:bg-purple-600 group-hover:text-white group-hover:border-purple-600 shadow-2xs'
+                  let textStyle = 'text-slate-800 font-medium'
+
+                  if (answered) {
+                    if (isCorrect) {
+                      cardStyle =
+                        'bg-emerald-50/50 border-emerald-500/90 shadow-[0_4px_16px_-4px_rgba(16,185,129,0.18)] cursor-default'
+                      badgeStyle = 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                      textStyle = 'text-slate-900 font-semibold'
+                    } else if (isWrong) {
+                      cardStyle =
+                        'bg-rose-50/40 border-rose-400/90 shadow-[0_4px_16px_-4px_rgba(244,63,94,0.15)] cursor-default'
+                      badgeStyle = 'bg-rose-600 text-white border-rose-600 shadow-2xs'
+                      textStyle = 'text-slate-900 font-semibold'
+                    } else {
+                      cardStyle =
+                        'bg-slate-50/40 border-slate-200/50 opacity-45 cursor-default'
+                      badgeStyle = 'bg-slate-100/70 text-slate-400 border-slate-200/40'
+                      textStyle = 'text-slate-400'
+                    }
+                  }
+
                   return (
                     <button
                       key={idx}
                       type="button"
                       disabled={answered}
                       onClick={() => handleAnswer(idx)}
-                      className={`group relative flex items-center gap-3 w-full p-3 sm:p-3.5 rounded-2xl text-left text-xs sm:text-sm font-medium transition-all duration-150 ${
-                        !answered
-                          ? 'bg-white hover:bg-slate-50/80 border border-slate-200/80 hover:border-slate-300 hover:shadow-xs cursor-pointer text-slate-800'
-                          : isSelected
-                          ? 'bg-white border-slate-900 ring-1 ring-slate-900/10 shadow-xs text-slate-900 font-semibold cursor-default'
-                          : 'bg-slate-50/50 border border-slate-200/40 text-slate-400 opacity-40 cursor-default'
-                      }`}
+                      className={`group relative flex items-center gap-3 w-full p-3 sm:p-3.5 rounded-2xl text-left text-xs sm:text-sm transition-all duration-150 ${cardStyle}`}
                     >
                       <span
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg font-mono text-xs font-semibold transition-colors ${
-                          !answered
-                            ? 'bg-slate-100 text-slate-500 group-hover:bg-slate-200/80 group-hover:text-slate-800'
-                            : isSelected
-                            ? 'bg-slate-900 text-white'
-                            : 'bg-slate-100/60 text-slate-400'
-                        }`}
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-xs sm:text-[13px] font-bold tracking-tight transition-all select-none leading-none ${badgeStyle}`}
                       >
                         {String.fromCharCode(65 + idx)}
                       </span>
-                      <span className="flex-1 leading-snug break-words text-balance">{opt}</span>
+                      <span className={`flex-1 leading-snug break-words text-balance ${textStyle}`}>{opt}</span>
+                      {answered && isCorrect && (
+                        <motion.div
+                          initial={{ scale: 0.5, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ duration: 0.2 }}
+                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xs"
+                        >
+                          <Check size={12} className="stroke-[3]" />
+                        </motion.div>
+                      )}
+                      {answered && isWrong && (
+                        <motion.div
+                          initial={{ scale: 0.5, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ duration: 0.2 }}
+                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 text-white shadow-2xs"
+                        >
+                          <X size={12} className="stroke-[3]" />
+                        </motion.div>
+                      )}
                     </button>
                   )
                 })}
               </div>
-
-              {/* Ultra-Clean Modern Resolution Strip */}
-              {answered && (
-                <motion.div
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2, ease: 'easeOut' }}
-                  className="mt-2 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 p-3 sm:p-3.5 shadow-xs"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-2.5">
-                    {/* Left: Clear Status Badge & Answer Reveal */}
-                    <div className="flex flex-wrap items-center gap-2 min-w-0">
-                      {selectedIndex === currentQ.correctIndex ? (
-                        <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white tracking-wide shrink-0 shadow-2xs">
-                          Correct
-                        </span>
-                      ) : selectedIndex === -1 ? (
-                        <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500 text-white tracking-wide shrink-0 shadow-2xs">
-                          Time's Up
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-600 text-white tracking-wide shrink-0 shadow-2xs">
-                          Wrong
-                        </span>
-                      )}
-
-                      {selectedIndex !== currentQ.correctIndex && (
-                        <div className="flex items-center gap-1.5 text-xs text-slate-600 min-w-0">
-                          <span className="text-slate-500 font-medium shrink-0">Correct:</span>
-                          <span className="font-bold font-mono text-slate-900 bg-white border border-slate-200/90 px-2 py-0.5 rounded-md shadow-2xs">
-                            Option {String.fromCharCode(65 + currentQ.correctIndex)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right: Exact Points Added */}
-                    {selectedIndex === currentQ.correctIndex && lastPts !== null && (
-                      <div className="flex items-center gap-1 font-mono text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 rounded-lg self-end sm:self-center shrink-0 shadow-2xs">
-                        +{lastPts} pts
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              )}
 
               {/* Score strip */}
               <div className="flex items-center justify-between pt-2.5 text-xs font-medium text-slate-500 border-t border-slate-100">

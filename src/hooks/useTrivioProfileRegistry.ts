@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { ARC_TESTNET_CHAIN_ID, TRIVIO_PROFILE_REGISTRY_ADDRESS } from '@/config'
+import { getUserProfile, saveUserProfile, getDiceBearAvatarUrl, type UserProfile } from '@/lib/userProfile'
 
 export const PROFILE_REGISTRY_ABI = [
   {
@@ -66,7 +68,7 @@ export interface OnchainProfileData {
 }
 
 /**
- * Read onchain profile for a given wallet address
+ * Read onchain profile for a given wallet address with instant local cache fallback
  */
 export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNET_CHAIN_ID) {
   const isValidAddress = Boolean(
@@ -76,6 +78,9 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
     address !== '0x0000000000000000000000000000000000000000'
   )
 
+  const normalized = isValidAddress && address ? address.toLowerCase() : ''
+  const cachedLocal = normalized ? (getUserProfile(normalized) || getUserProfile()) : getUserProfile()
+
   const { data, isLoading, refetch, error } = useReadContract({
     address: TRIVIO_PROFILE_REGISTRY_ADDRESS,
     abi: PROFILE_REGISTRY_ABI,
@@ -84,27 +89,54 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
     chainId,
     query: {
       enabled: isValidAddress,
-      staleTime: 10_000,
+      staleTime: 30_000,
     },
   })
 
   const [username, avatarUrl, avatarSeed, avatarStyle, updatedAt] =
     (data as [string, string, string, string, bigint] | undefined) ?? ['', '', '', '', 0n]
 
-  const hasProfile = Boolean(username && username.length > 0)
+  const hasOnchainData = Boolean(username && username.length > 0)
+
+  // Save to persistent storage once contract resolves
+  useEffect(() => {
+    if (hasOnchainData && normalized) {
+      const p: UserProfile = {
+        username,
+        avatarUrl: avatarUrl || getDiceBearAvatarUrl(avatarStyle || 'bottts-neutral', avatarSeed || username),
+        avatarSeed: avatarSeed || username,
+        avatarStyle: avatarStyle || 'bottts-neutral',
+        createdAt: Number(updatedAt) * 1000 || Date.now(),
+        isOnchainVerified: true,
+      }
+      saveUserProfile(p, normalized)
+    }
+  }, [hasOnchainData, normalized, username, avatarUrl, avatarSeed, avatarStyle, updatedAt])
+
+  const effectiveProfile: OnchainProfileData | null = hasOnchainData
+    ? {
+        username,
+        avatarUrl: avatarUrl || getDiceBearAvatarUrl(avatarStyle || 'bottts-neutral', avatarSeed || username),
+        avatarSeed: avatarSeed || username,
+        avatarStyle: avatarStyle || 'bottts-neutral',
+        updatedAt,
+      }
+    : cachedLocal && cachedLocal.username
+    ? {
+        username: cachedLocal.username,
+        avatarUrl: cachedLocal.avatarUrl || getDiceBearAvatarUrl(cachedLocal.avatarStyle || 'bottts-neutral', cachedLocal.avatarSeed || cachedLocal.username),
+        avatarSeed: cachedLocal.avatarSeed || cachedLocal.username,
+        avatarStyle: cachedLocal.avatarStyle || 'bottts-neutral',
+        updatedAt: BigInt(Math.floor((cachedLocal.createdAt || Date.now()) / 1000)),
+      }
+    : null
+
+  const hasProfile = Boolean(effectiveProfile && effectiveProfile.username.length > 0)
 
   return {
     hasProfile,
-    profile: hasProfile
-      ? {
-          username,
-          avatarUrl,
-          avatarSeed,
-          avatarStyle,
-          updatedAt,
-        }
-      : null,
-    isLoading,
+    profile: effectiveProfile,
+    isLoading: isLoading && !hasProfile,
     refetch,
     error,
   }
