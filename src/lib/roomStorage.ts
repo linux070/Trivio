@@ -203,36 +203,64 @@ export function getRoomCategory(roomCode: string | null | undefined): Category |
   return null
 }
 
-/** Save the host-assigned round duration (in seconds) for a room code */
-export function saveRoomDuration(roomCode: string, durationSeconds: number): void {
-  if (!roomCode) return
+/** Save the prize pool amount for a room code */
+export function saveRoomPrize(roomCode: string, prize: string): void {
+  if (!roomCode || !prize) return
   const code = roomCode.trim().toUpperCase()
   try {
-    localStorage.setItem(`${STORAGE_ROOM_DUR_PREFIX}${code}`, String(durationSeconds))
-    sessionStorage.setItem(`${STORAGE_ROOM_DUR_PREFIX}${code}`, String(durationSeconds))
+    localStorage.setItem(`trivio_room_prize_${code}`, prize)
+    sessionStorage.setItem(`trivio_room_prize_${code}`, prize)
   } catch {
     // ignore
   }
 }
 
-/** Retrieve the round duration (in seconds) for a room code */
-export function getRoomDuration(roomCode: string | null | undefined, defaultDuration = 15): number {
-  if (!roomCode) return defaultDuration
+/** Retrieve the saved prize pool amount for a room code */
+export function getRoomPrize(roomCode: string | null | undefined): string | null {
+  if (!roomCode) return null
   const code = roomCode.trim().toUpperCase()
   try {
+    return (
+      sessionStorage.getItem(`trivio_room_prize_${code}`) ||
+      localStorage.getItem(`trivio_room_prize_${code}`)
+    )
+  } catch {
+    return null
+  }
+}
+
+/** Save a user's score for a specific room */
+export function saveRoomUserScore(roomCode: string, address?: string, score?: number): void {
+  if (!roomCode || typeof score !== 'number') return
+  const code = roomCode.trim().toUpperCase()
+  const addr = address ? address.toLowerCase() : 'active'
+  try {
+    localStorage.setItem(`trivio_score_${code}_${addr}`, String(score))
+    sessionStorage.setItem(`trivio_score_${code}_${addr}`, String(score))
+  } catch {
+    // ignore
+  }
+}
+
+/** Retrieve a user's score for a specific room */
+export function getRoomUserScore(roomCode: string | null | undefined, address?: string): number | null {
+  if (!roomCode) return null
+  const code = roomCode.trim().toUpperCase()
+  const addr = address ? address.toLowerCase() : 'active'
+  try {
     const saved =
-      sessionStorage.getItem(`${STORAGE_ROOM_DUR_PREFIX}${code}`) ||
-      localStorage.getItem(`${STORAGE_ROOM_DUR_PREFIX}${code}`)
-    if (saved) {
+      sessionStorage.getItem(`trivio_score_${code}_${addr}`) ||
+      localStorage.getItem(`trivio_score_${code}_${addr}`) ||
+      sessionStorage.getItem(`trivio_score_${code}_active`) ||
+      localStorage.getItem(`trivio_score_${code}_active`)
+    if (saved !== null) {
       const parsed = parseInt(saved, 10)
-      if (!isNaN(parsed) && parsed >= 5 && parsed <= 120) {
-        return parsed
-      }
+      if (!isNaN(parsed)) return parsed
     }
   } catch {
     // ignore
   }
-  return defaultDuration
+  return null
 }
 
 export interface ActiveGameSession {

@@ -79,7 +79,7 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
   )
 
   const normalized = isValidAddress && address ? address.toLowerCase() : ''
-  const cachedLocal = normalized ? (getUserProfile(normalized) || getUserProfile()) : getUserProfile()
+  const cachedLocal = normalized ? getUserProfile(normalized) : getUserProfile()
 
   const { data, isLoading, refetch, error } = useReadContract({
     address: TRIVIO_PROFILE_REGISTRY_ADDRESS,

@@ -1,15 +1,14 @@
 import { useState, useEffect, useRef, startTransition } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
-import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2, Zap } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2 } from 'lucide-react'
 import { buildJoinUrl } from '@/App'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import {
   useStartGame,
   useDeclareWinners,
-  useDeclareWinner,
   useCancelRoom,
   useRoomInfo,
   useRoomPlayers,
@@ -18,7 +17,17 @@ import {
   type RoomTuple,
 } from '@/hooks/useTriviaContract'
 import { getQuestions, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
-import { getRoomCategory, getRoomDuration, getRoomPayout, calculatePayoutSplits, saveActiveGame, clearActiveGame, getActiveGame } from '@/lib/roomStorage'
+import {
+  getRoomCategory,
+  getRoomDuration,
+  getRoomPayout,
+  calculatePayoutSplits,
+  saveActiveGame,
+  clearActiveGame,
+  getActiveGame,
+  saveRoomPrize,
+  saveRoomUserScore,
+} from '@/lib/roomStorage'
 import { recordWinnerPayout } from '@/lib/winnersStorage'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { QuestionCard } from '@/components/QuestionCard'
@@ -94,7 +103,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   }, [phase, questions.length, resolvedCategory, roomCode])
 
   // Auto-polls onchain every 1.5s
-  const { data: roomInfo, refetch: refetchRoomInfo } = useRoomInfo(roomCode, 1500)
+  const { data: roomInfo } = useRoomInfo(roomCode, 1500)
   const { data: winnersList } = useRoomWinners(roomCode)
   const { data: rawPlayersList } = useRoomPlayers(roomCode, 1500)
 
@@ -106,9 +115,6 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     playerCount,
     status,
     payoutMode,
-    questionSeedHash,
-    createdAt,
-    startedAt,
   ] = (roomInfo as RoomTuple) ?? []
   const prizeHuman = prizePool !== undefined ? formatUSDCRaw(prizePool) : '0'
   const buyInHuman = _buyIn !== undefined ? formatUSDCRaw(_buyIn) : '0'
@@ -126,7 +132,13 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   // Keep active game persisted with current phase, score, and question index for smooth resume/rejoin on refresh
   useEffect(() => {
     saveActiveGame(roomCode, resolvedCategory, isHost, phase, score, qIndex)
-  }, [roomCode, resolvedCategory, isHost, phase, score, qIndex])
+    if (activeAddress && typeof score === 'number') {
+      saveRoomUserScore(roomCode, activeAddress, score)
+    }
+    if (prizeHuman && Number(prizeHuman) > 0) {
+      saveRoomPrize(roomCode, prizeHuman)
+    }
+  }, [roomCode, resolvedCategory, isHost, phase, score, qIndex, activeAddress, prizeHuman])
 
   const { startGame, isPending: startPending, isConfirming: startConfirming, isSuccess: gameStarted } = useStartGame()
   const { declareWinners, isPending: declarePending, isConfirming: declareConfirming, isSuccess: declared, hash: declareHash } = useDeclareWinners()

@@ -1,13 +1,20 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trophy, ExternalLink, RotateCcw, Medal, Sparkles, Check, Copy, Shield, ArrowRight, User } from 'lucide-react'
+import { Trophy, ExternalLink, RotateCcw, Check, Copy } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import { buildTxExplorerUrl } from '@/onchain-facts'
 import { ARC_TESTNET_CHAIN_ID } from '@/config'
-import { getRoomPayout, calculatePayoutSplits, getRoomCategory } from '@/lib/roomStorage'
+import {
+  getRoomPayout,
+  calculatePayoutSplits,
+  getRoomCategory,
+  getRoomPrize,
+  getRoomUserScore,
+  getActiveGame,
+} from '@/lib/roomStorage'
 import { recordWinnerPayout } from '@/lib/winnersStorage'
-import { useRoomInfo, type RoomTuple } from '@/hooks/useTriviaContract'
+import { useRoomInfo, formatUSDCRaw, type RoomTuple } from '@/hooks/useTriviaContract'
 import { useOnchainProfile } from '@/hooks/useTrivioProfileRegistry'
 import { getDiceBearAvatarUrl, getUserProfile, generateRandomUsername } from '@/lib/userProfile'
 
@@ -51,10 +58,13 @@ function PlayerIdentity({ address, isMe }: { address?: string; isMe?: boolean })
   }
 
   const { profile: onchainProfile } = useOnchainProfile(address)
-  const localProfile = getUserProfile(address)
+  const localProfile = address ? getUserProfile(address) : null
 
   const username = onchainProfile?.username || localProfile?.username || generateRandomUsername(address)
-  const avatarUrl = onchainProfile?.avatarUrl || localProfile?.avatarUrl || getDiceBearAvatarUrl('bottts-neutral', address)
+  const avatarUrl =
+    onchainProfile?.avatarUrl ||
+    localProfile?.avatarUrl ||
+    getDiceBearAvatarUrl('bottts-neutral', address || username)
 
   return (
     <div className="flex items-center gap-2 min-w-0">
@@ -62,11 +72,14 @@ function PlayerIdentity({ address, isMe }: { address?: string; isMe?: boolean })
         src={avatarUrl}
         alt={username}
         className="h-6 w-6 rounded-full border border-slate-200 bg-white object-cover shrink-0"
+        onError={(e) => {
+          e.currentTarget.src = getDiceBearAvatarUrl('bottts-neutral', address || username)
+        }}
       />
       <div className="min-w-0">
         <div className="flex items-center gap-1.5">
           <span className="font-bold text-xs sm:text-sm text-slate-900 truncate">
-            @{username}
+            @{username.replace(/^@/, '')}
           </span>
           {isMe && (
             <span className="bg-purple-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full shadow-2xs">
@@ -102,38 +115,68 @@ export default function Results({
     host && myAddress && host.toLowerCase() === myAddress.toLowerCase()
   )
 
+  // Resolve true prize pool across prop, onchain data, and room storage
+  const onchainPrizeHuman = _prizePool !== undefined ? formatUSDCRaw(_prizePool) : undefined
+  const savedPrize = getRoomPrize(roomCode)
+  const effectivePrizeAmount = (prizeAmount && Number(prizeAmount) > 0)
+    ? prizeAmount
+    : (onchainPrizeHuman && Number(onchainPrizeHuman) > 0)
+      ? onchainPrizeHuman
+      : (savedPrize && Number(savedPrize) > 0)
+        ? savedPrize
+        : (prizeAmount || '0.00')
+
   // Ensure this winning result is recorded into live winners storage
   useEffect(() => {
     if (winnerAddress && winnerAddress !== '0x0000000000000000000000000000000000000000') {
       recordWinnerPayout({
         roomCode: roomCode || 'TRIVIA',
         winnerAddress,
-        amount: prizeAmount || '0.00',
+        amount: effectivePrizeAmount,
         category: getRoomCategory(roomCode) || 'General Knowledge',
         txHash,
       })
     }
-  }, [winnerAddress, prizeAmount, roomCode, txHash])
+  }, [winnerAddress, effectivePrizeAmount, roomCode, txHash])
 
   const txUrl = txHash ? buildTxExplorerUrl(ARC_TESTNET_CHAIN_ID, txHash) : undefined
 
   // Retrieve room payout structure and calculate exact monetary splits
   const payout = getRoomPayout(roomCode, payoutMode)
-  const splits = calculatePayoutSplits(prizeAmount, payout.splits)
+  const splits = calculatePayoutSplits(effectivePrizeAmount, payout.splits)
 
-  // Build clean player leaderboard without injecting host
+  // Retrieve user's actual game score recorded during gameplay
+  const activeSession = getActiveGame()
+  const savedScore = (roomCode && myAddress) ? getRoomUserScore(roomCode, myAddress) : null
+  const activeScore = (typeof activeSession?.score === 'number') ? activeSession.score : null
+  const userActualScore = savedScore ?? activeScore ?? (isHost ? 950 : 0)
+
+  // Distinct addresses for demo rankings when multiplayer list is minimal
+  const defaultDemoAddresses = [
+    '0xDE7534A0e8549C6b0e8b2b95b451000000009AF7',
+    '0x38Bc210A889392e21b777a41908b981230005678',
+    '0x99Fa521B436e23187c331a980b12384730001234',
+  ]
+
+  const resolvedWinner = (winnerAddress && winnerAddress !== '0x0000000000000000000000000000000000000000')
+    ? winnerAddress
+    : isHost
+      ? defaultDemoAddresses[0]
+      : (myAddress || defaultDemoAddresses[0])
+
+  // Build clean player leaderboard outputting actual recorded scores
   const board: LeaderboardEntry[] = leaderboard.length > 0
     ? leaderboard
     : isHost
       ? [
-          { address: winnerAddress && winnerAddress !== '0x0000000000000000000000000000000000000000' ? winnerAddress : '0xDE7534A0e8549C6b0e8b2b95b451000000009AF7', score: 950, rank: 1 },
-          { address: '0x38Bc210A889392e21b777a41908b981230005678', score: 810, rank: 2 },
-          { address: '0x99Fa521B436e23187c331a980b12384730001234', score: 670, rank: 3 },
+          { address: resolvedWinner, score: userActualScore || 950, rank: 1 },
+          { address: defaultDemoAddresses[1], score: Math.max(10, (userActualScore || 950) - 140), rank: 2 },
+          { address: defaultDemoAddresses[2], score: Math.max(0, (userActualScore || 950) - 280), rank: 3 },
         ]
       : [
-          { address: winnerAddress && winnerAddress !== '0x0000000000000000000000000000000000000000' ? winnerAddress : (myAddress || '0xDE7534A0e8549C6b0e8b2b95b451000000009AF7'), score: 950, rank: 1 },
-          { address: '0x38Bc210A889392e21b777a41908b981230005678', score: 810, rank: 2 },
-          { address: '0x99Fa521B436e23187c331a980b12384730001234', score: 670, rank: 3 },
+          { address: resolvedWinner, score: userActualScore, rank: 1 },
+          { address: defaultDemoAddresses[1], score: Math.max(10, userActualScore - 140), rank: 2 },
+          { address: defaultDemoAddresses[2], score: Math.max(0, userActualScore - 280), rank: 3 },
         ]
 
   // Player's personal standing (Host never matches as a player recipient)
@@ -171,44 +214,14 @@ export default function Results({
           transition={{ duration: 0.35, ease: 'easeOut' }}
           className="text-center mb-6"
         >
-          {/* Status Chip */}
-          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-bold mb-3 shadow-2xs border backdrop-blur-md bg-white/90 border-slate-200/80">
-            {isHost ? (
-              <>
-                <Shield size={13} className="text-purple-600" />
-                <span className="text-purple-900 font-bold">Room Arbiter · Payouts Released</span>
-              </>
-            ) : isWinnerPlayer ? (
-              <>
-                <Trophy size={13} className="text-amber-500" />
-                <span className="text-amber-900 font-bold">Podium Winner</span>
-              </>
-            ) : (
-              <>
-                <Sparkles size={13} className="text-slate-500" />
-                <span className="text-slate-700 font-bold">Match Concluded</span>
-              </>
-            )}
-          </div>
-
           {/* Main Title */}
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-950">
-            {isHost
-              ? 'Game Concluded!'
-              : myWinningSplit
-                ? myWinningSplit.rank === 1
-                  ? 'You Won 1st Place!'
-                  : `You Placed ${myWinningSplit.label.split(' ')[0]}!`
-                : 'Final Results'}
+            {isHost ? 'Game Concluded!' : 'Final Results'}
           </h1>
 
           {/* Subtitle */}
           <p className="mt-1.5 text-sm sm:text-base font-medium text-slate-600 max-w-md mx-auto">
-            {isHost
-              ? `All USDC prize payouts have been settled on Arc Testnet.`
-              : myWinningSplit
-                ? `You earned $${myWinningSplit.amount} USDC (${myWinningSplit.percent}% prize split)!`
-                : `@${generateRandomUsername(winnerAddress || board[0]?.address || '')} took 1st place in this arena.`}
+            All USDC prize payouts have been settled on Arc Testnet.
           </p>
         </motion.div>
 
@@ -233,7 +246,7 @@ export default function Results({
           <div className="flex items-center justify-center gap-2.5 py-1">
             <TokenUSDC variant="branded" size={34} />
             <span className="text-4xl sm:text-5xl font-black tracking-tight text-slate-950 tabular-nums">
-              {prizeAmount || '0.00'}
+              {effectivePrizeAmount}
             </span>
             <span className="text-lg font-bold text-slate-400">USDC</span>
           </div>
@@ -258,7 +271,7 @@ export default function Results({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            Podium & Payouts ({splits.length})
+            Payouts ({splits.length})
           </button>
 
           <button
@@ -381,7 +394,7 @@ export default function Results({
                           <PlayerIdentity address={entry.address} isMe={isEntryMe} />
                           {earnedSplit && (
                             <span className="text-[11px] font-bold text-emerald-700 mt-0.5 block">
-                              Won ${earnedSplit.amount} USDC ({earnedSplit.percent}%)
+                              won ${earnedSplit.amount} USDC
                             </span>
                           )}
                         </div>
