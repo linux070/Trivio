@@ -40,6 +40,37 @@ const STORAGE_PAYOUTS_KEY = 'trivio_live_payouts'
 export const EVENT_PAYOUT_UPDATED = 'trivio_payout_recorded'
 
 /**
+ * Helper to deduplicate payout records (by compound key: winnerAddress + txHash or winnerAddress + roomCode)
+ */
+export function deduplicatePayouts(records: WinnerPayoutRecord[]): WinnerPayoutRecord[] {
+  const seenKeys = new Set<string>()
+  const result: WinnerPayoutRecord[] = []
+
+  for (const r of records) {
+    if (!r.winnerAddress || r.winnerAddress === '0x0000000000000000000000000000000000000000') continue
+    const addr = r.winnerAddress.toLowerCase()
+    const room = r.roomCode ? r.roomCode.trim().toUpperCase() : ''
+    const tx = r.txHash ? r.txHash.toLowerCase() : ''
+
+    const keyByTx = tx ? `tx_${tx}_${addr}` : null
+    const keyByRoom = room ? `room_${room}_${addr}` : null
+
+    if (keyByTx && seenKeys.has(keyByTx)) {
+      continue
+    }
+    if (keyByRoom && seenKeys.has(keyByRoom)) {
+      continue
+    }
+
+    if (keyByTx) seenKeys.add(keyByTx)
+    if (keyByRoom) seenKeys.add(keyByRoom)
+    result.push(r)
+  }
+
+  return result
+}
+
+/**
  * Record a real winner payout to persistent storage
  */
 export function recordWinnerPayout(payout: {
@@ -69,22 +100,35 @@ export function recordWinnerPayout(payout: {
 
     const raw = localStorage.getItem(STORAGE_PAYOUTS_KEY)
     const existing: WinnerPayoutRecord[] = raw ? JSON.parse(raw) : []
-    
-    // Prevent duplicate recording by txHash or (roomCode + winnerAddress + recent timestamp)
-    const isDup = existing.some(
-      (e) =>
-        (payout.txHash && e.txHash === payout.txHash) ||
-        (e.roomCode === record.roomCode &&
-          e.winnerAddress.toLowerCase() === record.winnerAddress &&
-          Math.abs(e.timestamp - record.timestamp) < 60000)
-    )
 
-    if (!isDup) {
+    // Look for existing matching record to update in-place or detect duplicate
+    const existingIdx = existing.findIndex((e) => {
+      const sameWinner = e.winnerAddress.toLowerCase() === record.winnerAddress
+      const sameTx = Boolean(payout.txHash && e.txHash && e.txHash.toLowerCase() === payout.txHash.toLowerCase())
+      const sameRoom = Boolean(e.roomCode && record.roomCode && e.roomCode === record.roomCode)
+      return sameWinner && (sameTx || sameRoom)
+    })
+
+    let updated = false
+    if (existingIdx >= 0) {
+      // Update missing txHash or higher prize amount if newly confirmed
+      if (payout.txHash && !existing[existingIdx].txHash) {
+        existing[existingIdx].txHash = payout.txHash
+        updated = true
+      }
+      if (parseFloat(record.amount) > parseFloat(existing[existingIdx].amount || '0')) {
+        existing[existingIdx].amount = record.amount
+        updated = true
+      }
+    } else {
       existing.unshift(record)
-      // Keep up to 100 recent payouts
-      const trimmed = existing.slice(0, 100)
-      localStorage.setItem(STORAGE_PAYOUTS_KEY, JSON.stringify(trimmed))
-      
+      updated = true
+    }
+
+    if (updated) {
+      const deduped = deduplicatePayouts(existing).slice(0, 100)
+      localStorage.setItem(STORAGE_PAYOUTS_KEY, JSON.stringify(deduped))
+
       // Dispatch custom event for real-time reactivity in current tab
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent(EVENT_PAYOUT_UPDATED, { detail: record }))
@@ -102,7 +146,14 @@ export function getStoredPayouts(): WinnerPayoutRecord[] {
   try {
     const raw = localStorage.getItem(STORAGE_PAYOUTS_KEY)
     if (raw) {
-      return JSON.parse(raw) as WinnerPayoutRecord[]
+      const parsed = JSON.parse(raw) as WinnerPayoutRecord[]
+      if (Array.isArray(parsed)) {
+        const deduped = deduplicatePayouts(parsed)
+        if (deduped.length !== parsed.length) {
+          localStorage.setItem(STORAGE_PAYOUTS_KEY, JSON.stringify(deduped))
+        }
+        return deduped
+      }
     }
   } catch {
     // ignore
@@ -126,13 +177,14 @@ export function formatTimeAgo(timestamp: number): string {
  * Calculate dynamic live leaderboard from all recorded payouts
  */
 export function computeLeaderboard(
-  realPayouts: WinnerPayoutRecord[]
+  rawPayouts: WinnerPayoutRecord[]
 ): {
   leaderboard: LiveLeaderboardEntry[]
   totalToday: string
   latestPayout: LatestPayoutInfo | null
   payouts: WinnerPayoutRecord[]
 } {
+  const realPayouts = deduplicatePayouts(rawPayouts)
   const now = Date.now()
   const oneDayAgo = now - 24 * 60 * 60 * 1000
 

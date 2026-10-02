@@ -97,7 +97,7 @@ function PodiumWinnerCard({
   const style = podiumColors[rankIndex] || podiumColors[2]
 
   const { profile: onchainProfile } = useOnchainProfile(winner.address)
-  const localProfile = getUserProfile(winner.address)
+  const localProfile = winner.address ? getUserProfile(winner.address.toLowerCase()) : null
 
   const rawUsername =
     onchainProfile?.username ||
@@ -169,7 +169,7 @@ function PodiumWinnerCard({
 
 function RunnerUpRow({ entry }: { entry: LiveLeaderboardEntry }) {
   const { profile: onchainProfile } = useOnchainProfile(entry.address)
-  const localProfile = getUserProfile(entry.address)
+  const localProfile = entry.address ? getUserProfile(entry.address.toLowerCase()) : null
 
   const rawUsername =
     onchainProfile?.username ||

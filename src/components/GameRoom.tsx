@@ -212,6 +212,8 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   // Winner payout synchronization (for host who triggered payout or guest receiving finished status)
   useEffect(() => {
     const winningAddress = (winnersList && winnersList.length > 0) ? winnersList[0] : null
+    const splits = calculatePayoutSplits(prizeForPayouts, getRoomPayout(roomCode, payoutMode).splits)
+
     if (declared && activeAddress) {
       clearActiveGame()
       const primaryWinner = (winnersList && winnersList.length > 0)
@@ -219,25 +221,44 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
         : (rawPlayersList && rawPlayersList.length > 0)
           ? (rawPlayersList[0] as string)
           : activeAddress
-      recordWinnerPayout({
-        roomCode,
-        winnerAddress: primaryWinner,
-        amount: prizeForPayouts,
-        category: resolvedCategory,
-        txHash: declareHash,
-      })
+
+      const allWinners: string[] = (winnersList && winnersList.length > 0)
+        ? (winnersList as string[])
+        : [primaryWinner]
+
+      for (let i = 0; i < allWinners.length; i++) {
+        const wAddr = allWinners[i]
+        const splitAmt = splits[i]?.amount || prizeForPayouts
+        recordWinnerPayout({
+          roomCode,
+          winnerAddress: wAddr,
+          amount: splitAmt,
+          category: resolvedCategory,
+          txHash: declareHash,
+        })
+      }
+
       onGameEnd(primaryWinner, prizeForPayouts, declareHash, score)
     } else if (status === 2 && winningAddress && winningAddress !== '0x0000000000000000000000000000000000000000' && phase === 'finished') {
       clearActiveGame()
-      recordWinnerPayout({
-        roomCode,
-        winnerAddress: winningAddress,
-        amount: prizeForPayouts,
-        category: resolvedCategory,
-      })
+      const allWinners: string[] = (winnersList && winnersList.length > 0)
+        ? (winnersList as string[])
+        : [winningAddress]
+
+      for (let i = 0; i < allWinners.length; i++) {
+        const wAddr = allWinners[i]
+        const splitAmt = splits[i]?.amount || prizeForPayouts
+        recordWinnerPayout({
+          roomCode,
+          winnerAddress: wAddr,
+          amount: splitAmt,
+          category: resolvedCategory,
+        })
+      }
+
       onGameEnd(winningAddress, prizeForPayouts, undefined, score)
     }
-  }, [declared, activeAddress, prizeForPayouts, declareHash, status, winnersList, phase, onGameEnd, rawPlayersList, roomCode, resolvedCategory, score])
+  }, [declared, activeAddress, prizeForPayouts, declareHash, status, winnersList, phase, onGameEnd, rawPlayersList, roomCode, resolvedCategory, score, payoutMode])
 
   function advanceQuestion(currentIndex: number, qs: TriviaQuestion[]) {
     const next = currentIndex + 1
