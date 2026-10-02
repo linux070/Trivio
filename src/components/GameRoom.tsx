@@ -26,6 +26,7 @@ import {
   clearActiveGame,
   getActiveGame,
   saveRoomPrize,
+  getRoomPrize,
   saveRoomUserScore,
 } from '@/lib/roomStorage'
 import { recordWinnerPayout } from '@/lib/winnersStorage'
