@@ -19,6 +19,7 @@ import {
 import { getQuestions, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
 import {
   getRoomCategory,
+  saveRoomCategory,
   getRoomDuration,
   getRoomPayout,
   calculatePayoutSplits,
@@ -64,8 +65,16 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const privyWalletAddress = user?.wallet?.address as `0x${string}` | undefined
   const activeAddress = wagmiAddress || privyWalletAddress || ''
 
-  const resolvedCategory = category || getRoomCategory(roomCode) || 'General Knowledge'
+  const hostRoomCategory = getRoomCategory(roomCode)
+  const resolvedCategory = hostRoomCategory || category || 'General Knowledge'
   const roomDuration = getRoomDuration(roomCode, 15)
+
+  // Ensure persistent storage of the host-assigned category
+  useEffect(() => {
+    if (roomCode && resolvedCategory) {
+      saveRoomCategory(roomCode, resolvedCategory)
+    }
+  }, [roomCode, resolvedCategory])
 
   const savedSession = getActiveGame()
   const isMatchRoom = savedSession?.roomCode === roomCode.trim().toUpperCase()

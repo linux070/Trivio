@@ -52,7 +52,14 @@ import {
   type SubCategoryInfo,
   prefetchCategoryQuestions,
 } from '@/lib/questions'
-import { getActiveGame, clearActiveGame, getPendingJoin, type ActiveGameSession } from '@/lib/roomStorage'
+import {
+  getActiveGame,
+  clearActiveGame,
+  getPendingJoin,
+  getRoomCategory,
+  saveRoomCategory,
+  type ActiveGameSession,
+} from '@/lib/roomStorage'
 import { useLiveRooms } from '@/hooks/useLiveRooms'
 import { useLiveWinners } from '@/hooks/useLiveWinners'
 import { type LiveLeaderboardEntry, type LatestPayoutInfo } from '@/lib/winnersStorage'
@@ -1118,7 +1125,10 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
 
               <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-2.5">
                 <button
-                  onClick={() => onContinueGame(activeSession.roomCode, activeSession.category)}
+                  onClick={() => {
+                    const hostCat = getRoomCategory(activeSession.roomCode)
+                    onContinueGame(activeSession.roomCode, hostCat || activeSession.category)
+                  }}
                   className="rounded-full px-3.5 sm:px-4 py-1.5 sm:py-2 text-xs font-bold text-white transition-all shadow-xs active:scale-95 cursor-pointer hover:brightness-105"
                   style={{ background: 'var(--accent)' }}
                 >
@@ -1293,7 +1303,8 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
             <button
               onClick={() => {
                 const pending = getPendingJoin()
-                onJoinRoom(selected || 'General Knowledge', pending?.roomCode)
+                const pendingCat = pending?.roomCode ? getRoomCategory(pending.roomCode) || pending.category : undefined
+                onJoinRoom(pendingCat || selected || 'General Knowledge', pending?.roomCode)
               }}
               className="group flex flex-col items-center justify-center gap-1.5 sm:gap-2 rounded-2xl sm:rounded-3xl p-3.5 sm:py-5 text-center transition-all duration-200 bg-white hover:bg-violet-50/50 active:scale-95 border-2 border-purple-100 hover:border-purple-300 shadow-sm cursor-pointer"
             >
@@ -1411,7 +1422,10 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                         <button
                           type="button"
                           disabled={isFull}
-                          onClick={() => onJoinRoom(room.category, room.roomCode)}
+                          onClick={() => {
+                            saveRoomCategory(room.roomCode, room.category)
+                            onJoinRoom(room.category, room.roomCode)
+                          }}
                           className="inline-flex items-center justify-center rounded-xl px-3 sm:px-3.5 py-1.5 sm:py-2 text-xs font-extrabold text-gray-900 bg-white active:scale-95 border-2 border-purple-100 shadow-xs transition-transform cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 hover:border-purple-300 hover:bg-purple-50/50"
                         >
                           <span>Join</span>

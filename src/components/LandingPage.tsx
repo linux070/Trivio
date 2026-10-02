@@ -8,7 +8,7 @@ import { getDiceBearAvatarUrl, getUserProfile, generateRandomUsername } from '@/
 import { useOnchainProfile } from '@/hooks/useTrivioProfileRegistry'
 import { useLiveWinners } from '@/hooks/useLiveWinners'
 import { formatTimeAgo, type WinnerPayoutRecord } from '@/lib/winnersStorage'
-import { setPendingJoin, getPendingJoin, getRoomCategory, extractRoomCode } from '@/lib/roomStorage'
+import { setPendingJoin, getPendingJoin, getRoomCategory, saveRoomCategory, extractRoomCode } from '@/lib/roomStorage'
 import type { Category } from '@/lib/questions'
 
 /* ── Typewriter hook ─────────────────────────────────────────────────────── */
@@ -381,7 +381,8 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
     if (roomCode.trim()) {
       const extracted = extractRoomCode(roomCode)
       if (extracted?.roomCode) {
-        const cat = extracted.category || getRoomCategory(extracted.roomCode) || undefined
+        const cat = getRoomCategory(extracted.roomCode) || extracted.category || undefined
+        if (cat) saveRoomCategory(extracted.roomCode, cat)
         setPendingJoin(extracted.roomCode, cat)
         if (authenticated) {
           onConnected(extracted.roomCode, cat)
@@ -399,6 +400,7 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
     if (extracted && extracted.roomCode) {
       e.preventDefault()
       setRoomCode(extracted.roomCode)
+      if (extracted.category) saveRoomCategory(extracted.roomCode, extracted.category)
       toast.success(`Room code detected: ${extracted.roomCode}`)
     }
   }
@@ -412,7 +414,8 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
     }
 
     const code = extracted.roomCode
-    const category = extracted.category || getRoomCategory(code) || undefined
+    const category = getRoomCategory(code) || extracted.category || undefined
+    if (category) saveRoomCategory(code, category)
     setPendingJoin(code, category)
 
     if (authenticated) {

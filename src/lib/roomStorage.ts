@@ -188,10 +188,63 @@ export function saveRoomCategory(roomCode: string, category: Category): void {
   }
 }
 
+/** Known room categories lookup registry */
+const KNOWN_DEFAULT_ROOMS: Record<string, Category> = {
+  CRYP99: 'Crypto',
+  BLITZ4: 'Word Blitz',
+  EMOJI8: 'Emoji Decoder',
+  BOMB01: 'Bomb Tag',
+  MATH12: 'Logic & Math Arena',
+  DEFI08: 'Candle Rush',
+  WEB399: 'Crypto',
+  MEME42: 'Pop Culture',
+}
+
+/** Smart category inference from room code prefix or keywords */
+export function inferCategoryFromCode(code: string): Category | null {
+  if (!code) return null
+  const clean = code.trim().toUpperCase()
+
+  if (clean.startsWith('CRYP') || clean.startsWith('BTC') || clean.startsWith('ETH') || clean.startsWith('DEFI') || clean.startsWith('WEB3') || clean.startsWith('SOL')) {
+    return 'Crypto'
+  }
+  if (clean.startsWith('BLITZ') || clean.startsWith('WORD') || clean.startsWith('GRAM') || clean.startsWith('VOCAB') || clean.startsWith('ANAG')) {
+    return 'Word Blitz'
+  }
+  if (clean.startsWith('EMOJI') || clean.startsWith('ICON') || clean.startsWith('EMO')) {
+    return 'Emoji Decoder'
+  }
+  if (clean.startsWith('BOMB') || clean.startsWith('TAG') || clean.startsWith('BOOM') || clean.startsWith('BLAST') || clean.startsWith('ELIM')) {
+    return 'Bomb Tag'
+  }
+  if (clean.startsWith('MATH') || clean.startsWith('LOGIC') || clean.startsWith('CALC') || clean.startsWith('NUM') || clean.startsWith('EULER')) {
+    return 'Logic & Math Arena'
+  }
+  if (clean.startsWith('CANDLE') || clean.startsWith('CHART') || clean.startsWith('RUSH') || clean.startsWith('TRAD') || clean.startsWith('BULL') || clean.startsWith('BEAR')) {
+    return 'Candle Rush'
+  }
+  if (clean.startsWith('SPORT') || clean.startsWith('BALL') || clean.startsWith('GAME') || clean.startsWith('GOAL') || clean.startsWith('HOOP')) {
+    return 'Sports'
+  }
+  if (clean.startsWith('POP') || clean.startsWith('MEME') || clean.startsWith('FILM') || clean.startsWith('STAR') || clean.startsWith('SHOW') || clean.startsWith('CULT')) {
+    return 'Pop Culture'
+  }
+  if (clean.startsWith('SCI') || clean.startsWith('BIO') || clean.startsWith('PHYS') || clean.startsWith('CHEM') || clean.startsWith('COSM') || clean.startsWith('ASTRO')) {
+    return 'Science'
+  }
+  if (clean.startsWith('HIST') || clean.startsWith('WAR') || clean.startsWith('LORE') || clean.startsWith('PAST') || clean.startsWith('EMP')) {
+    return 'History'
+  }
+
+  return null
+}
+
 /** Retrieve the category assigned to a room code */
 export function getRoomCategory(roomCode: string | null | undefined): Category | null {
   if (!roomCode) return null
   const code = roomCode.trim().toUpperCase()
+
+  // 1. Direct session and local storage
   try {
     const saved =
       sessionStorage.getItem(`${STORAGE_ROOM_CAT_PREFIX}${code}`) ||
@@ -200,6 +253,54 @@ export function getRoomCategory(roomCode: string | null | undefined): Category |
   } catch {
     // ignore
   }
+
+  // 2. Actively registered live rooms
+  try {
+    const liveRooms = getRegisteredLiveRooms()
+    const foundLive = liveRooms.find(r => r.roomCode.toUpperCase() === code)
+    if (foundLive && isValidCategory(foundLive.category)) {
+      saveRoomCategory(code, foundLive.category)
+      return foundLive.category
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Active game session
+  try {
+    const activeGame = getActiveGame()
+    if (activeGame && activeGame.roomCode === code && isValidCategory(activeGame.category)) {
+      saveRoomCategory(code, activeGame.category)
+      return activeGame.category
+    }
+  } catch {
+    // ignore
+  }
+
+  // 4. Pending join state
+  try {
+    const pending = getPendingJoin()
+    if (pending && pending.roomCode === code && isValidCategory(pending.category)) {
+      saveRoomCategory(code, pending.category)
+      return pending.category
+    }
+  } catch {
+    // ignore
+  }
+
+  // 5. Known default rooms
+  if (KNOWN_DEFAULT_ROOMS[code] && isValidCategory(KNOWN_DEFAULT_ROOMS[code])) {
+    saveRoomCategory(code, KNOWN_DEFAULT_ROOMS[code])
+    return KNOWN_DEFAULT_ROOMS[code]
+  }
+
+  // 6. Prefix & keyword inference
+  const inferred = inferCategoryFromCode(code)
+  if (inferred && isValidCategory(inferred)) {
+    saveRoomCategory(code, inferred)
+    return inferred
+  }
+
   return null
 }
 
@@ -403,7 +504,11 @@ export function extractRoomCode(input: string): { roomCode: string; category?: C
         const rawCat = url.searchParams.get('cat') || url.searchParams.get('category')
         const category = isValidCategory(rawCat) ? rawCat : undefined
         if (cleanCode.length >= 4) {
-          return { roomCode: cleanCode, category }
+          if (category) {
+            saveRoomCategory(cleanCode, category)
+          }
+          const finalCat = category || getRoomCategory(cleanCode) || undefined
+          return { roomCode: cleanCode, category: finalCat }
         }
       }
     } catch {
@@ -411,7 +516,9 @@ export function extractRoomCode(input: string): { roomCode: string; category?: C
     }
     const match = text.match(/(?:join|code)=([A-Za-z0-9]{4,8})/i)
     if (match && match[1]) {
-      return { roomCode: match[1].toUpperCase() }
+      const code = match[1].toUpperCase()
+      const category = getRoomCategory(code) || undefined
+      return { roomCode: code, category }
     }
   }
 

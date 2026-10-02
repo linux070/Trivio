@@ -26,6 +26,7 @@ import {
   calculatePayoutSplits,
   consumePendingJoin,
   getPendingJoin,
+  extractRoomCode,
 } from '@/lib/roomStorage'
 
 const ROOM_STATUS = ['Open', 'In Progress', 'Finished', 'Cancelled']
@@ -60,13 +61,35 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   const activeAddress = address || privyWalletAddress || undefined
 
   const resolveInitialCode = (): string => {
-    if (prefillCode && prefillCode.trim()) return prefillCode.trim().toUpperCase()
+    if (prefillCode && prefillCode.trim()) {
+      const extracted = extractRoomCode(prefillCode.trim())
+      if (extracted?.roomCode) {
+        if (extracted.category) saveRoomCategory(extracted.roomCode, extracted.category)
+        return extracted.roomCode
+      }
+      return prefillCode.trim().toUpperCase()
+    }
     const pending = consumePendingJoin() || getPendingJoin()
-    if (pending?.roomCode) return pending.roomCode.trim().toUpperCase()
+    if (pending?.roomCode) {
+      const extracted = extractRoomCode(pending.roomCode)
+      const code = extracted ? extracted.roomCode : pending.roomCode.trim().toUpperCase()
+      const cat = extracted?.category || pending.category
+      if (cat) saveRoomCategory(code, cat)
+      return code
+    }
     try {
       const p = new URLSearchParams(window.location.search)
-      const code = p.get('join')?.trim().toUpperCase()
-      if (code) return code
+      const rawJoin = p.get('join')?.trim()
+      if (rawJoin) {
+        const extracted = extractRoomCode(rawJoin)
+        const code = extracted ? extracted.roomCode : rawJoin.toUpperCase()
+        const rawCat = p.get('cat') || p.get('category')
+        if (rawCat) {
+          const category = getRoomCategory(code) || (rawCat as Category)
+          saveRoomCategory(code, category)
+        }
+        return code
+      }
     } catch {
       // ignore
     }
@@ -80,22 +103,33 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   // Keep input and checkedCode synchronized whenever prefillCode prop updates
   useEffect(() => {
     if (prefillCode && prefillCode.trim()) {
-      const code = prefillCode.trim().toUpperCase()
+      const extracted = extractRoomCode(prefillCode.trim())
+      const code = extracted ? extracted.roomCode : prefillCode.trim().toUpperCase()
+      if (extracted?.category) saveRoomCategory(code, extracted.category)
       setInput(code)
       setCheckedCode(code)
     } else {
       const pending = consumePendingJoin() || getPendingJoin()
       if (pending?.roomCode) {
-        const code = pending.roomCode.trim().toUpperCase()
+        const extracted = extractRoomCode(pending.roomCode)
+        const code = extracted ? extracted.roomCode : pending.roomCode.trim().toUpperCase()
+        const cat = extracted?.category || pending.category
+        if (cat) saveRoomCategory(code, cat)
         setInput(code)
         setCheckedCode(code)
       }
     }
   }, [prefillCode])
 
-  const resolvedCategory = checkedCode
-    ? getRoomCategory(checkedCode) || initialCategory
-    : initialCategory
+  const hostRoomCat = checkedCode ? getRoomCategory(checkedCode) : null
+  const resolvedCategory = hostRoomCat || (checkedCode ? undefined : initialCategory) || initialCategory || 'General Knowledge'
+
+  // Persist resolved host category once determined
+  useEffect(() => {
+    if (checkedCode && hostRoomCat) {
+      saveRoomCategory(checkedCode, hostRoomCat)
+    }
+  }, [checkedCode, hostRoomCat])
 
   const { data: roomInfo, isLoading: roomLoading, error: roomError } = useRoomInfo(checkedCode)
   const { data: isPlayerOnchain } = useIsPlayer(checkedCode, activeAddress)
@@ -151,9 +185,33 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   const isRoomOpen = status === 0
   const contractReady = Boolean(TRIVIA_GAME_ADDRESS)
 
+  const handleInputChange = (raw: string) => {
+    const extracted = extractRoomCode(raw)
+    if (extracted) {
+      setInput(extracted.roomCode)
+      setCheckedCode(extracted.roomCode)
+      if (extracted.category) {
+        saveRoomCategory(extracted.roomCode, extracted.category)
+      }
+    } else {
+      const clean = raw.toUpperCase()
+      setInput(clean)
+      const cleanCode = clean.replace(/[^A-Z0-9]/g, '').slice(0, 8)
+      if (cleanCode.length >= 4) {
+        setCheckedCode(cleanCode)
+      }
+    }
+  }
+
   const handleLookup = () => {
-    const code = input.trim().toUpperCase()
-    if (code.length >= 4) setCheckedCode(code)
+    const extracted = extractRoomCode(input)
+    const code = extracted ? extracted.roomCode : input.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
+    if (code.length >= 4) {
+      if (extracted?.category) {
+        saveRoomCategory(code, extracted.category)
+      }
+      setCheckedCode(code)
+    }
   }
 
   const handleApprove = () => {
@@ -164,8 +222,8 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   const handleJoin = () => {
     if (isWrongChain) { switchChain({ chainId: ARC_TESTNET_CHAIN_ID }); return }
     if (!checkedCode) return
+    saveRoomCategory(checkedCode, resolvedCategory)
     if (isAlreadyJoined) {
-      saveRoomCategory(checkedCode, resolvedCategory)
       onJoined(checkedCode, resolvedCategory)
       return
     }
@@ -212,7 +270,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                 placeholder="e.g. TRV001"
                 maxLength={8}
                 value={input}
-                onChange={e => setInput(e.target.value.toUpperCase())}
+                onChange={e => handleInputChange(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleLookup()}
                 className="min-w-0 flex-1 rounded-2xl px-3.5 sm:px-4 py-3 text-base font-bold outline-none"
                 style={{

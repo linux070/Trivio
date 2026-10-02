@@ -114,7 +114,8 @@ function getInitialScreen(): Screen {
     if (joinParams || pendingJoin) {
       const pendingObj = joinParams || pendingJoin
       if (pendingObj?.roomCode) {
-        const cat = pendingObj.category || getRoomCategory(pendingObj.roomCode) || 'General Knowledge'
+        const cat = getRoomCategory(pendingObj.roomCode) || pendingObj.category || 'General Knowledge'
+        saveRoomCategory(pendingObj.roomCode, cat)
         return { name: 'join', category: cat, prefillCode: pendingObj.roomCode }
       }
     }
@@ -188,7 +189,7 @@ export default function App() {
   const restoreGameScreen = () => {
     const pendingJoin = consumePendingJoin() || getJoinParamsFromUrl()
     if (pendingJoin) {
-      const cat = pendingJoin.category || getRoomCategory(pendingJoin.roomCode) || 'General Knowledge'
+      const cat = getRoomCategory(pendingJoin.roomCode) || pendingJoin.category || 'General Knowledge'
       saveRoomCategory(pendingJoin.roomCode, cat)
       const url = new URL(window.location.href)
       url.searchParams.delete('join')
@@ -330,7 +331,7 @@ export default function App() {
     if (ready && authenticated && hasUserProfile(activeAddress) && screen.name !== 'landing') {
       const joinParams = getJoinParamsFromUrl()
       if (joinParams) {
-        const cat = joinParams.category || getRoomCategory(joinParams.roomCode) || 'General Knowledge'
+        const cat = getRoomCategory(joinParams.roomCode) || joinParams.category || 'General Knowledge'
         saveRoomCategory(joinParams.roomCode, cat)
         const url = new URL(window.location.href)
         url.searchParams.delete('join')
@@ -506,10 +507,17 @@ export default function App() {
       <Lobby
         initialCategory={screen.initialCategory}
         onCreateRoom={(category) => setScreen({ name: 'create', category })}
-        onJoinRoom={(category, prefillCode) => setScreen({ name: 'join', category, prefillCode })}
+        onJoinRoom={(category, prefillCode) => {
+          const hostCat = prefillCode ? getRoomCategory(prefillCode) : null
+          const finalCategory = hostCat || category || 'General Knowledge'
+          if (prefillCode) saveRoomCategory(prefillCode, finalCategory)
+          setScreen({ name: 'join', category: finalCategory, prefillCode })
+        }}
         onContinueGame={(roomCode, category) => {
-          saveActiveGame(roomCode, category)
-          setScreen({ name: 'game', roomCode, category })
+          const hostCat = getRoomCategory(roomCode)
+          const finalCategory = hostCat || category || 'General Knowledge'
+          saveActiveGame(roomCode, finalCategory)
+          setScreen({ name: 'game', roomCode, category: finalCategory })
         }}
         onDisconnect={handleDisconnect}
       />
@@ -536,8 +544,11 @@ export default function App() {
         prefillCode={screen.prefillCode}
         onBack={() => setScreen({ name: 'lobby', initialCategory: screen.category })}
         onJoined={(code, category) => {
-          saveActiveGame(code, category, false)
-          setScreen({ name: 'game', roomCode: code, category })
+          const hostCat = getRoomCategory(code)
+          const finalCategory = hostCat || category || 'General Knowledge'
+          saveRoomCategory(code, finalCategory)
+          saveActiveGame(code, finalCategory, false)
+          setScreen({ name: 'game', roomCode: code, category: finalCategory })
         }}
       />
     )

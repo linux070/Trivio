@@ -532,15 +532,18 @@ export function prefetchCategoryQuestions(category: Category) {
 }
 
 /**
- * Returns `count` dynamic, non-repetitive questions for the given category.
- * - For Logic & Math and Word Blitz, procedural generators create infinite unique variations.
- * - For other categories, uses cached OpenTDB live questions if available, or
- *   seeded deterministic shuffle on the expanded curated bank.
+ * Returns `count` dynamic questions for the given category.
+ * - When `seed` (roomCode) is provided (multiplayer rooms):
+ *   Generates 100% deterministic questions and shuffled choices from the curated vault/procedural generators.
+ *   This ensures Host and ALL players always receive the exact same questions at the exact same time.
+ * - When `seed` is undefined (solo practice mode):
+ *   Uses live OpenTDB cache or random generator.
  */
 export function getQuestions(category: Category, count: number, seed?: string): TriviaQuestion[] {
-  const random = createPrng(seed ? `${category}_${seed}` : undefined)
+  const cleanSeed = seed ? seed.trim().toUpperCase() : undefined
+  const random = createPrng(cleanSeed ? `${category}_${cleanSeed}` : undefined)
 
-  // 1. Procedural generation for Math & Logic (Infinite questions)
+  // 1. Procedural generation for Math & Logic (Infinite questions, 100% deterministic when seeded)
   if (category === 'Logic & Math Arena') {
     const questions: TriviaQuestion[] = []
     for (let i = 0; i < count; i++) {
@@ -549,7 +552,7 @@ export function getQuestions(category: Category, count: number, seed?: string): 
     return questions
   }
 
-  // 2. Hybrid procedural + bank for Word Blitz
+  // 2. Hybrid procedural + bank for Word Blitz (100% deterministic when seeded)
   if (category === 'Word Blitz') {
     const questions: TriviaQuestion[] = []
     const staticPool = [...(QUESTION_BANK['Word Blitz'] ?? [])]
@@ -557,13 +560,13 @@ export function getQuestions(category: Category, count: number, seed?: string): 
       const j = Math.floor(random() * (i + 1))
       ;[staticPool[i], staticPool[j]] = [staticPool[j], staticPool[i]]
     }
-    
+
     const proceduralCount = Math.floor(count / 2)
     for (let i = 0; i < proceduralCount; i++) {
       questions.push(generateWordBlitzQuestion(random))
     }
     questions.push(...staticPool.slice(0, count - proceduralCount))
-    
+
     for (let i = questions.length - 1; i > 0; i--) {
       const j = Math.floor(random() * (i + 1))
       ;[questions[i], questions[j]] = [questions[j], questions[i]]
@@ -571,41 +574,68 @@ export function getQuestions(category: Category, count: number, seed?: string): 
     return questions.slice(0, count)
   }
 
-  // 3. Check if cached live questions from OpenTDB exist
-  const cachedLive = LIVE_QUESTION_CACHE.get(category)
-  if (cachedLive && cachedLive.length >= count) {
-    const pool = [...cachedLive]
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(random() * (i + 1))
-      ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  // 3. For unseeded solo practice only, check if cached live questions from OpenTDB exist
+  if (!cleanSeed) {
+    const cachedLive = LIVE_QUESTION_CACHE.get(category)
+    if (cachedLive && cachedLive.length >= count) {
+      const pool = [...cachedLive]
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(random() * (i + 1))
+        ;[pool[i], pool[j]] = [pool[j], pool[i]]
+      }
+      return pool.slice(0, count)
     }
-    return pool.slice(0, count)
   }
 
-  // 4. Expanded Curated Bank with Deterministic Seeded Fisher-Yates Shuffle
-  const pool = [...(QUESTION_BANK[category] ?? QUESTION_BANK['General Knowledge'])]
+  // 4. Curated Bank with Deterministic Seeded Fisher-Yates Shuffle
+  // This guarantees 100% identical question selection and option arrangement for all players in the room
+  const basePool = (QUESTION_BANK[category] && QUESTION_BANK[category].length > 0)
+    ? QUESTION_BANK[category]
+    : QUESTION_BANK['General Knowledge']
+
+  const pool = basePool.map(q => ({
+    question: q.question,
+    options: [...q.options],
+    correctIndex: q.correctIndex,
+  }))
 
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1))
     ;[pool[i], pool[j]] = [pool[j], pool[i]]
   }
 
-  return pool.slice(0, count)
+  const selectedQuestions = pool.slice(0, count)
+
+  // Also deterministically shuffle answer options for each question so all players see identical choices in identical order
+  return selectedQuestions.map((q) => {
+    const correctOption = q.options[q.correctIndex]
+    const options = [...q.options]
+    for (let i = options.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1))
+      ;[options[i], options[j]] = [options[j], options[i]]
+    }
+    return {
+      question: q.question,
+      options,
+      correctIndex: options.indexOf(correctOption),
+    }
+  })
 }
 
 /**
- * Main entry point: asynchronously fetches live questions from OpenTDB if available,
- * with immediate fallback to procedural generation & curated local pool.
+ * Main entry point: for unseeded mode fetches live questions, for seeded rooms guarantees determinism
  */
 export async function getQuestionsAsync(category: Category, count: number, seed?: string): Promise<TriviaQuestion[]> {
-  // If it's a live API supported category, attempt fresh fetch
-  if (OPENTDB_CATEGORY_MAP[category]) {
-    const live = await fetchLiveQuestionsFromAPI(category, count, seed)
+  const cleanSeed = seed ? seed.trim().toUpperCase() : undefined
+
+  // If unseeded (solo mode), attempt fresh fetch from live API
+  if (!cleanSeed && OPENTDB_CATEGORY_MAP[category]) {
+    const live = await fetchLiveQuestionsFromAPI(category, count)
     if (live && live.length >= count) {
       return live
     }
   }
 
-  // Otherwise synchronous generation / local bank
+  // When seed is provided (multiplayer rooms), use deterministic synchronized generator
   return getQuestions(category, count, seed)
 }
