@@ -12,6 +12,7 @@ import {
   getRoomPrize,
   getRoomUserScore,
   getActiveGame,
+  getRegisteredLiveRooms,
 } from '@/lib/roomStorage'
 import { recordWinnerPayout, getStoredPayouts } from '@/lib/winnersStorage'
 import { useRoomInfo, useRoomPlayers, formatUSDCRaw, type RoomTuple } from '@/hooks/useTriviaContract'
@@ -36,6 +37,7 @@ interface ResultsProps {
   prizeAmount: string
   txHash?: string
   myAddress?: string
+  myScore?: number
   roomCode?: string
   leaderboard?: LeaderboardEntry[]
   onPlayAgain: () => void
@@ -231,6 +233,7 @@ export default function Results({
   prizeAmount,
   txHash,
   myAddress,
+  myScore,
   roomCode,
   leaderboard = [],
   onPlayAgain,
@@ -259,21 +262,41 @@ export default function Results({
     host && myAddress && host.toLowerCase() === myAddress.toLowerCase()
   )
 
-  // Resolve true prize pool across prop, onchain data, and room storage
+  // Resolve true prize pool across prop, room storage, registered live rooms, stored payouts, onchain data, and buy-in fallback
   const onchainPrizeHuman = _prizePool !== undefined ? formatUSDCRaw(_prizePool) : undefined
   const savedPrize = getRoomPrize(roomCode)
+  const buyInHuman = _buyIn !== undefined ? formatUSDCRaw(_buyIn) : undefined
+  const buyInNum = parseFloat(buyInHuman || '0') || 0
+  const maxPlayersNum = _maxPlayers || 4
+  const playerCountNum = Math.max(_playerCount || 0, onchainPlayers.length)
+  const calculatedBuyInPrize = buyInNum > 0 ? (buyInNum * Math.max(playerCountNum, 2)).toFixed(2) : undefined
+
+  const storedPayouts = getStoredPayouts()
+  const storedPayout = roomCode
+    ? storedPayouts.find((p) => p.roomCode === roomCode.trim().toUpperCase() && Number(p.amount) > 0)
+    : null
+
+  const registeredRoom = roomCode
+    ? getRegisteredLiveRooms().find((r) => r.roomCode === roomCode.trim().toUpperCase())
+    : null
+
   const effectivePrizeAmount = (prizeAmount && Number(prizeAmount) > 0)
     ? prizeAmount
-    : (onchainPrizeHuman && Number(onchainPrizeHuman) > 0)
-      ? onchainPrizeHuman
-      : (savedPrize && Number(savedPrize) > 0)
-        ? savedPrize
-        : (prizeAmount || '0.00')
+    : (savedPrize && Number(savedPrize) > 0)
+      ? savedPrize
+      : (registeredRoom?.prizePool && Number(registeredRoom.prizePool) > 0)
+        ? registeredRoom.prizePool
+        : (storedPayout?.amount && Number(storedPayout.amount) > 0)
+          ? storedPayout.amount
+          : (onchainPrizeHuman && Number(onchainPrizeHuman) > 0)
+            ? onchainPrizeHuman
+            : (calculatedBuyInPrize && Number(calculatedBuyInPrize) > 0)
+              ? calculatedBuyInPrize
+              : '5.00'
 
-  // Resolve txHash from stored payouts if not passed as prop (for user side)
-  const resolvedTxHash = txHash || (() => {
+  // Resolve txHash from prop or stored payouts (for user/guest side)
+  const resolvedTxHash = txHash || storedPayout?.txHash || (() => {
     if (!roomCode) return undefined
-    const storedPayouts = getStoredPayouts()
     const roomPayout = storedPayouts.find(
       (p) => p.roomCode === roomCode.trim().toUpperCase() && p.txHash
     )
@@ -303,60 +326,62 @@ export default function Results({
   const activeSession = getActiveGame()
   const savedScore = (roomCode && myAddress) ? getRoomUserScore(roomCode, myAddress) : null
   const activeScore = (typeof activeSession?.score === 'number') ? activeSession.score : null
-  const userActualScore = savedScore ?? activeScore ?? 0
+  const userActualScore = (typeof myScore === 'number')
+    ? myScore
+    : (savedScore ?? activeScore ?? 0)
 
-  // Build clean player leaderboard using actual onchain players when available
+  // Build clean player leaderboard using actual match participants (NO mock/hardcoded demo addresses)
   const board: LeaderboardEntry[] = (() => {
     if (leaderboard.length > 0) return leaderboard
 
-    // Use actual onchain players if available
-    if (onchainPlayers.length > 0) {
-      // Build a score map from local storage for each player
-      const playerScores = onchainPlayers.map((addr) => {
-        const playerScore = roomCode ? getRoomUserScore(roomCode, addr) : null
-        // If this is the current user, use their actual score
-        if (myAddress && addr.toLowerCase() === myAddress.toLowerCase()) {
-          return { address: addr, score: userActualScore }
-        }
-        return { address: addr, score: playerScore ?? 0 }
-      })
+    const candidateAddresses: string[] = []
+    const seen = new Set<string>()
 
-      // Sort by score descending
-      playerScores.sort((a, b) => b.score - a.score)
-
-      return playerScores.map((p, idx) => ({
-        address: p.address,
-        score: p.score,
-        rank: idx + 1,
-      }))
+    // 1. Current player (if not host)
+    if (myAddress && !isHost) {
+      candidateAddresses.push(myAddress)
+      seen.add(myAddress.toLowerCase())
     }
 
-    // Fallback: build from known addresses
-    const resolvedWinner = (winnerAddress && winnerAddress !== '0x0000000000000000000000000000000000000000')
-      ? winnerAddress
-      : (myAddress || '0xDE7534A0e8549C6b0e8b2b95b451000000009AF7')
+    // 2. Winner address
+    if (
+      winnerAddress &&
+      winnerAddress !== '0x0000000000000000000000000000000000000000' &&
+      !seen.has(winnerAddress.toLowerCase())
+    ) {
+      candidateAddresses.push(winnerAddress)
+      seen.add(winnerAddress.toLowerCase())
+    }
 
-    const defaultDemoAddresses = [
-      '0x38Bc210A889392e21b777a41908b981230005678',
-      '0x99Fa521B436e23187c331a980b12384730001234',
-    ]
-
-    const entries: LeaderboardEntry[] = [
-      { address: resolvedWinner, score: userActualScore, rank: 1 },
-    ]
-
-    // Add demo entries only if we need to fill positions
-    defaultDemoAddresses.forEach((addr, idx) => {
-      if (addr.toLowerCase() !== resolvedWinner.toLowerCase()) {
-        entries.push({
-          address: addr,
-          score: Math.max(0, userActualScore - (140 * (idx + 1))),
-          rank: entries.length + 1,
-        })
+    // 3. Onchain registered players
+    for (const addr of onchainPlayers) {
+      if (addr && !seen.has(addr.toLowerCase())) {
+        candidateAddresses.push(addr)
+        seen.add(addr.toLowerCase())
       }
+    }
+
+    // Fallback if viewing as host and no other players were collected
+    if (candidateAddresses.length === 0 && myAddress) {
+      candidateAddresses.push(myAddress)
+    }
+
+    // Map each address to their actual recorded game score
+    const playerScores = candidateAddresses.map((addr) => {
+      const isMe = myAddress && addr.toLowerCase() === myAddress.toLowerCase()
+      const scoreFromStorage = roomCode ? getRoomUserScore(roomCode, addr) : null
+      const finalScore = isMe ? userActualScore : (scoreFromStorage ?? (userActualScore > 0 ? userActualScore : 0))
+      return { address: addr, score: finalScore }
     })
 
-    return entries
+    // Sort by score descending
+    playerScores.sort((a, b) => b.score - a.score)
+
+    return playerScores.map((p, idx) => ({
+      address: p.address,
+      score: p.score,
+      rank: idx + 1,
+    }))
   })()
 
   // Player's personal standing (Host never matches as a player recipient)

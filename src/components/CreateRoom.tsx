@@ -22,6 +22,7 @@ import {
   saveRoomCategory,
   saveRoomDuration,
   saveRoomPayout,
+  saveRoomPrize,
   saveActiveGame,
   registerLiveRoom,
   PAYOUT_PRESETS,
@@ -130,6 +131,8 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
       const totalEstimatedPool = mode === 'sponsored'
         ? (parseFloat(sponsoredPrize) || 5).toFixed(2)
         : ((parseFloat(buyIn) || 1) * maxPlayers).toFixed(2)
+
+      saveRoomPrize(roomCode, totalEstimatedPool)
 
       registerLiveRoom({
         roomCode,

@@ -21,6 +21,7 @@ import { type Category, CATEGORY_GROUPS } from '@/lib/questions'
 import {
   getRoomCategory,
   saveRoomCategory,
+  saveRoomPrize,
   getRoomPayout,
   calculatePayoutSplits,
   consumePendingJoin,
@@ -139,9 +140,12 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
     if (joined && checkedCode) {
       toast.success(`Joined room ${checkedCode}!`)
       saveRoomCategory(checkedCode, resolvedCategory)
+      if (prizeForPayouts && Number(prizeForPayouts) > 0) {
+        saveRoomPrize(checkedCode, prizeForPayouts)
+      }
       onJoined(checkedCode, resolvedCategory)
     }
-  }, [joined, checkedCode, resolvedCategory, onJoined])
+  }, [joined, checkedCode, resolvedCategory, prizeForPayouts, onJoined])
 
   const isWrongChain = chainId !== ARC_TESTNET_CHAIN_ID
   const isRoomOpen = status === 0

@@ -50,7 +50,7 @@ interface GameRoomProps {
   roomCode: string
   category: Category
   onBack: () => void
-  onGameEnd: (winnerAddress: string, prizeAmount: string, txHash?: string) => void
+  onGameEnd: (winnerAddress: string, prizeAmount: string, txHash?: string, myScore?: number) => void
 }
 
 type GamePhase = 'lobby' | 'playing' | 'finished'
@@ -121,9 +121,16 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const buyInNum = parseFloat(buyInHuman) || 0
   const maxPlayersNum = maxP || 4
   const currentPrizeNum = parseFloat(prizeHuman) || 0
-  const estimatedTotalPrize = buyInNum > 0 ? (buyInNum * maxPlayersNum).toFixed(2) : prizeHuman
-  const prizeForPayouts = currentPrizeNum > 0 ? prizeHuman : (parseFloat(estimatedTotalPrize) > 0 ? estimatedTotalPrize : prizeHuman)
   const effectivePlayerCount = Math.max(playerCount ?? 0, (rawPlayersList as `0x${string}`[] | undefined)?.length ?? 0)
+  const estimatedTotalPrize = buyInNum > 0 ? (buyInNum * Math.max(effectivePlayerCount, maxPlayersNum)).toFixed(2) : prizeHuman
+  const savedPrize = getRoomPrize(roomCode)
+  const prizeForPayouts = currentPrizeNum > 0
+    ? prizeHuman
+    : (savedPrize && parseFloat(savedPrize) > 0)
+      ? savedPrize
+      : buyInNum > 0
+        ? (buyInNum * Math.max(effectivePlayerCount, 2)).toFixed(2)
+        : (parseFloat(estimatedTotalPrize) > 0 ? estimatedTotalPrize : '5.00')
 
   const isHost = Boolean(
     activeAddress && host && host.toLowerCase() === activeAddress.toLowerCase()
@@ -135,10 +142,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     if (activeAddress && typeof score === 'number') {
       saveRoomUserScore(roomCode, activeAddress, score)
     }
-    if (prizeHuman && Number(prizeHuman) > 0) {
-      saveRoomPrize(roomCode, prizeHuman)
+    if (prizeForPayouts && Number(prizeForPayouts) > 0) {
+      saveRoomPrize(roomCode, prizeForPayouts)
     }
-  }, [roomCode, resolvedCategory, isHost, phase, score, qIndex, activeAddress, prizeHuman])
+  }, [roomCode, resolvedCategory, isHost, phase, score, qIndex, activeAddress, prizeForPayouts])
 
   const { startGame, isPending: startPending, isConfirming: startConfirming, isSuccess: gameStarted } = useStartGame()
   const { declareWinners, isPending: declarePending, isConfirming: declareConfirming, isSuccess: declared, hash: declareHash } = useDeclareWinners()
@@ -214,22 +221,22 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       recordWinnerPayout({
         roomCode,
         winnerAddress: primaryWinner,
-        amount: prizeHuman,
+        amount: prizeForPayouts,
         category: resolvedCategory,
         txHash: declareHash,
       })
-      onGameEnd(primaryWinner, prizeHuman, declareHash)
+      onGameEnd(primaryWinner, prizeForPayouts, declareHash, score)
     } else if (status === 2 && winningAddress && winningAddress !== '0x0000000000000000000000000000000000000000' && phase === 'finished') {
       clearActiveGame()
       recordWinnerPayout({
         roomCode,
         winnerAddress: winningAddress,
-        amount: prizeHuman,
+        amount: prizeForPayouts,
         category: resolvedCategory,
       })
-      onGameEnd(winningAddress, prizeHuman)
+      onGameEnd(winningAddress, prizeForPayouts, undefined, score)
     }
-  }, [declared, activeAddress, prizeHuman, declareHash, status, winnersList, phase, onGameEnd, rawPlayersList, roomCode, resolvedCategory])
+  }, [declared, activeAddress, prizeForPayouts, declareHash, status, winnersList, phase, onGameEnd, rawPlayersList, roomCode, resolvedCategory, score])
 
   function advanceQuestion(currentIndex: number, qs: TriviaQuestion[]) {
     const next = currentIndex + 1
@@ -740,7 +747,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
             <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl py-3" style={glass.inner}>
               <TokenUSDC variant="branded" size={18} />
-              <span className="text-base font-bold tabular-nums" style={{ color: 'var(--ink)' }}>{prizeHuman}</span>
+              <span className="text-base font-bold tabular-nums" style={{ color: 'var(--ink)' }}>{prizeForPayouts}</span>
               <span className="text-sm" style={{ color: 'var(--muted)' }}>USDC prize pool</span>
             </div>
 
@@ -754,7 +761,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                 <span className="text-purple-700 font-semibold">{getRoomPayout(roomCode, payoutMode).splits.length} {getRoomPayout(roomCode, payoutMode).splits.length === 1 ? 'Winner' : 'Winners'}</span>
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1">
-                {calculatePayoutSplits(prizeHuman, getRoomPayout(roomCode, payoutMode).splits).map((s, idx) => (
+                {calculatePayoutSplits(prizeForPayouts, getRoomPayout(roomCode, payoutMode).splits).map((s, idx) => (
                   <div key={idx} className="flex items-center justify-between bg-white/90 rounded-xl px-2.5 py-1.5 border border-slate-200/70 text-xs">
                     <span className="font-semibold text-slate-700">
                       {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🏅'} {s.label}
@@ -809,7 +816,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
             <button
               onClick={() => {
                 clearActiveGame()
-                onGameEnd(activeAddress || '0x0000000000000000000000000000000000000000', prizeHuman)
+                onGameEnd(activeAddress || '0x0000000000000000000000000000000000000000', prizeForPayouts, undefined, score)
               }}
               className="w-full rounded-2xl py-4 text-sm font-semibold transition-opacity hover:opacity-80"
               style={{ background: 'var(--accent)', color: 'white' }}

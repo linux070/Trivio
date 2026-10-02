@@ -8,6 +8,7 @@ import { useOnchainProfile } from '@/hooks/useTrivioProfileRegistry'
 import {
   saveRoomCategory,
   getRoomCategory,
+  getRoomPrize,
   saveActiveGame,
   clearActiveGame,
   setPendingJoin,
@@ -29,7 +30,7 @@ type Screen =
   | { name: 'create'; category: Category }
   | { name: 'join'; category: Category; prefillCode?: string }
   | { name: 'game'; roomCode: string; category: Category }
-  | { name: 'results'; winnerAddress: string; prizeAmount: string; txHash?: string; roomCode?: string }
+  | { name: 'results'; winnerAddress: string; prizeAmount: string; txHash?: string; roomCode?: string; myScore?: number }
 
 /** Read ?join=CODE and ?cat=CATEGORY from the URL */
 export function getJoinParamsFromUrl(): { roomCode: string; category?: Category } | null {
@@ -548,9 +549,11 @@ export default function App() {
         roomCode={screen.roomCode}
         category={screen.category}
         onBack={() => setScreen({ name: 'lobby' })}
-        onGameEnd={(winnerAddress, prizeAmount, txHash) => {
+        onGameEnd={(winnerAddress, prizeAmount, txHash, myScore) => {
           clearActiveGame()
-          setScreen({ name: 'results', winnerAddress, prizeAmount, txHash, roomCode: screen.roomCode })
+          const saved = screen.roomCode ? getRoomPrize(screen.roomCode) : undefined
+          const effectivePrize = (prizeAmount && Number(prizeAmount) > 0) ? prizeAmount : (saved || '5.00')
+          setScreen({ name: 'results', winnerAddress, prizeAmount: effectivePrize, txHash, roomCode: screen.roomCode, myScore })
         }}
       />
     )
@@ -564,6 +567,7 @@ export default function App() {
         txHash={screen.txHash}
         roomCode={screen.roomCode}
         myAddress={activeAddress}
+        myScore={screen.myScore}
         onPlayAgain={() => {
           clearActiveGame()
           setScreen({ name: 'lobby' })
