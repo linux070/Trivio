@@ -18,7 +18,14 @@ import {
 } from '@/hooks/useTriviaContract'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { type Category, CATEGORY_GROUPS } from '@/lib/questions'
-import { getRoomCategory, saveRoomCategory, getRoomPayout, calculatePayoutSplits } from '@/lib/roomStorage'
+import {
+  getRoomCategory,
+  saveRoomCategory,
+  getRoomPayout,
+  calculatePayoutSplits,
+  consumePendingJoin,
+  getPendingJoin,
+} from '@/lib/roomStorage'
 
 const ROOM_STATUS = ['Open', 'In Progress', 'Finished', 'Cancelled']
 
@@ -51,15 +58,37 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   const privyWalletAddress = user?.wallet?.address as `0x${string}` | undefined
   const activeAddress = address || privyWalletAddress || undefined
 
-  const [input, setInput] = useState(prefillCode ? prefillCode.trim().toUpperCase() : '')
-  const [checkedCode, setCheckedCode] = useState<string | null>(prefillCode ? prefillCode.trim().toUpperCase() : null)
+  const resolveInitialCode = (): string => {
+    if (prefillCode && prefillCode.trim()) return prefillCode.trim().toUpperCase()
+    const pending = consumePendingJoin() || getPendingJoin()
+    if (pending?.roomCode) return pending.roomCode.trim().toUpperCase()
+    try {
+      const p = new URLSearchParams(window.location.search)
+      const code = p.get('join')?.trim().toUpperCase()
+      if (code) return code
+    } catch {
+      // ignore
+    }
+    return ''
+  }
+
+  const initialCode = resolveInitialCode()
+  const [input, setInput] = useState(initialCode)
+  const [checkedCode, setCheckedCode] = useState<string | null>(initialCode || null)
 
   // Keep input and checkedCode synchronized whenever prefillCode prop updates
   useEffect(() => {
-    if (prefillCode) {
+    if (prefillCode && prefillCode.trim()) {
       const code = prefillCode.trim().toUpperCase()
       setInput(code)
       setCheckedCode(code)
+    } else {
+      const pending = consumePendingJoin() || getPendingJoin()
+      if (pending?.roomCode) {
+        const code = pending.roomCode.trim().toUpperCase()
+        setInput(code)
+        setCheckedCode(code)
+      }
     }
   }, [prefillCode])
 

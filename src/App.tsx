@@ -11,6 +11,7 @@ import {
   saveActiveGame,
   clearActiveGame,
   setPendingJoin,
+  getPendingJoin,
   consumePendingJoin,
   isValidCategory,
 } from '@/lib/roomStorage'
@@ -80,6 +81,7 @@ function getInitialScreen(): Screen {
       saveRoomCategory(joinParams.roomCode, joinParams.category)
     }
   }
+  const pendingJoin = getPendingJoin()
 
   // Check if we have an authenticated user with a profile
   const isAuth = typeof window !== 'undefined' && localStorage.getItem(STORAGE_AUTH_KEY) === 'true'
@@ -108,9 +110,12 @@ function getInitialScreen(): Screen {
   }
 
   if (isAuth && hasProfile) {
-    if (joinParams) {
-      const cat = joinParams.category || getRoomCategory(joinParams.roomCode) || 'General Knowledge'
-      return { name: 'join', category: cat, prefillCode: joinParams.roomCode }
+    if (joinParams || pendingJoin) {
+      const pendingObj = joinParams || pendingJoin
+      if (pendingObj?.roomCode) {
+        const cat = pendingObj.category || getRoomCategory(pendingObj.roomCode) || 'General Knowledge'
+        return { name: 'join', category: cat, prefillCode: pendingObj.roomCode }
+      }
     }
 
     const hash = typeof window !== 'undefined' ? window.location.hash : ''
@@ -263,7 +268,8 @@ export default function App() {
         // 1. Returning user with existing local profile for this address -> go straight to game screen
         if (hasUserProfile(activeAddress)) {
           setShowOnboarding(false)
-          if (screen.name === 'landing') {
+          const pending = getPendingJoin()
+          if (pending || screen.name === 'landing') {
             restoreGameScreen()
           }
           return
@@ -281,7 +287,8 @@ export default function App() {
           }
           saveUserProfile(p, activeAddress)
           setShowOnboarding(false)
-          if (screen.name === 'landing') {
+          const pending = getPendingJoin()
+          if (pending || screen.name === 'landing') {
             restoreGameScreen()
           }
           return
@@ -401,11 +408,14 @@ export default function App() {
   }, [screen.name])
 
   // Handler called when user connects wallet or signs in via Privy
-  const handleConnected = () => {
+  const handleConnected = (directCode?: string, directCategory?: Category) => {
     try {
       localStorage.setItem(STORAGE_AUTH_KEY, 'true')
     } catch {
       // ignore
+    }
+    if (directCode) {
+      setPendingJoin(directCode, directCategory)
     }
     if (activeAddress && hasUserProfile(activeAddress)) {
       setShowOnboarding(false)

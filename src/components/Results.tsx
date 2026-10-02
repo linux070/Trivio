@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trophy, ExternalLink, RotateCcw, Check, Copy } from 'lucide-react'
+import { Trophy, ExternalLink, RotateCcw, Check, Copy, X } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import { buildTxExplorerUrl } from '@/onchain-facts'
@@ -13,8 +13,8 @@ import {
   getRoomUserScore,
   getActiveGame,
 } from '@/lib/roomStorage'
-import { recordWinnerPayout } from '@/lib/winnersStorage'
-import { useRoomInfo, formatUSDCRaw, type RoomTuple } from '@/hooks/useTriviaContract'
+import { recordWinnerPayout, getStoredPayouts } from '@/lib/winnersStorage'
+import { useRoomInfo, useRoomPlayers, formatUSDCRaw, type RoomTuple } from '@/hooks/useTriviaContract'
 import { useOnchainProfile } from '@/hooks/useTrivioProfileRegistry'
 import { getDiceBearAvatarUrl, getUserProfile, generateRandomUsername } from '@/lib/userProfile'
 
@@ -95,6 +95,137 @@ function PlayerIdentity({ address, isMe }: { address?: string; isMe?: boolean })
   )
 }
 
+/**
+ * Payout detail popup modal for winners
+ */
+function PayoutDetailPopup({
+  open,
+  onClose,
+  amount,
+  rank,
+  percent,
+  txHash,
+}: {
+  open: boolean
+  onClose: () => void
+  amount: string
+  rank: string
+  percent: number
+  txHash?: string
+}) {
+  const [copied, setCopied] = useState(false)
+  const txUrl = txHash ? buildTxExplorerUrl(ARC_TESTNET_CHAIN_ID, txHash) : undefined
+
+  const handleCopy = () => {
+    if (!txHash) return
+    void navigator.clipboard.writeText(txHash)
+    setCopied(true)
+    toast.success('Transaction hash copied!')
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  if (!open) return null
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onClick={onClose}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+
+          {/* Modal */}
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            className="relative w-full max-w-sm rounded-3xl bg-white border border-slate-200/80 shadow-2xl p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute top-4 right-4 h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors cursor-pointer"
+            >
+              <X size={16} className="text-slate-500" />
+            </button>
+
+            {/* Trophy icon */}
+            <div className="flex justify-center">
+              <div className="h-16 w-16 rounded-full bg-gradient-to-br from-amber-100 to-amber-200 flex items-center justify-center">
+                <Trophy size={28} className="text-amber-600" />
+              </div>
+            </div>
+
+            {/* Payout amount */}
+            <div className="text-center">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Your Payout
+              </p>
+              <div className="flex items-center justify-center gap-2">
+                <TokenUSDC variant="branded" size={28} />
+                <span className="text-3xl font-black text-slate-950 tabular-nums">${amount}</span>
+                <span className="text-sm font-bold text-slate-400">USDC</span>
+              </div>
+              <p className="mt-1 text-xs font-semibold text-purple-600">
+                {rank} — {percent}% of prize pool
+              </p>
+            </div>
+
+            {/* Transaction hash */}
+            {txHash && (
+              <div className="rounded-2xl bg-slate-50 border border-slate-200/80 p-3.5 space-y-2">
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Payout Transaction
+                </p>
+                <p className="font-mono text-xs text-slate-800 font-semibold truncate">
+                  {txHash}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    className="flex-1 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                    <span>{copied ? 'Copied!' : 'Copy Hash'}</span>
+                  </button>
+                  {txUrl && (
+                    <a
+                      href={txUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 h-9 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-xs font-bold text-purple-700 flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <span>View on Explorer</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {!txHash && (
+              <div className="rounded-2xl bg-amber-50 border border-amber-200/60 p-3 text-center">
+                <p className="text-xs font-semibold text-amber-700">
+                  Transaction details will appear once the payout is confirmed onchain.
+                </p>
+              </div>
+            )}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 export default function Results({
   winnerAddress,
   prizeAmount,
@@ -106,9 +237,22 @@ export default function Results({
 }: ResultsProps) {
   const [tab, setTab] = useState<'podium' | 'leaderboard'>('podium')
   const [copiedTx, setCopiedTx] = useState(false)
+  const [payoutPopup, setPayoutPopup] = useState<{
+    open: boolean
+    amount: string
+    rank: string
+    percent: number
+    txHash?: string
+  }>({ open: false, amount: '0.00', rank: '', percent: 0 })
 
   const { data: roomInfo } = useRoomInfo(roomCode || null)
   const [host, _buyIn, _prizePool, _maxPlayers, _playerCount, _status, payoutMode] = (roomInfo as RoomTuple) ?? []
+
+  // Fetch actual onchain players for the room
+  const { data: rawPlayersList } = useRoomPlayers(roomCode || null)
+  const onchainPlayers = ((rawPlayersList as `0x${string}`[] | undefined) || []).filter(
+    (addr) => Boolean(addr) && addr !== '0x0000000000000000000000000000000000000000'
+  )
 
   // Check if current user is the host
   const isHost = Boolean(
@@ -126,6 +270,16 @@ export default function Results({
         ? savedPrize
         : (prizeAmount || '0.00')
 
+  // Resolve txHash from stored payouts if not passed as prop (for user side)
+  const resolvedTxHash = txHash || (() => {
+    if (!roomCode) return undefined
+    const storedPayouts = getStoredPayouts()
+    const roomPayout = storedPayouts.find(
+      (p) => p.roomCode === roomCode.trim().toUpperCase() && p.txHash
+    )
+    return roomPayout?.txHash
+  })()
+
   // Ensure this winning result is recorded into live winners storage
   useEffect(() => {
     if (winnerAddress && winnerAddress !== '0x0000000000000000000000000000000000000000') {
@@ -134,12 +288,12 @@ export default function Results({
         winnerAddress,
         amount: effectivePrizeAmount,
         category: getRoomCategory(roomCode) || 'General Knowledge',
-        txHash,
+        txHash: resolvedTxHash,
       })
     }
-  }, [winnerAddress, effectivePrizeAmount, roomCode, txHash])
+  }, [winnerAddress, effectivePrizeAmount, roomCode, resolvedTxHash])
 
-  const txUrl = txHash ? buildTxExplorerUrl(ARC_TESTNET_CHAIN_ID, txHash) : undefined
+  const txUrl = resolvedTxHash ? buildTxExplorerUrl(ARC_TESTNET_CHAIN_ID, resolvedTxHash) : undefined
 
   // Retrieve room payout structure and calculate exact monetary splits
   const payout = getRoomPayout(roomCode, payoutMode)
@@ -149,35 +303,61 @@ export default function Results({
   const activeSession = getActiveGame()
   const savedScore = (roomCode && myAddress) ? getRoomUserScore(roomCode, myAddress) : null
   const activeScore = (typeof activeSession?.score === 'number') ? activeSession.score : null
-  const userActualScore = savedScore ?? activeScore ?? (isHost ? 950 : 0)
+  const userActualScore = savedScore ?? activeScore ?? 0
 
-  // Distinct addresses for demo rankings when multiplayer list is minimal
-  const defaultDemoAddresses = [
-    '0xDE7534A0e8549C6b0e8b2b95b451000000009AF7',
-    '0x38Bc210A889392e21b777a41908b981230005678',
-    '0x99Fa521B436e23187c331a980b12384730001234',
-  ]
+  // Build clean player leaderboard using actual onchain players when available
+  const board: LeaderboardEntry[] = (() => {
+    if (leaderboard.length > 0) return leaderboard
 
-  const resolvedWinner = (winnerAddress && winnerAddress !== '0x0000000000000000000000000000000000000000')
-    ? winnerAddress
-    : isHost
-      ? defaultDemoAddresses[0]
-      : (myAddress || defaultDemoAddresses[0])
+    // Use actual onchain players if available
+    if (onchainPlayers.length > 0) {
+      // Build a score map from local storage for each player
+      const playerScores = onchainPlayers.map((addr) => {
+        const playerScore = roomCode ? getRoomUserScore(roomCode, addr) : null
+        // If this is the current user, use their actual score
+        if (myAddress && addr.toLowerCase() === myAddress.toLowerCase()) {
+          return { address: addr, score: userActualScore }
+        }
+        return { address: addr, score: playerScore ?? 0 }
+      })
 
-  // Build clean player leaderboard outputting actual recorded scores
-  const board: LeaderboardEntry[] = leaderboard.length > 0
-    ? leaderboard
-    : isHost
-      ? [
-          { address: resolvedWinner, score: userActualScore || 950, rank: 1 },
-          { address: defaultDemoAddresses[1], score: Math.max(10, (userActualScore || 950) - 140), rank: 2 },
-          { address: defaultDemoAddresses[2], score: Math.max(0, (userActualScore || 950) - 280), rank: 3 },
-        ]
-      : [
-          { address: resolvedWinner, score: userActualScore, rank: 1 },
-          { address: defaultDemoAddresses[1], score: Math.max(10, userActualScore - 140), rank: 2 },
-          { address: defaultDemoAddresses[2], score: Math.max(0, userActualScore - 280), rank: 3 },
-        ]
+      // Sort by score descending
+      playerScores.sort((a, b) => b.score - a.score)
+
+      return playerScores.map((p, idx) => ({
+        address: p.address,
+        score: p.score,
+        rank: idx + 1,
+      }))
+    }
+
+    // Fallback: build from known addresses
+    const resolvedWinner = (winnerAddress && winnerAddress !== '0x0000000000000000000000000000000000000000')
+      ? winnerAddress
+      : (myAddress || '0xDE7534A0e8549C6b0e8b2b95b451000000009AF7')
+
+    const defaultDemoAddresses = [
+      '0x38Bc210A889392e21b777a41908b981230005678',
+      '0x99Fa521B436e23187c331a980b12384730001234',
+    ]
+
+    const entries: LeaderboardEntry[] = [
+      { address: resolvedWinner, score: userActualScore, rank: 1 },
+    ]
+
+    // Add demo entries only if we need to fill positions
+    defaultDemoAddresses.forEach((addr, idx) => {
+      if (addr.toLowerCase() !== resolvedWinner.toLowerCase()) {
+        entries.push({
+          address: addr,
+          score: Math.max(0, userActualScore - (140 * (idx + 1))),
+          rank: entries.length + 1,
+        })
+      }
+    })
+
+    return entries
+  })()
 
   // Player's personal standing (Host never matches as a player recipient)
   const myRankEntry = (!isHost && myAddress)
@@ -189,8 +369,8 @@ export default function Results({
   )
 
   const handleCopyTx = () => {
-    if (!txHash) return
-    void navigator.clipboard.writeText(txHash)
+    if (!resolvedTxHash) return
+    void navigator.clipboard.writeText(resolvedTxHash)
     setCopiedTx(true)
     toast.success('Transaction hash copied!')
     setTimeout(() => setCopiedTx(false), 2000)
@@ -214,18 +394,18 @@ export default function Results({
           transition={{ duration: 0.35, ease: 'easeOut' }}
           className="text-center mb-6"
         >
-          {/* Main Title */}
+          {/* Main Title — same for both host and users */}
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-950">
-            {isHost ? 'Game Concluded!' : 'Final Results'}
+            Game Concluded!
           </h1>
 
           {/* Subtitle */}
           <p className="mt-1.5 text-sm sm:text-base font-medium text-slate-600 max-w-md mx-auto">
-            All USDC prize payouts have been settled on Arc Testnet.
+            Final results displayed.
           </p>
         </motion.div>
 
-        {/* ─── Total Prize Banner ─────────────────────────────────── */}
+        {/* ─── Total Prize Banner (subheading — visible to both host and users) ─ */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -316,9 +496,18 @@ export default function Results({
                         key={split.rank}
                         className={`flex items-center justify-between gap-3 rounded-2xl p-3.5 transition-all border ${
                           isRecipientMe
-                            ? 'bg-purple-50/60 border-purple-300/80 ring-1 ring-purple-400/30'
+                            ? 'bg-purple-50/60 border-purple-300/80 ring-1 ring-purple-400/30 cursor-pointer hover:bg-purple-50'
                             : 'bg-slate-50/60 hover:bg-slate-50 border-slate-200/70'
                         }`}
+                        onClick={isRecipientMe ? () => {
+                          setPayoutPopup({
+                            open: true,
+                            amount: split.amount,
+                            rank: split.label,
+                            percent: split.percent,
+                            txHash: resolvedTxHash,
+                          })
+                        } : undefined}
                       >
                         {/* Rank Badge + Username + Avatar */}
                         <div className="flex items-center gap-3 min-w-0">
@@ -383,7 +572,16 @@ export default function Results({
                         isEntryMe
                           ? 'bg-purple-50/60 border-purple-300/80 ring-1 ring-purple-400/30'
                           : 'bg-slate-50/60 border-slate-200/70'
-                      }`}
+                      } ${isEntryMe && earnedSplit ? 'cursor-pointer hover:bg-purple-50' : ''}`}
+                      onClick={isEntryMe && earnedSplit ? () => {
+                        setPayoutPopup({
+                          open: true,
+                          amount: earnedSplit.amount,
+                          rank: earnedSplit.label,
+                          percent: earnedSplit.percent,
+                          txHash: resolvedTxHash,
+                        })
+                      } : undefined}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white border border-slate-200 font-bold text-xs text-slate-700 shadow-2xs">
@@ -394,7 +592,7 @@ export default function Results({
                           <PlayerIdentity address={entry.address} isMe={isEntryMe} />
                           {earnedSplit && (
                             <span className="text-[11px] font-bold text-emerald-700 mt-0.5 block">
-                              won ${earnedSplit.amount} USDC
+                              Won {earnedSplit.amount} USDC
                             </span>
                           )}
                         </div>
@@ -413,14 +611,14 @@ export default function Results({
         </AnimatePresence>
 
         {/* ─── Transaction Explorer Box ───────────────────────────── */}
-        {txHash && (
+        {resolvedTxHash && (
           <div className="mt-4 rounded-2xl bg-white border border-slate-200/80 p-3.5 shadow-2xs flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                 Payout Transaction
               </p>
               <p className="font-mono text-xs text-slate-800 font-semibold truncate">
-                {txHash}
+                {resolvedTxHash}
               </p>
             </div>
 
@@ -470,6 +668,16 @@ export default function Results({
         </p>
 
       </div>
+
+      {/* Payout Detail Popup */}
+      <PayoutDetailPopup
+        open={payoutPopup.open}
+        onClose={() => setPayoutPopup(prev => ({ ...prev, open: false }))}
+        amount={payoutPopup.amount}
+        rank={payoutPopup.rank}
+        percent={payoutPopup.percent}
+        txHash={payoutPopup.txHash}
+      />
     </div>
   )
 }

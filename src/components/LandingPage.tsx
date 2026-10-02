@@ -8,7 +8,8 @@ import { getDiceBearAvatarUrl, getUserProfile, generateRandomUsername } from '@/
 import { useOnchainProfile } from '@/hooks/useTrivioProfileRegistry'
 import { useLiveWinners } from '@/hooks/useLiveWinners'
 import { formatTimeAgo, type WinnerPayoutRecord } from '@/lib/winnersStorage'
-import { setPendingJoin, getRoomCategory, extractRoomCode } from '@/lib/roomStorage'
+import { setPendingJoin, getPendingJoin, getRoomCategory, extractRoomCode } from '@/lib/roomStorage'
+import type { Category } from '@/lib/questions'
 
 /* ── Typewriter hook ─────────────────────────────────────────────────────── */
 function useTypewriter(text: string, speed = 52, startDelay = 800) {
@@ -352,14 +353,15 @@ function LiveWinnersTicker({ onWinnerClick }: { onWinnerClick: () => void }) {
 
 /* ── LandingPage ──────────────────────────────────────────────────────────── */
 interface LandingPageProps {
-  onConnected: () => void
+  onConnected: (prefillCode?: string, category?: Category) => void
 }
 
 export default function LandingPage({ onConnected }: LandingPageProps) {
   const { authenticated } = usePrivy()
   const { login } = useLogin({
     onComplete: () => {
-      onConnected()
+      const pending = getPendingJoin()
+      onConnected(pending?.roomCode, pending?.category)
     },
   })
   const [modalOpen, setModalOpen] = useState(false)
@@ -370,11 +372,23 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
   // If already authenticated via Privy, immediately notify parent
   useEffect(() => {
     if (authenticated) {
-      onConnected()
+      const pending = getPendingJoin()
+      onConnected(pending?.roomCode, pending?.category)
     }
   }, [authenticated, onConnected])
 
   const handleGetStarted = () => {
+    if (roomCode.trim()) {
+      const extracted = extractRoomCode(roomCode)
+      if (extracted?.roomCode) {
+        const cat = extracted.category || getRoomCategory(extracted.roomCode) || undefined
+        setPendingJoin(extracted.roomCode, cat)
+        if (authenticated) {
+          onConnected(extracted.roomCode, cat)
+          return
+        }
+      }
+    }
     login()
   }
 
@@ -402,7 +416,7 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
     setPendingJoin(code, category)
 
     if (authenticated) {
-      onConnected()
+      onConnected(code, category)
     } else {
       login()
     }

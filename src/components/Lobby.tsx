@@ -52,7 +52,7 @@ import {
   type SubCategoryInfo,
   prefetchCategoryQuestions,
 } from '@/lib/questions'
-import { getActiveGame, clearActiveGame, type ActiveGameSession } from '@/lib/roomStorage'
+import { getActiveGame, clearActiveGame, getPendingJoin, type ActiveGameSession } from '@/lib/roomStorage'
 import { useLiveRooms } from '@/hooks/useLiveRooms'
 import { useLiveWinners } from '@/hooks/useLiveWinners'
 import { type LiveLeaderboardEntry, type LatestPayoutInfo } from '@/lib/winnersStorage'
@@ -1291,7 +1291,10 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
 
             {/* Join Room */}
             <button
-              onClick={() => onJoinRoom(selected || 'General Knowledge')}
+              onClick={() => {
+                const pending = getPendingJoin()
+                onJoinRoom(selected || 'General Knowledge', pending?.roomCode)
+              }}
               className="group flex flex-col items-center justify-center gap-1.5 sm:gap-2 rounded-2xl sm:rounded-3xl p-3.5 sm:py-5 text-center transition-all duration-200 bg-white hover:bg-violet-50/50 active:scale-95 border-2 border-purple-100 hover:border-purple-300 shadow-sm cursor-pointer"
             >
               <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl sm:rounded-2xl bg-purple-50 text-purple-700 transition-transform duration-200 group-hover:scale-110">

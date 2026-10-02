@@ -395,6 +395,41 @@ export function extractRoomCode(input: string): { roomCode: string; category?: C
   return null
 }
 
+/** Peek at pending join details without consuming */
+export function getPendingJoin(): { roomCode: string; category?: Category } | null {
+  try {
+    const raw =
+      sessionStorage.getItem(STORAGE_PENDING_JOIN_KEY) ||
+      localStorage.getItem(STORAGE_PENDING_JOIN_KEY)
+    if (raw) {
+      if (raw.startsWith('{')) {
+        const parsed = JSON.parse(raw)
+        if (parsed?.roomCode) {
+          return {
+            roomCode: parsed.roomCode.trim().toUpperCase(),
+            category: isValidCategory(parsed.category) ? parsed.category : undefined,
+          }
+        }
+      } else {
+        return { roomCode: raw.trim().toUpperCase() }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+/** Clear pending join details manually */
+export function clearPendingJoin(): void {
+  try {
+    sessionStorage.removeItem(STORAGE_PENDING_JOIN_KEY)
+    localStorage.removeItem(STORAGE_PENDING_JOIN_KEY)
+  } catch {
+    // ignore
+  }
+}
+
 /** Retrieve and consume pending join details */
 export function consumePendingJoin(): { roomCode: string; category?: Category } | null {
   try {
