@@ -8,6 +8,7 @@ import { useOnchainProfile } from '@/hooks/useTrivioProfileRegistry'
 import {
   saveRoomCategory,
   getRoomCategory,
+  inferCategoryFromCode,
   getRoomPrize,
   saveActiveGame,
   clearActiveGame,
@@ -509,13 +510,13 @@ export default function App() {
         onCreateRoom={(category) => setScreen({ name: 'create', category })}
         onJoinRoom={(category, prefillCode) => {
           const hostCat = prefillCode ? getRoomCategory(prefillCode) : null
-          const finalCategory = hostCat || category || 'General Knowledge'
-          if (prefillCode) saveRoomCategory(prefillCode, finalCategory)
+          const finalCategory = hostCat || (prefillCode ? inferCategoryFromCode(prefillCode) : null) || category || 'General Knowledge'
+          if (prefillCode && hostCat) saveRoomCategory(prefillCode, hostCat)
           setScreen({ name: 'join', category: finalCategory, prefillCode })
         }}
         onContinueGame={(roomCode, category) => {
           const hostCat = getRoomCategory(roomCode)
-          const finalCategory = hostCat || category || 'General Knowledge'
+          const finalCategory = hostCat || (roomCode ? inferCategoryFromCode(roomCode) : null) || category || 'General Knowledge'
           saveActiveGame(roomCode, finalCategory)
           setScreen({ name: 'game', roomCode, category: finalCategory })
         }}
@@ -545,7 +546,7 @@ export default function App() {
         onBack={() => setScreen({ name: 'lobby', initialCategory: screen.category })}
         onJoined={(code, category) => {
           const hostCat = getRoomCategory(code)
-          const finalCategory = hostCat || category || 'General Knowledge'
+          const finalCategory = hostCat || (code ? inferCategoryFromCode(code) : null) || category || 'General Knowledge'
           saveRoomCategory(code, finalCategory)
           saveActiveGame(code, finalCategory, false)
           setScreen({ name: 'game', roomCode: code, category: finalCategory })

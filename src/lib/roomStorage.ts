@@ -178,8 +178,21 @@ export function isValidCategory(cat: string | null | undefined): cat is Category
 
 /** Save the host-assigned category for a room code */
 export function saveRoomCategory(roomCode: string, category: Category): void {
-  if (!roomCode) return
+  if (!roomCode || !isValidCategory(category)) return
   const code = roomCode.trim().toUpperCase()
+
+  // Guard against accidentally overwriting a known specific room mode with generic fallback General Knowledge
+  const canonical = KNOWN_DEFAULT_ROOMS[code] || inferCategoryFromCode(code)
+  if (canonical && canonical !== 'General Knowledge' && category === 'General Knowledge') {
+    try {
+      localStorage.setItem(`${STORAGE_ROOM_CAT_PREFIX}${code}`, canonical)
+      sessionStorage.setItem(`${STORAGE_ROOM_CAT_PREFIX}${code}`, canonical)
+    } catch {
+      // ignore
+    }
+    return
+  }
+
   try {
     localStorage.setItem(`${STORAGE_ROOM_CAT_PREFIX}${code}`, category)
     sessionStorage.setItem(`${STORAGE_ROOM_CAT_PREFIX}${code}`, category)
@@ -189,7 +202,7 @@ export function saveRoomCategory(roomCode: string, category: Category): void {
 }
 
 /** Known room categories lookup registry */
-const KNOWN_DEFAULT_ROOMS: Record<string, Category> = {
+export const KNOWN_DEFAULT_ROOMS: Record<string, Category> = {
   CRYP99: 'Crypto',
   BLITZ4: 'Word Blitz',
   EMOJI8: 'Emoji Decoder',
@@ -205,35 +218,114 @@ export function inferCategoryFromCode(code: string): Category | null {
   if (!code) return null
   const clean = code.trim().toUpperCase()
 
-  if (clean.startsWith('CRYP') || clean.startsWith('BTC') || clean.startsWith('ETH') || clean.startsWith('DEFI') || clean.startsWith('WEB3') || clean.startsWith('SOL')) {
-    return 'Crypto'
-  }
-  if (clean.startsWith('BLITZ') || clean.startsWith('WORD') || clean.startsWith('GRAM') || clean.startsWith('VOCAB') || clean.startsWith('ANAG')) {
-    return 'Word Blitz'
-  }
-  if (clean.startsWith('EMOJI') || clean.startsWith('ICON') || clean.startsWith('EMO')) {
-    return 'Emoji Decoder'
-  }
-  if (clean.startsWith('BOMB') || clean.startsWith('TAG') || clean.startsWith('BOOM') || clean.startsWith('BLAST') || clean.startsWith('ELIM')) {
+  // 1. Bomb Tag
+  if (
+    clean.startsWith('BOMB') || clean.includes('BOMB') ||
+    clean.startsWith('TAG') || clean.includes('TAG') ||
+    clean.startsWith('BOOM') || clean.includes('BOOM') ||
+    clean.startsWith('BLAST') || clean.includes('BLAST') ||
+    clean.startsWith('ELIM') || clean.includes('ELIM') ||
+    clean.startsWith('TNT')
+  ) {
     return 'Bomb Tag'
   }
-  if (clean.startsWith('MATH') || clean.startsWith('LOGIC') || clean.startsWith('CALC') || clean.startsWith('NUM') || clean.startsWith('EULER')) {
-    return 'Logic & Math Arena'
+
+  // 2. Crypto
+  if (
+    clean.startsWith('CRYP') || clean.includes('CRYP') ||
+    clean.startsWith('BTC') || clean.startsWith('ETH') ||
+    clean.startsWith('DEFI') || clean.startsWith('WEB3') ||
+    clean.startsWith('SOL') || clean.includes('COIN') ||
+    clean.includes('TOKEN')
+  ) {
+    return 'Crypto'
   }
-  if (clean.startsWith('CANDLE') || clean.startsWith('CHART') || clean.startsWith('RUSH') || clean.startsWith('TRAD') || clean.startsWith('BULL') || clean.startsWith('BEAR')) {
+
+  // 3. Candle Rush
+  if (
+    clean.startsWith('CANDLE') || clean.includes('CANDLE') ||
+    clean.startsWith('CHART') || clean.includes('CHART') ||
+    clean.startsWith('RUSH') || clean.includes('RUSH') ||
+    clean.startsWith('TRAD') || clean.startsWith('BULL') ||
+    clean.startsWith('BEAR') || clean.startsWith('DEX')
+  ) {
     return 'Candle Rush'
   }
-  if (clean.startsWith('SPORT') || clean.startsWith('BALL') || clean.startsWith('GAME') || clean.startsWith('GOAL') || clean.startsWith('HOOP')) {
+
+  // 4. Word Blitz
+  if (
+    clean.startsWith('BLITZ') || clean.includes('BLITZ') ||
+    clean.startsWith('BLTZ') || clean.includes('BLTZ') ||
+    clean.startsWith('WORD') || clean.includes('WORD') ||
+    clean.startsWith('GRAM') || clean.startsWith('VOCAB') ||
+    clean.startsWith('ANAG') || clean.startsWith('LEX')
+  ) {
+    return 'Word Blitz'
+  }
+
+  // 5. Emoji Decoder
+  if (
+    clean.startsWith('EMOJI') || clean.includes('EMOJI') ||
+    clean.startsWith('EMOJ') || clean.startsWith('ICON') ||
+    clean.startsWith('EMO')
+  ) {
+    return 'Emoji Decoder'
+  }
+
+  // 6. Logic & Math Arena
+  if (
+    clean.startsWith('MATH') || clean.includes('MATH') ||
+    clean.startsWith('LOGIC') || clean.includes('LOGIC') ||
+    clean.startsWith('CALC') || clean.startsWith('NUM') ||
+    clean.startsWith('EULER') || clean.startsWith('PUZZLE')
+  ) {
+    return 'Logic & Math Arena'
+  }
+
+  // 7. Sports
+  if (
+    clean.startsWith('SPORT') || clean.includes('SPORT') ||
+    clean.startsWith('BALL') || clean.startsWith('GAME') ||
+    clean.startsWith('GOAL') || clean.startsWith('HOOP')
+  ) {
     return 'Sports'
   }
-  if (clean.startsWith('POP') || clean.startsWith('MEME') || clean.startsWith('FILM') || clean.startsWith('STAR') || clean.startsWith('SHOW') || clean.startsWith('CULT')) {
+
+  // 8. Pop Culture
+  if (
+    clean.startsWith('POP') || clean.includes('POP') ||
+    clean.startsWith('MEME') || clean.includes('MEME') ||
+    clean.startsWith('FILM') || clean.startsWith('STAR') ||
+    clean.startsWith('SHOW') || clean.startsWith('CULT')
+  ) {
     return 'Pop Culture'
   }
-  if (clean.startsWith('SCI') || clean.startsWith('BIO') || clean.startsWith('PHYS') || clean.startsWith('CHEM') || clean.startsWith('COSM') || clean.startsWith('ASTRO')) {
+
+  // 9. Science
+  if (
+    clean.startsWith('SCI') || clean.includes('SCI') ||
+    clean.startsWith('BIO') || clean.startsWith('PHYS') ||
+    clean.startsWith('CHEM') || clean.startsWith('COSM') ||
+    clean.startsWith('ASTRO')
+  ) {
     return 'Science'
   }
-  if (clean.startsWith('HIST') || clean.startsWith('WAR') || clean.startsWith('LORE') || clean.startsWith('PAST') || clean.startsWith('EMP')) {
+
+  // 10. History
+  if (
+    clean.startsWith('HIST') || clean.includes('HIST') ||
+    clean.startsWith('WAR') || clean.startsWith('LORE') ||
+    clean.startsWith('PAST') || clean.startsWith('EMP')
+  ) {
     return 'History'
+  }
+
+  // 11. General Knowledge
+  if (
+    clean.startsWith('GEN') || clean.startsWith('KNOW') ||
+    clean.startsWith('TRV') || clean.startsWith('TRIV')
+  ) {
+    return 'General Knowledge'
   }
 
   return null
@@ -244,7 +336,49 @@ export function getRoomCategory(roomCode: string | null | undefined): Category |
   if (!roomCode) return null
   const code = roomCode.trim().toUpperCase()
 
-  // 1. Direct session and local storage
+  // 1. Canonical known default room codes (e.g. BOMB01 -> Bomb Tag, CRYP99 -> Crypto, etc.)
+  if (KNOWN_DEFAULT_ROOMS[code] && isValidCategory(KNOWN_DEFAULT_ROOMS[code])) {
+    return KNOWN_DEFAULT_ROOMS[code]
+  }
+
+  // 2. Actively registered live rooms from hosts
+  try {
+    const liveRooms = getRegisteredLiveRooms()
+    const foundLive = liveRooms.find(r => r.roomCode.toUpperCase() === code)
+    if (foundLive && isValidCategory(foundLive.category)) {
+      return foundLive.category
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Prefix & keyword inference from room code
+  const inferred = inferCategoryFromCode(code)
+  if (inferred && isValidCategory(inferred)) {
+    return inferred
+  }
+
+  // 4. Active game session
+  try {
+    const activeGame = getActiveGame()
+    if (activeGame && activeGame.roomCode === code && isValidCategory(activeGame.category)) {
+      return activeGame.category
+    }
+  } catch {
+    // ignore
+  }
+
+  // 5. Pending join state
+  try {
+    const pending = getPendingJoin()
+    if (pending && pending.roomCode === code && isValidCategory(pending.category)) {
+      return pending.category
+    }
+  } catch {
+    // ignore
+  }
+
+  // 6. Direct session and local storage
   try {
     const saved =
       sessionStorage.getItem(`${STORAGE_ROOM_CAT_PREFIX}${code}`) ||
@@ -254,54 +388,28 @@ export function getRoomCategory(roomCode: string | null | undefined): Category |
     // ignore
   }
 
-  // 2. Actively registered live rooms
-  try {
-    const liveRooms = getRegisteredLiveRooms()
-    const foundLive = liveRooms.find(r => r.roomCode.toUpperCase() === code)
-    if (foundLive && isValidCategory(foundLive.category)) {
-      saveRoomCategory(code, foundLive.category)
-      return foundLive.category
-    }
-  } catch {
-    // ignore
-  }
-
-  // 3. Active game session
-  try {
-    const activeGame = getActiveGame()
-    if (activeGame && activeGame.roomCode === code && isValidCategory(activeGame.category)) {
-      saveRoomCategory(code, activeGame.category)
-      return activeGame.category
-    }
-  } catch {
-    // ignore
-  }
-
-  // 4. Pending join state
-  try {
-    const pending = getPendingJoin()
-    if (pending && pending.roomCode === code && isValidCategory(pending.category)) {
-      saveRoomCategory(code, pending.category)
-      return pending.category
-    }
-  } catch {
-    // ignore
-  }
-
-  // 5. Known default rooms
-  if (KNOWN_DEFAULT_ROOMS[code] && isValidCategory(KNOWN_DEFAULT_ROOMS[code])) {
-    saveRoomCategory(code, KNOWN_DEFAULT_ROOMS[code])
-    return KNOWN_DEFAULT_ROOMS[code]
-  }
-
-  // 6. Prefix & keyword inference
-  const inferred = inferCategoryFromCode(code)
-  if (inferred && isValidCategory(inferred)) {
-    saveRoomCategory(code, inferred)
-    return inferred
-  }
-
   return null
+}
+
+/** Generate a 6-character room code tailored with a category prefix */
+export function generateCategoryRoomCode(cat?: Category): string {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const rand2 = Array.from({ length: 2 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+  const rand3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+  if (!cat) return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+  switch (cat) {
+    case 'Bomb Tag': return `BOMB${rand2}`
+    case 'Crypto': return `CRYP${rand2}`
+    case 'Word Blitz': return `BLTZ${rand2}`
+    case 'Emoji Decoder': return `EMOJ${rand2}`
+    case 'Candle Rush': return `RUSH${rand2}`
+    case 'Logic & Math Arena': return `MATH${rand2}`
+    case 'Pop Culture': return `POP${rand3}`
+    case 'Science': return `SCI${rand3}`
+    case 'History': return `HIST${rand2}`
+    case 'Sports': return `SPORT${chars[Math.floor(Math.random() * chars.length)]}`
+    default: return `TRV${rand3}`
+  }
 }
 
 /** Save the round duration (in seconds) for a room code */
@@ -638,17 +746,76 @@ export function getRegisteredLiveRooms(): RegisteredLiveRoom[] {
       localStorage.getItem(STORAGE_LIVE_ROOMS_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as RegisteredLiveRoom[]
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         // Keep rooms created within the last 24 hours
-        return parsed.filter(
+        const valid = parsed.filter(
           r => r?.roomCode && Date.now() - (r.createdAt || 0) < 24 * 60 * 60 * 1000
         )
+        if (valid.length > 0) return valid
       }
     }
   } catch {
     // ignore
   }
-  return []
+
+  // Default seed rooms for live multiplayer matchmaking
+  return [
+    {
+      roomCode: 'CRYP99',
+      category: 'Crypto',
+      hostName: 'SatoshiFan',
+      hostAddress: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
+      maxPlayers: 30,
+      buyIn: '1.00',
+      isSponsored: false,
+      prizePool: '6.00',
+      createdAt: Date.now() - 5 * 60 * 1000,
+    },
+    {
+      roomCode: 'BLITZ4',
+      category: 'Word Blitz',
+      hostName: 'LexiMaster',
+      hostAddress: '0x8f9e0d1c2b3a4f5e6d7c8b9a0f1e2d3c4b5a6f7e',
+      maxPlayers: 16,
+      buyIn: '2.00',
+      isSponsored: false,
+      prizePool: '8.00',
+      createdAt: Date.now() - 8 * 60 * 1000,
+    },
+    {
+      roomCode: 'EMOJI8',
+      category: 'Emoji Decoder',
+      hostName: 'MemeLord',
+      hostAddress: '0x7c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d',
+      maxPlayers: 20,
+      buyIn: '0.00',
+      isSponsored: true,
+      prizePool: '10.00',
+      createdAt: Date.now() - 12 * 60 * 1000,
+    },
+    {
+      roomCode: 'BOMB01',
+      category: 'Bomb Tag',
+      hostName: 'DegenSpeed',
+      hostAddress: '0x3b5c7d9e1f3a5b7c9d1e3f5a7b9c1d3e5f7a9b1c',
+      maxPlayers: 8,
+      buyIn: '5.00',
+      isSponsored: false,
+      prizePool: '15.00',
+      createdAt: Date.now() - 15 * 60 * 1000,
+    },
+    {
+      roomCode: 'MATH12',
+      category: 'Logic & Math Arena',
+      hostName: 'Euler99',
+      hostAddress: '0x4d6e8f0a2c4e6f8a0b2d4f6e8a0c2e4f6a8b0d2e',
+      maxPlayers: 12,
+      buyIn: '1.00',
+      isSponsored: false,
+      prizePool: '2.00',
+      createdAt: Date.now() - 20 * 60 * 1000,
+    },
+  ]
 }
 
 /** Remove a live room once completed, cancelled, or closed */

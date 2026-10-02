@@ -25,6 +25,7 @@ import {
   saveRoomPrize,
   saveActiveGame,
   registerLiveRoom,
+  generateCategoryRoomCode,
   PAYOUT_PRESETS,
   calculatePayoutSplits,
   type PayoutPreset,
@@ -75,7 +76,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
   const [maxPlayersInput, setMaxPlayersInput] = useState('4')
   const [buyIn, setBuyIn] = useState('1')
   const [sponsoredPrize, setSponsoredPrize] = useState('5')
-  const [roomCode, setRoomCode] = useState(generateRoomCode)
+  const [roomCode, setRoomCode] = useState(() => generateCategoryRoomCode(initialCategory))
   const [copied, setCopied] = useState(false)
   const [codeEdited, setCodeEdited] = useState(false)
 

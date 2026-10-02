@@ -20,6 +20,7 @@ import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { type Category, CATEGORY_GROUPS } from '@/lib/questions'
 import {
   getRoomCategory,
+  inferCategoryFromCode,
   saveRoomCategory,
   saveRoomPrize,
   getRoomPayout,
@@ -122,12 +123,15 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   }, [prefillCode])
 
   const hostRoomCat = checkedCode ? getRoomCategory(checkedCode) : null
-  const resolvedCategory = hostRoomCat || (checkedCode ? undefined : initialCategory) || initialCategory || 'General Knowledge'
+  const resolvedCategory = hostRoomCat || (checkedCode ? inferCategoryFromCode(checkedCode) : null) || initialCategory || 'General Knowledge'
 
   // Persist resolved host category once determined
   useEffect(() => {
-    if (checkedCode && hostRoomCat) {
-      saveRoomCategory(checkedCode, hostRoomCat)
+    if (checkedCode) {
+      const catToSave = hostRoomCat || inferCategoryFromCode(checkedCode)
+      if (catToSave) {
+        saveRoomCategory(checkedCode, catToSave)
+      }
     }
   }, [checkedCode, hostRoomCat])
 
