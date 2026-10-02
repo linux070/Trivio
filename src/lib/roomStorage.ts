@@ -203,6 +203,36 @@ export function getRoomCategory(roomCode: string | null | undefined): Category |
   return null
 }
 
+/** Save the round duration (in seconds) for a room code */
+export function saveRoomDuration(roomCode: string, duration: number): void {
+  if (!roomCode || typeof duration !== 'number') return
+  const code = roomCode.trim().toUpperCase()
+  try {
+    localStorage.setItem(`${STORAGE_ROOM_DUR_PREFIX}${code}`, String(duration))
+    sessionStorage.setItem(`${STORAGE_ROOM_DUR_PREFIX}${code}`, String(duration))
+  } catch {
+    // ignore
+  }
+}
+
+/** Retrieve the saved round duration (in seconds) for a room code */
+export function getRoomDuration(roomCode: string | null | undefined, defaultDuration = 15): number {
+  if (!roomCode) return defaultDuration
+  const code = roomCode.trim().toUpperCase()
+  try {
+    const saved =
+      sessionStorage.getItem(`${STORAGE_ROOM_DUR_PREFIX}${code}`) ||
+      localStorage.getItem(`${STORAGE_ROOM_DUR_PREFIX}${code}`)
+    if (saved !== null) {
+      const parsed = parseInt(saved, 10)
+      if (!isNaN(parsed) && parsed > 0) return parsed
+    }
+  } catch {
+    // ignore
+  }
+  return defaultDuration
+}
+
 /** Save the prize pool amount for a room code */
 export function saveRoomPrize(roomCode: string, prize: string): void {
   if (!roomCode || !prize) return
