@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import { motion } from 'framer-motion'
@@ -7,6 +7,7 @@ import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import {
   useRoomInfo,
+  useRoomPlayers,
   useIsPlayer,
   useJoinRoom,
   useApproveUsdc,
@@ -16,6 +17,7 @@ import {
   parseUSDC,
   type RoomTuple,
 } from '@/hooks/useTriviaContract'
+import { PlayerTag } from '@/components/PlayerTag'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { type Category, CATEGORY_GROUPS } from '@/lib/questions'
 import {
@@ -136,6 +138,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   }, [checkedCode, hostRoomCat])
 
   const { data: roomInfo, isLoading: roomLoading, error: roomError } = useRoomInfo(checkedCode)
+  const { data: rawPlayersList } = useRoomPlayers(checkedCode)
   const { data: isPlayerOnchain } = useIsPlayer(checkedCode, activeAddress)
 
   const [host, buyIn, prizePool, maxPlayers, playerCount, status, payoutMode] = (roomInfo as RoomTuple) ?? []
@@ -361,18 +364,16 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                         const splits = calculatePayoutSplits(prizeForPayouts, getRoomPayout(checkedCode, payoutMode).splits)
                         if (splits.length === 1) {
                           return (
-                            <div className="flex items-center justify-between rounded-xl bg-white/90 px-3 py-2 border border-slate-200/70 shadow-2xs">
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center justify-center text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/80">
-                                  1st
+                            <div className="flex items-center justify-between rounded-xl bg-white/95 px-3.5 py-2.5 border border-slate-200/80 shadow-2xs">
+                              <span className="text-xs sm:text-sm font-bold text-slate-800">
+                                Winner Takes All
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <TokenUSDC variant="branded" size={14} className="shrink-0" />
+                                <span className="text-xs sm:text-sm font-extrabold text-slate-900 tabular-nums">
+                                  {splits[0].amount} USDC
                                 </span>
-                                <span className="text-xs font-medium text-slate-700">Winner Takes All</span>
-                              </div>
-                              <div className="flex items-baseline gap-1">
-                                <span className="text-xs font-bold text-slate-900 tabular-nums">
-                                  ${splits[0].amount}
-                                </span>
-                                <span className="text-[10px] font-semibold text-slate-400">100%</span>
+                                <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md">100%</span>
                               </div>
                             </div>
                           )
@@ -381,30 +382,32 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                           <div className={`grid gap-2 ${splits.length === 2 ? 'grid-cols-2' : splits.length === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-3'}`}>
                             {splits.map((s, idx) => {
                               const tierBadges = [
-                                { rankText: '1st', bg: 'bg-amber-50 text-amber-700 border-amber-200/70' },
-                                { rankText: '2nd', bg: 'bg-slate-100 text-slate-700 border-slate-200' },
-                                { rankText: '3rd', bg: 'bg-orange-50 text-orange-800 border-orange-200/70' },
+                                { rankText: '🥇 1st', bg: 'bg-amber-50/90 text-amber-800 border-amber-200/90' },
+                                { rankText: '🥈 2nd', bg: 'bg-slate-50 text-slate-700 border-slate-200' },
+                                { rankText: '🥉 3rd', bg: 'bg-orange-50/90 text-orange-900 border-orange-200/90' },
+                                { rankText: '4th', bg: 'bg-slate-50 text-slate-600 border-slate-200' },
+                                { rankText: '5th', bg: 'bg-slate-50 text-slate-600 border-slate-200' },
                               ]
-                              const badge = tierBadges[idx] ?? { rankText: `${idx + 1}th`, bg: 'bg-slate-100 text-slate-600 border-slate-200' }
+                              const badge = tierBadges[idx] ?? { rankText: `${idx + 1}th`, bg: 'bg-slate-50 text-slate-600 border-slate-200' }
 
                               return (
                                 <div
                                   key={idx}
-                                  className="flex flex-col justify-between rounded-xl bg-white/90 p-2.5 border border-slate-200/70 shadow-2xs transition-all hover:bg-white hover:border-slate-300"
+                                  className="flex flex-col justify-between rounded-xl bg-white/95 p-2.5 border border-slate-200/80 shadow-2xs transition-all hover:bg-white hover:border-slate-300"
                                 >
                                   <div className="flex items-center justify-between gap-1 mb-1.5">
-                                    <span className={`inline-flex items-center justify-center text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${badge.bg}`}>
+                                    <span className={`inline-flex items-center justify-center text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${badge.bg}`}>
                                       {badge.rankText}
                                     </span>
-                                    <span className="text-[10px] font-semibold text-slate-500 bg-slate-100/90 px-1.5 py-0.5 rounded-md tabular-nums">
+                                    <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md tabular-nums">
                                       {s.percent}%
                                     </span>
                                   </div>
-                                  <div className="flex items-baseline gap-1">
+                                  <div className="flex items-center gap-1">
+                                    <TokenUSDC variant="branded" size={13} className="shrink-0" />
                                     <span className="text-xs font-bold text-slate-900 tabular-nums">
-                                      ${s.amount}
+                                      {s.amount} USDC
                                     </span>
-                                    <span className="text-[10px] font-medium text-slate-400">USDC</span>
                                   </div>
                                 </div>
                               )
@@ -412,6 +415,39 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                           </div>
                         )
                       })()}
+                    </div>
+
+                    {/* Host & Joined Players Section */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-2xl p-3 sm:p-3.5" style={glass.inner}>
+                      {/* Host Column */}
+                      <div className="flex flex-col gap-1 min-w-0">
+                        <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                          Host
+                        </span>
+                        {host && host !== '0x0000000000000000000000000000000000000000' ? (
+                          <PlayerTag address={host} />
+                        ) : (
+                          <span className="text-xs text-slate-400 font-medium">Pending...</span>
+                        )}
+                      </div>
+
+                      {/* Joined Players Column */}
+                      <div className="flex flex-col gap-1 min-w-0 sm:border-l sm:border-slate-200/60 sm:pl-3.5">
+                        <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                          Joined Players ({rawPlayersList?.length ?? 0}/{maxPlayersNum})
+                        </span>
+                        {rawPlayersList && rawPlayersList.length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
+                            {(rawPlayersList as `0x${string}`[]).map((pAddr) => (
+                              <PlayerTag key={pAddr} address={pAddr} />
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400 font-medium pt-0.5">
+                            No players joined yet
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 

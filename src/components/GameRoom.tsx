@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, startTransition } from 'react'
+import { useState, useEffect, useRef, startTransition, useMemo } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2 } from 'lucide-react'
+import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2, Share2 } from 'lucide-react'
 import { buildJoinUrl } from '@/App'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
@@ -34,6 +34,7 @@ import {
 import { recordWinnerPayout } from '@/lib/winnersStorage'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { QuestionCard } from '@/components/QuestionCard'
+import { PlayerTag } from '@/components/PlayerTag'
 
 const glass = {
   card: {
@@ -104,6 +105,36 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const [lastCorrect, setLastCorrect] = useState<boolean | null>(null)
   const [copiedLink, setCopiedLink] = useState(false)
   const answerStartRef = useRef(Date.now())
+
+  const handleCopyLink = () => {
+    const joinUrl = buildJoinUrl(roomCode, resolvedCategory)
+    void navigator.clipboard.writeText(joinUrl)
+    setCopiedLink(true)
+    setTimeout(() => setCopiedLink(false), 2000)
+    toast.success('Invite link copied!')
+  }
+
+  const handleNativeShare = async () => {
+    const joinUrl = buildJoinUrl(roomCode, resolvedCategory)
+    const shareData = {
+      title: `Trivio Room #${roomCode}`,
+      text: `Join my ${resolvedCategory} trivia room #${roomCode} on Trivio and win USDC!`,
+      url: joinUrl,
+    }
+    if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+      try {
+        await navigator.share(shareData)
+        toast.success('Invite shared!')
+        return
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') {
+          handleCopyLink()
+        }
+        return
+      }
+    }
+    handleCopyLink()
+  }
 
   // Ensure questions are populated if resuming into playing phase
   useEffect(() => {
@@ -413,49 +444,38 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
               </div>
             </div>
 
-            {/* Live Lobby Players List (if any players joined) */}
-            {rawPlayersList && rawPlayersList.length > 0 && (
-              <div className="mb-4 rounded-2xl p-3" style={glass.inner}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold flex items-center gap-1.5 text-slate-700">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
-                    Joined Players ({rawPlayersList.length})
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {(rawPlayersList as `0x${string}`[]).map((pAddr, i) => {
-                    const isCurrent = Boolean(activeAddress && pAddr.toLowerCase() === activeAddress.toLowerCase())
-                    const isRoomHost = Boolean(host && pAddr.toLowerCase() === host.toLowerCase())
-                    return (
-                      <div
-                        key={pAddr + i}
-                        className={`flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs border ${isCurrent
-                          ? 'bg-purple-50 text-purple-900 border-purple-200 font-semibold shadow-2xs'
-                          : 'bg-white/90 text-slate-700 border-slate-200/80 font-medium'
-                          }`}
-                      >
-                        <span className="font-mono text-[11px]">
-                          {pAddr.slice(0, 6)}...{pAddr.slice(-4)}
-                        </span>
-                        {isRoomHost && (
-                          <span className="text-[9px] uppercase font-bold bg-amber-100 text-amber-800 px-1 py-0.5 rounded">
-                            Host
-                          </span>
-                        )}
-                        {isCurrent && (
-                          <span className="text-[9px] uppercase font-bold bg-purple-200 text-purple-800 px-1 py-0.5 rounded">
-                            You
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+            {/* Host & Joined Players Section */}
+            <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-2xl p-3 sm:p-3.5" style={glass.inner}>
+              {/* Host Column */}
+              <div className="flex flex-col gap-1 min-w-0">
+                <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Host
+                </span>
+                {host && host !== '0x0000000000000000000000000000000000000000' ? (
+                  <PlayerTag address={host} />
+                ) : (
+                  <span className="text-xs text-slate-400 font-medium">Pending...</span>
+                )}
               </div>
-            )}
+
+              {/* Joined Players Column */}
+              <div className="flex flex-col gap-1 min-w-0 sm:border-l sm:border-slate-200/60 sm:pl-3.5">
+                <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Joined Players ({rawPlayersList?.length ?? 0}/{maxP ?? '—'})
+                </span>
+                {rawPlayersList && rawPlayersList.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
+                    {(rawPlayersList as `0x${string}`[]).map((pAddr) => (
+                      <PlayerTag key={pAddr} address={pAddr} />
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-xs text-slate-400 font-medium pt-0.5">
+                    Waiting for players to join...
+                  </span>
+                )}
+              </div>
+            </div>
 
             {/* Payout Distribution Banner */}
             <div className="mb-4 rounded-2xl p-3 sm:p-3.5" style={glass.inner}>
@@ -470,18 +490,16 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                 const splits = calculatePayoutSplits(prizeForPayouts, getRoomPayout(roomCode, payoutMode).splits)
                 if (splits.length === 1) {
                   return (
-                    <div className="flex items-center justify-between rounded-xl bg-white/90 px-3 py-2 border border-slate-200/70 shadow-2xs">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center justify-center text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/80">
-                          1st
+                    <div className="flex items-center justify-between rounded-xl bg-white/95 px-3.5 py-2.5 border border-slate-200/80 shadow-2xs">
+                      <span className="text-xs sm:text-sm font-bold text-slate-800">
+                        Winner Takes All
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <TokenUSDC variant="branded" size={14} className="shrink-0" />
+                        <span className="text-xs sm:text-sm font-extrabold text-slate-900 tabular-nums">
+                          {splits[0].amount} USDC
                         </span>
-                        <span className="text-xs font-medium text-slate-700">Winner Takes All</span>
-                      </div>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-sm font-bold tracking-tight text-slate-900 tabular-nums">
-                          ${splits[0].amount}
-                        </span>
-                        <span className="text-[10px] font-semibold text-slate-400">100%</span>
+                        <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md">100%</span>
                       </div>
                     </div>
                   )
@@ -490,30 +508,32 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                   <div className={`grid gap-2 ${splits.length === 2 ? 'grid-cols-2' : splits.length === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-3'}`}>
                     {splits.map((s, idx) => {
                       const tierBadges = [
-                        { rankText: '1st', bg: 'bg-amber-50 text-amber-700 border-amber-200/70' },
-                        { rankText: '2nd', bg: 'bg-slate-100 text-slate-700 border-slate-200' },
-                        { rankText: '3rd', bg: 'bg-orange-50 text-orange-800 border-orange-200/70' },
+                        { rankText: '🥇 1st', bg: 'bg-amber-50/90 text-amber-800 border-amber-200/90' },
+                        { rankText: '🥈 2nd', bg: 'bg-slate-50 text-slate-700 border-slate-200' },
+                        { rankText: '🥉 3rd', bg: 'bg-orange-50/90 text-orange-900 border-orange-200/90' },
+                        { rankText: '4th', bg: 'bg-slate-50 text-slate-600 border-slate-200' },
+                        { rankText: '5th', bg: 'bg-slate-50 text-slate-600 border-slate-200' },
                       ]
-                      const badge = tierBadges[idx] ?? { rankText: `${idx + 1}th`, bg: 'bg-slate-100 text-slate-600 border-slate-200' }
+                      const badge = tierBadges[idx] ?? { rankText: `${idx + 1}th`, bg: 'bg-slate-50 text-slate-600 border-slate-200' }
 
                       return (
                         <div
                           key={idx}
-                          className="flex flex-col justify-between rounded-xl bg-white/90 p-2.5 border border-slate-200/70 shadow-2xs transition-all hover:bg-white hover:border-slate-300"
+                          className="flex flex-col justify-between rounded-xl bg-white/95 p-2.5 border border-slate-200/80 shadow-2xs transition-all hover:bg-white hover:border-slate-300"
                         >
                           <div className="flex items-center justify-between gap-1 mb-1.5">
-                            <span className={`inline-flex items-center justify-center text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${badge.bg}`}>
+                            <span className={`inline-flex items-center justify-center text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${badge.bg}`}>
                               {badge.rankText}
                             </span>
-                            <span className="text-[10px] font-semibold text-slate-500 bg-slate-100/90 px-1.5 py-0.5 rounded-md tabular-nums">
+                            <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md tabular-nums">
                               {s.percent}%
                             </span>
                           </div>
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-sm font-bold tracking-tight text-slate-900 tabular-nums">
-                              ${s.amount}
+                          <div className="flex items-center gap-1">
+                            <TokenUSDC variant="branded" size={13} className="shrink-0" />
+                            <span className="text-xs font-bold text-slate-900 tabular-nums">
+                              {s.amount} USDC
                             </span>
-                            <span className="text-[10px] font-medium text-slate-400">USDC</span>
                           </div>
                         </div>
                       )
@@ -523,53 +543,68 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
               })()}
             </div>
 
-            {/* ── Modern Invite Players Box (Slim, Clean Theme) ── */}
+            {/* ── Modern Invite Friends Box ── */}
             <div
-              className="mb-4 overflow-hidden rounded-2xl p-3.5 transition-all"
+              className="mb-4 overflow-hidden rounded-2xl p-3.5 sm:p-4 transition-all"
               style={{
                 background: 'linear-gradient(135deg, rgba(248,250,252,0.98) 0%, rgba(241,245,249,0.95) 100%)',
                 border: '1px solid rgba(226,232,240,0.95)',
                 boxShadow: '0 4px 16px -2px rgba(15,23,42,0.04), inset 0 1px 0 rgba(255,255,255,1)',
               }}
             >
-              {/* Header row */}
-              <div className="mb-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-md bg-slate-200 text-slate-700">
-                    <Link2 size={12} />
-                  </span>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800">
-                    Invite Players
-                  </span>
-                </div>
+              {/* Header row (Clean, uncolored icon) */}
+              <div className="mb-2.5 flex items-center gap-1.5">
+                <Users size={14} className="text-slate-500 shrink-0" />
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800">
+                  Invite Friends
+                </span>
               </div>
 
-              {/* Integrated modern input container */}
+              {/* Integrated modern input and action bar */}
               <div
-                className="flex items-center gap-2 rounded-xl p-1.5 pl-3 transition-all"
+                className="flex items-center gap-1.5 rounded-xl p-1.5 pl-3 transition-all"
                 style={{
                   background: '#ffffff',
                   border: '1px solid rgba(226, 232, 240, 1)',
                   boxShadow: '0 2px 6px -2px rgba(15, 23, 42, 0.04), inset 0 1px 2px rgba(0,0,0,0.02)',
                 }}
               >
+                {/* Clean shortened URL display (hiding long query parameters from the view) */}
                 <span className="flex-1 min-w-0 truncate font-mono text-xs text-slate-600 select-all">
-                  {buildJoinUrl(roomCode, resolvedCategory)}
+                  {(typeof window !== 'undefined' ? window.location.host : 'trivio.io') + `/?join=${roomCode}`}
                 </span>
 
-                <button
-                  onClick={() => {
-                    void navigator.clipboard.writeText(buildJoinUrl(roomCode, resolvedCategory))
-                    setCopiedLink(true)
-                    setTimeout(() => setCopiedLink(false), 2000)
-                    toast.success('Invite link copied!')
-                  }}
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-all duration-150 active:scale-95 cursor-pointer bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6]"
-                >
-                  {copiedLink ? <Check size={13} className="stroke-[2.5]" /> : <Copy size={13} />}
-                  <span>{copiedLink ? 'Copied!' : 'Copy Link'}</span>
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Native Share (if supported) */}
+                  {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+                    <button
+                      type="button"
+                      onClick={handleNativeShare}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:text-purple-700 hover:bg-purple-50 border border-slate-200/80 transition-all active:scale-95 cursor-pointer shadow-2xs"
+                      title="Share via device (WhatsApp, Telegram, X, Discord)"
+                      aria-label="Share via device"
+                    >
+                      <Share2 size={12} />
+                    </button>
+                  )}
+
+                  {/* Copy Link Button */}
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold text-white bg-[#7c3aed] hover:bg-[#6d28d9] active:bg-[#5b21b6] shadow-xs transition-all duration-150 active:scale-95 cursor-pointer select-none"
+                    title="Copy full invite link"
+                  >
+                    {copiedLink ? <Check size={12} className="stroke-[2.5]" /> : <Copy size={12} />}
+                    <span>{copiedLink ? 'Copied Link' : 'Copy Link'}</span>
+                  </button>
+                </div>
               </div>
+
+              {/* Contextual Helper Text */}
+              <p className="mt-2 text-[11px] text-slate-400 font-medium">
+                Share the link or code with friends to join this lobby.
+              </p>
             </div>
 
             {!TRIVIA_GAME_ADDRESS && (
@@ -579,7 +614,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
             )}
 
             {isHost && (
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {(startPending || startConfirming) && (
                   <p className="text-center text-sm" style={{ color: 'var(--muted)' }}>
                     {startPending ? 'Confirm in wallet...' : 'Starting game onchain...'}
@@ -598,15 +633,16 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                   type="button"
                   onClick={handleCancelRoom}
                   disabled={startPending || startConfirming || cancelPending || cancelConfirming}
-                  className="w-full rounded-2xl py-2.5 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50/70 hover:bg-rose-100/80 border border-rose-200/70 transition-all disabled:opacity-40 cursor-pointer active:scale-98 flex items-center justify-center gap-1.5"
+                  className="w-full rounded-2xl py-2.5 px-4 text-xs sm:text-sm font-semibold text-slate-500 hover:text-rose-600 bg-white/80 hover:bg-rose-50/90 border border-slate-200/80 hover:border-rose-200 transition-all duration-150 disabled:opacity-40 cursor-pointer active:scale-[0.99] flex items-center justify-center gap-1.5 shadow-2xs group"
+                  title="Cancel room and refund escrowed funds"
                 >
                   {cancelPending || cancelConfirming ? (
                     <>
-                      <Loader2 size={13} className="animate-spin text-rose-600" />
-                      <span>Refunding & Cancelling...</span>
+                      <Loader2 size={13} className="animate-spin text-rose-600 shrink-0" />
+                      <span className="font-bold text-rose-600">Cancelling & Refunding...</span>
                     </>
                   ) : (
-                    <span>Cancel Room & Refund Escrow</span>
+                    <span>Cancel Room & Refund</span>
                   )}
                 </button>
               </div>

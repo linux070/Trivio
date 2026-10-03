@@ -181,16 +181,18 @@ export function saveRoomCategory(roomCode: string, category: Category): void {
   if (!roomCode || !isValidCategory(category)) return
   const code = roomCode.trim().toUpperCase()
 
-  // Guard against accidentally overwriting a known specific room mode with generic fallback General Knowledge
-  const canonical = KNOWN_DEFAULT_ROOMS[code] || inferCategoryFromCode(code)
-  if (canonical && canonical !== 'General Knowledge' && category === 'General Knowledge') {
+  // Guard against overwriting an already-stored specific category with generic fallback
+  if (category === 'General Knowledge') {
     try {
-      localStorage.setItem(`${STORAGE_ROOM_CAT_PREFIX}${code}`, canonical)
-      sessionStorage.setItem(`${STORAGE_ROOM_CAT_PREFIX}${code}`, canonical)
+      const existing =
+        sessionStorage.getItem(`${STORAGE_ROOM_CAT_PREFIX}${code}`) ||
+        localStorage.getItem(`${STORAGE_ROOM_CAT_PREFIX}${code}`)
+      if (existing && isValidCategory(existing) && existing !== 'General Knowledge') {
+        return // don't overwrite a specific category with the generic fallback
+      }
     } catch {
       // ignore
     }
-    return
   }
 
   try {
@@ -199,18 +201,6 @@ export function saveRoomCategory(roomCode: string, category: Category): void {
   } catch {
     // ignore
   }
-}
-
-/** Known room categories lookup registry */
-export const KNOWN_DEFAULT_ROOMS: Record<string, Category> = {
-  CRYP99: 'Crypto',
-  BLITZ4: 'Word Blitz',
-  EMOJI8: 'Emoji Decoder',
-  BOMB01: 'Bomb Tag',
-  MATH12: 'Logic & Math Arena',
-  DEFI08: 'Candle Rush',
-  WEB399: 'Crypto',
-  MEME42: 'Pop Culture',
 }
 
 /** Smart category inference from room code prefix or keywords */
@@ -336,9 +326,16 @@ export function getRoomCategory(roomCode: string | null | undefined): Category |
   if (!roomCode) return null
   const code = roomCode.trim().toUpperCase()
 
-  // 1. Canonical known default room codes (e.g. BOMB01 -> Bomb Tag, CRYP99 -> Crypto, etc.)
-  if (KNOWN_DEFAULT_ROOMS[code] && isValidCategory(KNOWN_DEFAULT_ROOMS[code])) {
-    return KNOWN_DEFAULT_ROOMS[code]
+  // 1. Check explicitly stored category (from host setting or user saving)
+  try {
+    const stored =
+      sessionStorage.getItem(`${STORAGE_ROOM_CAT_PREFIX}${code}`) ||
+      localStorage.getItem(`${STORAGE_ROOM_CAT_PREFIX}${code}`)
+    if (stored && isValidCategory(stored)) {
+      return stored as Category
+    }
+  } catch {
+    // ignore
   }
 
   // 2. Actively registered live rooms from hosts
@@ -350,12 +347,6 @@ export function getRoomCategory(roomCode: string | null | undefined): Category |
     }
   } catch {
     // ignore
-  }
-
-  // 3. Prefix & keyword inference from room code
-  const inferred = inferCategoryFromCode(code)
-  if (inferred && isValidCategory(inferred)) {
-    return inferred
   }
 
   // 4. Active game session
@@ -391,25 +382,10 @@ export function getRoomCategory(roomCode: string | null | undefined): Category |
   return null
 }
 
-/** Generate a 6-character room code tailored with a category prefix */
-export function generateCategoryRoomCode(cat?: Category): string {
+/** Generate a random 6-character room code (letters + digits, no ambiguous chars) */
+export function generateCategoryRoomCode(_cat?: Category): string {
   const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
-  const rand2 = Array.from({ length: 2 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-  const rand3 = Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-  if (!cat) return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-  switch (cat) {
-    case 'Bomb Tag': return `BOMB${rand2}`
-    case 'Crypto': return `CRYP${rand2}`
-    case 'Word Blitz': return `BLTZ${rand2}`
-    case 'Emoji Decoder': return `EMOJ${rand2}`
-    case 'Candle Rush': return `RUSH${rand2}`
-    case 'Logic & Math Arena': return `MATH${rand2}`
-    case 'Pop Culture': return `POP${rand3}`
-    case 'Science': return `SCI${rand3}`
-    case 'History': return `HIST${rand2}`
-    case 'Sports': return `SPORT${chars[Math.floor(Math.random() * chars.length)]}`
-    default: return `TRV${rand3}`
-  }
+  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
 }
 
 /** Save the round duration (in seconds) for a room code */
@@ -740,6 +716,9 @@ export function registerLiveRoom(room: RegisteredLiveRoom): void {
 
 /** Retrieve all actively registered live rooms */
 export function getRegisteredLiveRooms(): RegisteredLiveRoom[] {
+  // Legacy hardcoded seed room codes to filter out from any cached storage
+  const LEGACY_SEED_CODES = new Set(['CRYP99', 'BLITZ4', 'EMOJI8', 'BOMB01', 'MATH12'])
+
   try {
     const raw =
       sessionStorage.getItem(STORAGE_LIVE_ROOMS_KEY) ||
@@ -747,9 +726,11 @@ export function getRegisteredLiveRooms(): RegisteredLiveRoom[] {
     if (raw) {
       const parsed = JSON.parse(raw) as RegisteredLiveRoom[]
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Keep rooms created within the last 24 hours
+        // Keep rooms created within the last 24 hours, excluding legacy seed rooms
         const valid = parsed.filter(
-          r => r?.roomCode && Date.now() - (r.createdAt || 0) < 24 * 60 * 60 * 1000
+          r => r?.roomCode &&
+            !LEGACY_SEED_CODES.has(r.roomCode) &&
+            Date.now() - (r.createdAt || 0) < 24 * 60 * 60 * 1000
         )
         if (valid.length > 0) return valid
       }
@@ -758,64 +739,8 @@ export function getRegisteredLiveRooms(): RegisteredLiveRoom[] {
     // ignore
   }
 
-  // Default seed rooms for live multiplayer matchmaking
-  return [
-    {
-      roomCode: 'CRYP99',
-      category: 'Crypto',
-      hostName: 'SatoshiFan',
-      hostAddress: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
-      maxPlayers: 30,
-      buyIn: '1.00',
-      isSponsored: false,
-      prizePool: '6.00',
-      createdAt: Date.now() - 5 * 60 * 1000,
-    },
-    {
-      roomCode: 'BLITZ4',
-      category: 'Word Blitz',
-      hostName: 'LexiMaster',
-      hostAddress: '0x8f9e0d1c2b3a4f5e6d7c8b9a0f1e2d3c4b5a6f7e',
-      maxPlayers: 16,
-      buyIn: '2.00',
-      isSponsored: false,
-      prizePool: '8.00',
-      createdAt: Date.now() - 8 * 60 * 1000,
-    },
-    {
-      roomCode: 'EMOJI8',
-      category: 'Emoji Decoder',
-      hostName: 'MemeLord',
-      hostAddress: '0x7c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d',
-      maxPlayers: 20,
-      buyIn: '0.00',
-      isSponsored: true,
-      prizePool: '10.00',
-      createdAt: Date.now() - 12 * 60 * 1000,
-    },
-    {
-      roomCode: 'BOMB01',
-      category: 'Bomb Tag',
-      hostName: 'DegenSpeed',
-      hostAddress: '0x3b5c7d9e1f3a5b7c9d1e3f5a7b9c1d3e5f7a9b1c',
-      maxPlayers: 8,
-      buyIn: '5.00',
-      isSponsored: false,
-      prizePool: '15.00',
-      createdAt: Date.now() - 15 * 60 * 1000,
-    },
-    {
-      roomCode: 'MATH12',
-      category: 'Logic & Math Arena',
-      hostName: 'Euler99',
-      hostAddress: '0x4d6e8f0a2c4e6f8a0b2d4f6e8a0c2e4f6a8b0d2e',
-      maxPlayers: 12,
-      buyIn: '1.00',
-      isSponsored: false,
-      prizePool: '2.00',
-      createdAt: Date.now() - 20 * 60 * 1000,
-    },
-  ]
+  // No rooms registered — return empty so the lobby shows the real empty state
+  return []
 }
 
 /** Remove a live room once completed, cancelled, or closed */

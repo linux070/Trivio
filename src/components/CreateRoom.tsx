@@ -32,7 +32,7 @@ import {
   type PayoutSplitItem,
   type PayoutStructure,
 } from '@/lib/roomStorage'
-import { getUserProfile } from '@/lib/userProfile'
+import { getUserProfile, generateRandomUsername } from '@/lib/userProfile'
 
 const glass = {
   card: {
@@ -127,7 +127,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
       saveActiveGame(roomCode, category, true)
 
       const myProfile = getUserProfile(activeAddress)
-      const hostName = myProfile?.username || (activeAddress ? `${activeAddress.slice(0, 6)}...${activeAddress.slice(-4)}` : 'Host')
+      const hostName = myProfile?.username || (activeAddress ? generateRandomUsername(activeAddress) : 'Host')
 
       const totalEstimatedPool = mode === 'sponsored'
         ? (parseFloat(sponsoredPrize) || 5).toFixed(2)
@@ -248,6 +248,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
                 value={roomCode}
                 maxLength={8}
                 spellCheck={false}
+                placeholder="CUSTOM"
                 onChange={e => {
                   const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
                   setRoomCode(val)
@@ -261,8 +262,10 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
                 }}
               />
               <button
+                type="button"
                 onClick={copyCode}
                 className="shrink-0 flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold bg-white/90 hover:bg-white border border-slate-200/80 text-slate-700 hover:text-purple-600 shadow-2xs transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                title="Copy room code"
               >
                 {copied ? <Check size={13} className="text-emerald-600 stroke-[2.5]" /> : <Copy size={13} />}
                 {copied ? 'Copied' : 'Copy'}

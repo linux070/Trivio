@@ -8,7 +8,15 @@ import { getDiceBearAvatarUrl, getUserProfile, generateRandomUsername } from '@/
 import { useOnchainProfile } from '@/hooks/useTrivioProfileRegistry'
 import { useLiveWinners } from '@/hooks/useLiveWinners'
 import { formatTimeAgo, type WinnerPayoutRecord } from '@/lib/winnersStorage'
-import { setPendingJoin, getPendingJoin, getRoomCategory, saveRoomCategory, extractRoomCode } from '@/lib/roomStorage'
+import {
+  setPendingJoin,
+  getPendingJoin,
+  getRoomCategory,
+  saveRoomCategory,
+  extractRoomCode,
+  clearPendingJoin,
+  isValidCategory,
+} from '@/lib/roomStorage'
 import type { Category } from '@/lib/questions'
 
 /* ── Typewriter hook ─────────────────────────────────────────────────────── */
@@ -153,7 +161,7 @@ function HowToPlayModal({ open, onClose }: { open: boolean; onClose: () => void 
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-6 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-5 overflow-hidden">
           {/* Smooth Backdrop */}
           <motion.div
             key="backdrop"
@@ -172,16 +180,16 @@ function HowToPlayModal({ open, onClose }: { open: boolean; onClose: () => void 
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             onClick={e => e.stopPropagation()}
-            className="relative w-full max-w-lg sm:max-w-2xl rounded-[28px] my-auto flex flex-col overflow-hidden max-h-[90dvh] bg-[#f5f3ff] shadow-[0_28px_90px_rgba(30,10,60,0.38)] z-10 transform-gpu"
+            className="relative w-full max-w-lg sm:max-w-2xl rounded-2xl sm:rounded-[28px] my-auto flex flex-col overflow-hidden max-h-[88dvh] sm:max-h-[90dvh] bg-[#f5f3ff] shadow-[0_28px_90px_rgba(30,10,60,0.38)] z-10 transform-gpu"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 pt-5 pb-3 shrink-0">
-              <h2 className="text-xl font-bold" style={{ color: '#1e0a3c', fontFamily: "'Space Grotesk', sans-serif" }}>
+            <div className="flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-5 pb-2.5 sm:pb-3 shrink-0">
+              <h2 className="text-base sm:text-xl font-bold" style={{ color: '#1e0a3c', fontFamily: "'Space Grotesk', sans-serif" }}>
                 How to play trivio?
               </h2>
               <button
                 onClick={onClose}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-purple-100"
+                className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-purple-100 cursor-pointer"
                 style={{ color: '#7c3aed' }}
                 aria-label="Close"
               >
@@ -190,31 +198,34 @@ function HowToPlayModal({ open, onClose }: { open: boolean; onClose: () => void 
             </div>
 
             {/* Scrollable content container */}
-            <div className="overflow-y-auto px-6 pb-6 pt-1">
+            <div
+              className="overflow-y-auto overscroll-contain px-4 sm:px-6 pb-4 sm:pb-6 pt-1"
+              style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 1rem))' }}
+            >
               {/* Step cards */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3">
                 {HOW_TO_PLAY.map(({ icon: Icon, label, desc, iconBg, iconColor }, i) => (
                   <motion.div
                     key={label}
                     initial={{ opacity: 0, y: 14 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.04 + i * 0.06, duration: 0.28 }}
-                    className="rounded-2xl bg-white p-4 sm:p-5"
+                    className="rounded-xl sm:rounded-2xl bg-white p-3.5 sm:p-5"
                     style={{ border: '1px solid rgba(109,40,217,0.10)', boxShadow: '0 2px 12px rgba(109,40,217,0.06)' }}
                   >
-                    <div className="mb-3 flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl" style={{ background: iconBg }}>
-                      <Icon size={19} style={{ color: iconColor }} />
+                    <div className="mb-2.5 sm:mb-3 flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl" style={{ background: iconBg }}>
+                      <Icon size={18} style={{ color: iconColor }} />
                     </div>
-                    <p className="mb-1 text-sm font-bold" style={{ color: '#1e0a3c' }}>{label}</p>
-                    <p className="text-xs sm:text-sm leading-snug text-pretty" style={{ color: '#6b7280' }}>{desc}</p>
+                    <p className="mb-0.5 sm:mb-1 text-xs sm:text-sm font-bold" style={{ color: '#1e0a3c' }}>{label}</p>
+                    <p className="text-[11px] sm:text-sm leading-snug text-pretty" style={{ color: '#6b7280' }}>{desc}</p>
                   </motion.div>
                 ))}
               </div>
 
               {/* USDC note */}
-              <div className="mt-3.5 flex items-center gap-2 rounded-xl px-4 py-3" style={{ background: '#ede9fe' }}>
-                <TokenUSDC variant="branded" size={15} />
-                <p className="text-xs" style={{ color: '#5b21b6' }}>
+              <div className="mt-3 flex items-center gap-2 rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3" style={{ background: '#ede9fe' }}>
+                <TokenUSDC variant="branded" size={14} />
+                <p className="text-[11px] sm:text-xs" style={{ color: '#5b21b6' }}>
                   All prizes paid in <strong>USDC</strong> on Arc — instant onchain payouts straight to your wallet.
                 </p>
               </div>
@@ -366,7 +377,35 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
   })
   const [modalOpen, setModalOpen] = useState(false)
 
-  const [roomCode, setRoomCode] = useState('')
+  // Detect pending invitation from URL parameters or existing pending join
+  const [activeInvite, setActiveInvite] = useState<{ roomCode: string; category?: Category } | null>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search)
+      const rawJoin = urlParams.get('join')?.trim().toUpperCase()
+      const rawCat = urlParams.get('cat') || urlParams.get('category')
+      if (rawJoin) {
+        const extracted = extractRoomCode(rawJoin)
+        const code = extracted ? extracted.roomCode : rawJoin.replace(/[^A-Z0-9]/g, '').slice(0, 8)
+        const cat = (isValidCategory(rawCat) ? rawCat : undefined) || extracted?.category || getRoomCategory(code) || undefined
+        if (code && code.length >= 4) {
+          if (cat) saveRoomCategory(code, cat)
+          setPendingJoin(code, cat)
+          return { roomCode: code, category: cat }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    const pending = getPendingJoin()
+    if (pending?.roomCode) {
+      const code = pending.roomCode.trim().toUpperCase()
+      const cat = pending.category || getRoomCategory(code) || undefined
+      return { roomCode: code, category: cat }
+    }
+    return null
+  })
+
+  const [roomCode, setRoomCode] = useState(() => activeInvite?.roomCode || '')
   const { displayed, done } = useTypewriter('having fun onchain', 52, 800)
 
   // If already authenticated via Privy, immediately notify parent
@@ -378,10 +417,11 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
   }, [authenticated, onConnected])
 
   const handleGetStarted = () => {
-    if (roomCode.trim()) {
-      const extracted = extractRoomCode(roomCode)
+    const codeToJoin = activeInvite?.roomCode || roomCode.trim()
+    if (codeToJoin) {
+      const extracted = extractRoomCode(codeToJoin)
       if (extracted?.roomCode) {
-        const cat = getRoomCategory(extracted.roomCode) || extracted.category || undefined
+        const cat = activeInvite?.category || getRoomCategory(extracted.roomCode) || extracted.category || undefined
         if (cat) saveRoomCategory(extracted.roomCode, cat)
         setPendingJoin(extracted.roomCode, cat)
         if (authenticated) {
@@ -393,6 +433,24 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
     login()
   }
 
+  const handleDismissInvite = () => {
+    setActiveInvite(null)
+    setRoomCode('')
+    clearPendingJoin()
+    try {
+      const url = new URL(window.location.href)
+      if (url.searchParams.has('join') || url.searchParams.has('cat') || url.searchParams.has('category')) {
+        url.searchParams.delete('join')
+        url.searchParams.delete('cat')
+        url.searchParams.delete('category')
+        window.history.replaceState(null, '', url.pathname + (url.hash || ''))
+      }
+    } catch {
+      // ignore
+    }
+    toast.info('Invitation dismissed')
+  }
+
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     const pastedText = e.clipboardData.getData('text')
     if (!pastedText) return
@@ -400,8 +458,34 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
     if (extracted && extracted.roomCode) {
       e.preventDefault()
       setRoomCode(extracted.roomCode)
-      if (extracted.category) saveRoomCategory(extracted.roomCode, extracted.category)
-      toast.success(`Room code detected: ${extracted.roomCode}`)
+      const cat = extracted.category || getRoomCategory(extracted.roomCode) || undefined
+      if (cat) saveRoomCategory(extracted.roomCode, cat)
+      setPendingJoin(extracted.roomCode, cat)
+      setActiveInvite({ roomCode: extracted.roomCode, category: cat })
+      toast.success(`Room code detected: #${extracted.roomCode}`)
+    }
+  }
+
+  const handleInputChange = (val: string) => {
+    const extracted = extractRoomCode(val)
+    if (extracted && (val.includes('http') || val.includes('join=') || val.includes('?'))) {
+      setRoomCode(extracted.roomCode)
+      const cat = extracted.category || getRoomCategory(extracted.roomCode) || undefined
+      if (cat) saveRoomCategory(extracted.roomCode, cat)
+      setPendingJoin(extracted.roomCode, cat)
+      setActiveInvite({ roomCode: extracted.roomCode, category: cat })
+      return
+    }
+
+    const clean = val.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
+    setRoomCode(clean)
+    if (clean.length >= 4) {
+      const cat = getRoomCategory(clean) || undefined
+      setActiveInvite({ roomCode: clean, category: cat })
+      setPendingJoin(clean, cat)
+    } else if (clean.length === 0) {
+      setActiveInvite(null)
+      clearPendingJoin()
     }
   }
 
@@ -414,7 +498,7 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
     }
 
     const code = extracted.roomCode
-    const category = getRoomCategory(code) || extracted.category || undefined
+    const category = activeInvite?.category || getRoomCategory(code) || extracted.category || undefined
     if (category) saveRoomCategory(code, category)
     setPendingJoin(code, category)
 
@@ -477,22 +561,74 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
             </div>
           </motion.div>
 
-          {/* ── Start Playing Call-To-Action & Fast-Track Join (Option 1 Hierarchy) ── */}
+          {/* ── Start Playing Call-To-Action & Fast-Track Join ── */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.24, duration: 0.52, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-3.5 sm:mt-6 flex flex-col items-center gap-2.5 sm:gap-3 w-full mb-3 sm:mb-4"
+            className="mt-3 sm:mt-5 flex flex-col items-center gap-2.5 sm:gap-3 w-full mb-3 sm:mb-4"
           >
-            {/* 1. Primary Hero Action (Squircle Rounded Rectangle) */}
+            {/* First-Time Invitee Welcome Banner */}
+            <AnimatePresence>
+              {activeInvite && (
+                <motion.div
+                  key="invite-banner"
+                  initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.95 }}
+                  transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                  className="mb-1 inline-flex items-center gap-2 sm:gap-3 rounded-2xl px-3.5 sm:px-4 py-2 sm:py-2.5 max-w-[94%] sm:max-w-md w-auto text-left shadow-[0_8px_30px_rgba(0,0,0,0.22)] border border-white/35 backdrop-blur-md"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.12) 100%)',
+                  }}
+                >
+                  <div className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-purple-950 font-black text-xs sm:text-sm shadow-xs select-none">
+                    🎉
+                  </div>
+                  <div className="flex-1 min-w-0 pr-1">
+                    <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-purple-200">
+                      Room Invitation
+                    </p>
+                    <p className="text-xs sm:text-sm font-bold text-white truncate leading-tight">
+                      {activeInvite.category ? (
+                        <>
+                          Play <span className="text-amber-300 font-black">{activeInvite.category}</span> in{' '}
+                        </>
+                      ) : (
+                        <>Join Room </>
+                      )}
+                      <span className="font-mono text-amber-300 font-black tracking-wide">#{activeInvite.roomCode}</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDismissInvite}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-white/60 hover:text-white hover:bg-white/15 transition-all cursor-pointer"
+                    title="Dismiss invite"
+                    aria-label="Dismiss invite"
+                  >
+                    <X size={14} />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* 1. Primary Hero Action Button */}
             <button
               onClick={handleGetStarted}
-              className="relative inline-flex items-center justify-center rounded-2xl bg-white px-9 py-3.5 sm:px-12 sm:py-4 text-xs sm:text-sm font-black uppercase tracking-wider text-[#1e1b2e] border border-white/60 shadow-[0_8px_25px_rgba(0,0,0,0.24)] transition-all duration-200 hover:scale-105 hover:bg-slate-50 hover:shadow-[0_10px_30px_rgba(0,0,0,0.3)] active:scale-95 cursor-pointer"
+              className="relative inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-8 py-3.5 sm:px-11 sm:py-4 text-xs sm:text-sm font-black uppercase tracking-wider text-[#1e1b2e] border border-white/60 shadow-[0_8px_25px_rgba(0,0,0,0.24)] transition-all duration-200 hover:scale-105 hover:bg-slate-50 hover:shadow-[0_10px_30px_rgba(0,0,0,0.3)] active:scale-95 cursor-pointer"
               style={{
                 letterSpacing: '0.07em',
               }}
             >
-              GET STARTED
+              {activeInvite?.roomCode ? (
+                <>
+                  <span>JOIN ROOM #{activeInvite.roomCode}</span>
+                  <span className="text-purple-700 font-black">→</span>
+                </>
+              ) : (
+                <span>GET STARTED</span>
+              )}
             </button>
 
             {/* 2. Direct Room Code / Invite Link Fast-Track Input */}
@@ -512,17 +648,9 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
                 <input
                   type="text"
                   value={roomCode}
-                  onChange={(e) => {
-                    const val = e.target.value
-                    const extracted = extractRoomCode(val)
-                    if (extracted && (val.includes('http') || val.includes('join=') || val.includes('?'))) {
-                      setRoomCode(extracted.roomCode)
-                    } else {
-                      setRoomCode(val.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))
-                    }
-                  }}
+                  onChange={(e) => handleInputChange(e.target.value)}
                   onPaste={handlePaste}
-                  placeholder="Enter room code (e.g. CRYP99)"
+                  placeholder="Enter room code (e.g. TRIVIA)"
                   maxLength={100}
                   autoCapitalize="characters"
                   autoCorrect="off"
