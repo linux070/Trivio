@@ -58,7 +58,11 @@ import {
   getPendingJoin,
   getRoomCategory,
   saveRoomCategory,
+  saveActiveGame,
+  getPendingPayoutRooms,
+  removePendingPayoutRoom,
   type ActiveGameSession,
+  type PendingPayoutRoom,
 } from '@/lib/roomStorage'
 import { useLiveRooms } from '@/hooks/useLiveRooms'
 import { useLiveWinners } from '@/hooks/useLiveWinners'
@@ -376,12 +380,14 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
 
   useEffect(() => {
     if (hasOnchainProfile && onchainProfile) {
+      const existingLocal = getUserProfile(activeAddress)
       const p: UserProfile = {
-        username: onchainProfile.username,
-        avatarUrl: onchainProfile.avatarUrl || getDiceBearAvatarUrl(onchainProfile.avatarStyle || 'bottts-neutral', onchainProfile.avatarSeed || onchainProfile.username),
-        avatarSeed: onchainProfile.avatarSeed || onchainProfile.username,
-        avatarStyle: onchainProfile.avatarStyle || 'bottts-neutral',
-        createdAt: Number(onchainProfile.updatedAt) * 1000 || Date.now(),
+        username: onchainProfile.username || existingLocal?.username || 'player',
+        // Preserve locally chosen/rolled avatar if present
+        avatarUrl: existingLocal?.avatarUrl || onchainProfile.avatarUrl || getDiceBearAvatarUrl(onchainProfile.avatarStyle || 'bottts-neutral', onchainProfile.avatarSeed || onchainProfile.username),
+        avatarSeed: existingLocal?.avatarSeed || onchainProfile.avatarSeed || onchainProfile.username,
+        avatarStyle: existingLocal?.avatarStyle || onchainProfile.avatarStyle || 'bottts-neutral',
+        createdAt: Number(onchainProfile.updatedAt) * 1000 || existingLocal?.createdAt || Date.now(),
         isOnchainVerified: true,
       }
       saveUserProfile(p, activeAddress)
@@ -568,16 +574,27 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
     setIsRollingAvatar(true)
     setTimeout(() => setIsRollingAvatar(false), 500)
 
-    const randomStyle = DICEBEAR_STYLES[Math.floor(Math.random() * DICEBEAR_STYLES.length)].id
+    // Select a style (pick a different one than current style if possible for maximum visual difference)
+    const currentStyle = profile?.avatarStyle || 'bottts-neutral'
+    const otherStyles = DICEBEAR_STYLES.filter(s => s.id !== currentStyle)
+    const chosenStyle = (otherStyles.length > 0
+      ? otherStyles[Math.floor(Math.random() * otherStyles.length)]
+      : DICEBEAR_STYLES[Math.floor(Math.random() * DICEBEAR_STYLES.length)]).id
+
     const randomSeed = `p_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`
-    const newAvatarUrl = getDiceBearAvatarUrl(randomStyle, randomSeed)
+    const newAvatarUrl = getDiceBearAvatarUrl(chosenStyle, randomSeed)
+
+    // Preload image
+    const img = new Image()
+    img.src = newAvatarUrl
 
     const updated: UserProfile = {
       username: profile?.username || (displayName.replace(/^@/, '') || 'player'),
       avatarUrl: newAvatarUrl,
       avatarSeed: randomSeed,
-      avatarStyle: randomStyle,
+      avatarStyle: chosenStyle,
       createdAt: profile?.createdAt || Date.now(),
+      isOnchainVerified: profile?.isOnchainVerified ?? isProfileVerified,
     }
     saveUserProfile(updated, activeAddress)
     setProfile(updated)
@@ -619,9 +636,10 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
   const shortAddr = activeAddress && activeAddress !== '0x0000000000000000000000000000000000000000'
     ? `${activeAddress.slice(0, 6)}...${activeAddress.slice(-4)}`
     : ''
-  const effectiveProfile = profile || (onchainProfile ? { username: onchainProfile.username, avatarUrl: onchainProfile.avatarUrl } : null) || getUserProfile(activeAddress) || getUserProfile()
+  const localStoredProfile = getUserProfile(activeAddress)
+  const effectiveProfile = profile || localStoredProfile || (onchainProfile ? { username: onchainProfile.username, avatarUrl: onchainProfile.avatarUrl } : null) || getUserProfile()
   const displayName = effectiveProfile?.username ? `@${effectiveProfile.username.replace(/^@/, '')}` : (shortAddr || 'player')
-  const effectiveAvatar = effectiveProfile?.avatarUrl || profile?.avatarUrl || (effectiveProfile?.username ? getDiceBearAvatarUrl('bottts-neutral', effectiveProfile.username) : '')
+  const effectiveAvatar = effectiveProfile?.avatarUrl || profile?.avatarUrl || localStoredProfile?.avatarUrl || (effectiveProfile?.username ? getDiceBearAvatarUrl('bottts-neutral', effectiveProfile.username) : '')
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -635,6 +653,7 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
         <div className="relative flex h-6 w-6 sm:h-7 sm:w-7 shrink-0 items-center justify-center rounded-full bg-purple-50 ring-1 ring-black/5">
           {effectiveAvatar && !avatarImgError ? (
             <img
+              key={effectiveAvatar}
               src={effectiveAvatar}
               alt={effectiveProfile?.username || 'Profile'}
               className="h-full w-full rounded-full object-cover"
@@ -710,10 +729,18 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                     >
                       {profile?.avatarUrl && !avatarImgError ? (
                         <img
+                          key={profile.avatarUrl}
                           src={profile.avatarUrl}
-                          alt=""
-                          className="h-full w-full rounded-[14px] object-cover bg-gray-50 transition-transform duration-300 group-hover/avatar:scale-105"
-                          onError={() => setAvatarImgError(true)}
+                          alt="Avatar"
+                          className="h-full w-full rounded-[14px] object-cover bg-purple-50 transition-transform duration-300 group-hover/avatar:scale-105"
+                          onError={(e) => {
+                            const fallback = getDiceBearAvatarUrl('bottts-neutral', activeAddress || profile?.avatarSeed || 'player')
+                            if (e.currentTarget.src !== fallback) {
+                              e.currentTarget.src = fallback
+                            } else {
+                              setAvatarImgError(true)
+                            }
+                          }}
                         />
                       ) : (
                         <div className="h-full w-full rounded-[14px] bg-purple-100 flex items-center justify-center font-bold text-xl text-purple-700">
@@ -729,12 +756,17 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
 
                     <button
                       type="button"
-                      onClick={handleRandomizeAvatar}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        handleRandomizeAvatar(e)
+                      }}
                       title="Roll random avatar"
-                      className="absolute -bottom-1 -right-1 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-white text-gray-700 hover:text-purple-600 hover:bg-purple-50 shadow-sm border border-gray-200/90 transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                      aria-label="Roll random avatar"
+                      className="absolute -bottom-1 -right-1 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-white text-gray-700 hover:text-purple-600 hover:bg-purple-50 shadow-md border border-gray-200 hover:border-purple-300 transition-all hover:scale-110 active:scale-90 cursor-pointer pointer-events-auto"
                     >
                       <Dices
-                        size={12}
+                        size={14}
                         className={`transition-transform duration-500 ease-out ${isRollingAvatar ? 'rotate-180 text-purple-600' : 'group-hover/avatar:rotate-45'}`}
                       />
                     </button>
@@ -994,6 +1026,16 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
   const { liveRooms, totalCount } = useLiveRooms(1500)
   const { leaderboard: liveLeaderboard, totalToday, latestPayout } = useLiveWinners()
 
+  const { user } = usePrivy()
+  const { address: wagmiAddress } = useAccount()
+  const activeAddress = wagmiAddress || user?.wallet?.address || ''
+
+  const [pendingPayouts, setPendingPayouts] = useState<PendingPayoutRoom[]>(() => getPendingPayoutRooms(activeAddress))
+
+  useEffect(() => {
+    setPendingPayouts(getPendingPayoutRooms(activeAddress))
+  }, [activeAddress, activeSession])
+
   // Find the group that contains the initial/selected category
   const [activeGroupId, setActiveGroupId] = useState<string>(() => {
     if (initialCategory) {
@@ -1091,8 +1133,71 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="w-full space-y-4"
         >
-          {/* ── Active Session Recovery Banner ── */}
-          {activeSession && onContinueGame && (
+          {/* ── Host Pending Payouts Fallback Reminder ── */}
+          {pendingPayouts.length > 0 && onContinueGame && (
+            <div className="space-y-2">
+              {pendingPayouts.map((pending) => (
+                <motion.div
+                  key={`pending-payout-${pending.roomCode}`}
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  className="relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/8 to-purple-500/10 p-3.5 sm:p-4 border border-amber-300/80 shadow-xs transition-all"
+                >
+                  <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+                    <div className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-amber-950 shadow-xs">
+                      <Trophy size={20} className="stroke-[2.2]" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs sm:text-sm font-black text-slate-900 tracking-tight">
+                          {pending.roomCode}
+                        </span>
+                        <span className="inline-flex items-center text-[10px] sm:text-[11px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-400/40 text-amber-950 border border-amber-400/60">
+                          PAYOUT PENDING
+                        </span>
+                      </div>
+                      <p className="text-[11px] sm:text-xs text-slate-600 truncate mt-0.5 font-medium">
+                        {pending.prize ? `$${pending.prize} USDC prize · ` : ''}Game finished. Finalize winner payout now!
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto w-full sm:w-auto justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        saveActiveGame(pending.roomCode, pending.category, true, 'finished', pending.score)
+                        onContinueGame(pending.roomCode, pending.category)
+                      }}
+                      className="inline-flex items-center justify-center rounded-xl px-3.5 sm:px-4 py-2 text-xs font-bold text-white shadow-xs transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer"
+                      style={{
+                        background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+                      }}
+                    >
+                      <span>Pay Out Winners</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        removePendingPayoutRoom(pending.roomCode)
+                        setPendingPayouts(getPendingPayoutRooms(activeAddress))
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/60 transition-colors cursor-pointer"
+                      title="Dismiss reminder"
+                      aria-label="Dismiss reminder"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Active Session Recovery Banner (if not already in pending payouts) ── */}
+          {activeSession && onContinueGame && !pendingPayouts.some(p => p.roomCode === activeSession.roomCode) && (
             <motion.div
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}

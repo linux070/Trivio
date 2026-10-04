@@ -444,17 +444,188 @@ export function getRoomPrize(roomCode: string | null | undefined): string | null
   }
 }
 
-/** Save a user's score for a specific room */
-export function saveRoomUserScore(roomCode: string, address?: string, score?: number): void {
+export const EVENT_ROOM_SCORES_UPDATED = 'trivio_room_scores_updated'
+const STORAGE_ROOM_SCORES_PREFIX = 'trivio_room_scores_'
+
+export interface PlayerRoomScore {
+  address: string
+  score: number
+  username?: string
+  avatarSeed?: string
+  avatarUrl?: string
+  qIndex?: number
+  isFinished?: boolean
+  updatedAt: number
+}
+
+// BroadcastChannel for instant cross-tab / cross-window sync in the same browser
+let roomSyncChannel: BroadcastChannel | null = null
+try {
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    roomSyncChannel = new BroadcastChannel('trivio_room_sync_channel')
+    roomSyncChannel.onmessage = (e) => {
+      if (e?.data?.type === 'SCORE_BROADCAST' && e.data.roomCode && e.data.address) {
+        const { roomCode, address, score, options } = e.data
+        saveRoomUserScoreInternal(roomCode, address, score, options, false)
+        window.dispatchEvent(
+          new CustomEvent(EVENT_ROOM_SCORES_UPDATED, {
+            detail: { roomCode, address, score, options },
+          })
+        )
+      }
+    }
+  }
+} catch {
+  // BroadcastChannel unavailable or restricted
+}
+
+function saveRoomUserScoreInternal(
+  roomCode: string,
+  address?: string,
+  score?: number,
+  options?: {
+    username?: string
+    avatarSeed?: string
+    avatarUrl?: string
+    qIndex?: number
+    isFinished?: boolean
+  },
+  shouldBroadcast: boolean = true
+): void {
   if (!roomCode || typeof score !== 'number') return
   const code = roomCode.trim().toUpperCase()
   const addr = address ? address.toLowerCase() : 'active'
+  const now = Date.now()
+
   try {
     localStorage.setItem(`trivio_score_${code}_${addr}`, String(score))
     sessionStorage.setItem(`trivio_score_${code}_${addr}`, String(score))
+
+    // Update the room-wide scores map
+    const mapKey = `${STORAGE_ROOM_SCORES_PREFIX}${code}`
+    const rawMap = sessionStorage.getItem(mapKey) || localStorage.getItem(mapKey)
+    const map: Record<string, PlayerRoomScore> = rawMap ? JSON.parse(rawMap) : {}
+
+    map[addr] = {
+      address: addr,
+      score,
+      username: options?.username || map[addr]?.username,
+      avatarSeed: options?.avatarSeed || map[addr]?.avatarSeed,
+      avatarUrl: options?.avatarUrl || map[addr]?.avatarUrl,
+      qIndex: options?.qIndex ?? map[addr]?.qIndex,
+      isFinished: options?.isFinished ?? map[addr]?.isFinished,
+      updatedAt: now,
+    }
+
+    const json = JSON.stringify(map)
+    localStorage.setItem(mapKey, json)
+    sessionStorage.setItem(mapKey, json)
+
+    // Also update any matching pending payout room
+    const pendingList = getPendingPayoutRooms()
+    const targetPending = pendingList.find(p => p.roomCode === code)
+    if (targetPending) {
+      if (!targetPending.scores) targetPending.scores = {}
+      targetPending.scores[addr] = score
+      savePendingPayoutRoom(targetPending)
+    }
+
+    if (shouldBroadcast) {
+      // Broadcast via BroadcastChannel to other tabs/windows
+      if (roomSyncChannel) {
+        roomSyncChannel.postMessage({
+          type: 'SCORE_BROADCAST',
+          roomCode: code,
+          address: addr,
+          score,
+          options,
+        })
+      }
+
+      // Dispatch local event
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent(EVENT_ROOM_SCORES_UPDATED, {
+            detail: { roomCode: code, address: addr, score, options },
+          })
+        )
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+/** Save a user's score for a specific room and notify all room subscribers */
+export function saveRoomUserScore(
+  roomCode: string,
+  address?: string,
+  score?: number,
+  options?: {
+    username?: string
+    avatarSeed?: string
+    avatarUrl?: string
+    qIndex?: number
+    isFinished?: boolean
+  }
+): void {
+  saveRoomUserScoreInternal(roomCode, address, score, options, true)
+}
+
+/** Retrieve all scores recorded for a room as a simple map of { [address]: score } */
+export function getRoomAllScores(roomCode: string | null | undefined): Record<string, number> {
+  if (!roomCode) return {}
+  const code = roomCode.trim().toUpperCase()
+  const result: Record<string, number> = {}
+
+  try {
+    const mapKey = `${STORAGE_ROOM_SCORES_PREFIX}${code}`
+    const rawMap = sessionStorage.getItem(mapKey) || localStorage.getItem(mapKey)
+    if (rawMap) {
+      const map: Record<string, PlayerRoomScore> = JSON.parse(rawMap)
+      for (const [addr, entry] of Object.entries(map)) {
+        if (typeof entry?.score === 'number') {
+          result[addr.toLowerCase()] = entry.score
+        }
+      }
+    }
   } catch {
     // ignore
   }
+
+  // Also merge scores from pending payout rooms if available
+  try {
+    const pending = getPendingPayoutRooms().find(p => p.roomCode === code)
+    if (pending?.scores) {
+      for (const [addr, sc] of Object.entries(pending.scores)) {
+        if (typeof sc === 'number' && !(addr.toLowerCase() in result)) {
+          result[addr.toLowerCase()] = sc
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return result
+}
+
+/** Retrieve all player details (score, progress, username, avatar) for a room */
+export function getRoomAllPlayerScores(
+  roomCode: string | null | undefined
+): Record<string, PlayerRoomScore> {
+  if (!roomCode) return {}
+  const code = roomCode.trim().toUpperCase()
+  try {
+    const mapKey = `${STORAGE_ROOM_SCORES_PREFIX}${code}`
+    const rawMap = sessionStorage.getItem(mapKey) || localStorage.getItem(mapKey)
+    if (rawMap) {
+      return JSON.parse(rawMap)
+    }
+  } catch {
+    // ignore
+  }
+  return {}
 }
 
 /** Retrieve a user's score for a specific room */
@@ -462,15 +633,45 @@ export function getRoomUserScore(roomCode: string | null | undefined, address?: 
   if (!roomCode) return null
   const code = roomCode.trim().toUpperCase()
   const addr = address ? address.toLowerCase() : 'active'
+
   try {
+    // 1. Direct score key check
     const saved =
       sessionStorage.getItem(`trivio_score_${code}_${addr}`) ||
-      localStorage.getItem(`trivio_score_${code}_${addr}`) ||
-      sessionStorage.getItem(`trivio_score_${code}_active`) ||
-      localStorage.getItem(`trivio_score_${code}_active`)
+      localStorage.getItem(`trivio_score_${code}_${addr}`)
     if (saved !== null) {
       const parsed = parseInt(saved, 10)
       if (!isNaN(parsed)) return parsed
+    }
+
+    // 2. Room scores map check
+    const mapKey = `${STORAGE_ROOM_SCORES_PREFIX}${code}`
+    const rawMap = sessionStorage.getItem(mapKey) || localStorage.getItem(mapKey)
+    if (rawMap) {
+      const map: Record<string, PlayerRoomScore> = JSON.parse(rawMap)
+      if (typeof map[addr]?.score === 'number') {
+        return map[addr].score
+      }
+    }
+
+    // 3. Check active player fallback if address was not passed
+    if (!address || address === 'active') {
+      const activeSaved =
+        sessionStorage.getItem(`trivio_score_${code}_active`) ||
+        localStorage.getItem(`trivio_score_${code}_active`)
+      if (activeSaved !== null) {
+        const parsed = parseInt(activeSaved, 10)
+        if (!isNaN(parsed)) return parsed
+      }
+    }
+
+    // 4. Check pending payout rooms
+    const pending = getPendingPayoutRooms().find(p => p.roomCode === code)
+    if (pending?.scores && typeof pending.scores[addr] === 'number') {
+      return pending.scores[addr]
+    }
+    if (pending && (!address || (pending.hostAddress && pending.hostAddress.toLowerCase() === addr))) {
+      if (typeof pending.score === 'number') return pending.score
     }
   } catch {
     // ignore
@@ -550,6 +751,76 @@ export function clearActiveGame(): void {
     sessionStorage.removeItem(STORAGE_ACTIVE_GAME_KEY)
   } catch {
     // ignore
+  }
+}
+
+const STORAGE_PENDING_PAYOUT_ROOMS_KEY = 'trivio_pending_payout_rooms'
+
+export interface PendingPayoutRoom {
+  roomCode: string
+  category: Category
+  prize?: string
+  payoutMode?: number
+  finishedAt: number
+  hostAddress?: string
+  score?: number
+  scores?: Record<string, number>
+  playersCount?: number
+}
+
+/** Save a completed host game that is awaiting winner declaration and payout */
+export function savePendingPayoutRoom(room: PendingPayoutRoom): void {
+  if (!room?.roomCode) return
+  const code = room.roomCode.trim().toUpperCase()
+  try {
+    const list = getPendingPayoutRooms()
+    const filtered = list.filter(r => r.roomCode !== code)
+    filtered.unshift({ ...room, roomCode: code })
+    const sliced = filtered.slice(0, 10)
+    localStorage.setItem(STORAGE_PENDING_PAYOUT_ROOMS_KEY, JSON.stringify(sliced))
+    sessionStorage.setItem(STORAGE_PENDING_PAYOUT_ROOMS_KEY, JSON.stringify(sliced))
+  } catch {
+    // ignore
+  }
+}
+
+/** Remove a room from pending payouts once declareWinner transaction is confirmed or dismissed */
+export function removePendingPayoutRoom(roomCode: string): void {
+  if (!roomCode) return
+  const code = roomCode.trim().toUpperCase()
+  try {
+    const list = getPendingPayoutRooms()
+    const filtered = list.filter(r => r.roomCode !== code)
+    localStorage.setItem(STORAGE_PENDING_PAYOUT_ROOMS_KEY, JSON.stringify(filtered))
+    sessionStorage.setItem(STORAGE_PENDING_PAYOUT_ROOMS_KEY, JSON.stringify(filtered))
+  } catch {
+    // ignore
+  }
+}
+
+/** Get list of pending payout rooms for a host (persisted across sessions and new room creations) */
+export function getPendingPayoutRooms(hostAddress?: string): PendingPayoutRoom[] {
+  try {
+    const raw =
+      sessionStorage.getItem(STORAGE_PENDING_PAYOUT_ROOMS_KEY) ||
+      localStorage.getItem(STORAGE_PENDING_PAYOUT_ROOMS_KEY)
+    if (!raw) return []
+    const list = JSON.parse(raw) as PendingPayoutRoom[]
+    if (!Array.isArray(list)) return []
+    const valid = list.filter(r => {
+      if (!r.roomCode || !isValidCategory(r.category)) return false
+      // Expire after 7 days
+      if (Date.now() - (r.finishedAt || 0) > 7 * 24 * 60 * 60 * 1000) return false
+      if (hostAddress && r.hostAddress && r.hostAddress !== '0x0000000000000000000000000000000000000000' && hostAddress !== '0x0000000000000000000000000000000000000000') {
+        if (r.hostAddress.toLowerCase() !== hostAddress.toLowerCase()) {
+          return false
+        }
+      }
+      return true
+    })
+    return valid
+  } catch {
+    return []
   }
 }
 
@@ -761,3 +1032,33 @@ export function removeLiveRoom(roomCode: string): void {
     // ignore
   }
 }
+
+const STORAGE_ROOM_TX_PREFIX = 'trivio_room_tx_'
+
+/** Save payout transaction hash for a room */
+export function saveRoomTxHash(roomCode: string, txHash: string): void {
+  if (!roomCode || !txHash) return
+  const code = roomCode.trim().toUpperCase()
+  try {
+    sessionStorage.setItem(`${STORAGE_ROOM_TX_PREFIX}${code}`, txHash)
+    localStorage.setItem(`${STORAGE_ROOM_TX_PREFIX}${code}`, txHash)
+  } catch {
+    // ignore
+  }
+}
+
+/** Retrieve saved payout transaction hash for a room */
+export function getRoomTxHash(roomCode?: string | null): string | undefined {
+  if (!roomCode) return undefined
+  const code = roomCode.trim().toUpperCase()
+  try {
+    return (
+      sessionStorage.getItem(`${STORAGE_ROOM_TX_PREFIX}${code}`) ||
+      localStorage.getItem(`${STORAGE_ROOM_TX_PREFIX}${code}`) ||
+      undefined
+    )
+  } catch {
+    return undefined
+  }
+}
+

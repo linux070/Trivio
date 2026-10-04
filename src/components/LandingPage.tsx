@@ -523,19 +523,19 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
         <FloatingShapes />
 
         {/* ── Main Hero Container ───────────────────────────────────────── */}
-        <div className="relative z-10 flex flex-col items-center justify-center w-full max-w-xl my-auto text-center">
+        <div className="relative z-10 flex flex-col items-center justify-center w-full max-w-xl sm:max-w-2xl my-auto text-center">
           {/* Wordmark Header */}
           <motion.div
             initial={{ opacity: 0, scale: 0.85, y: -10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="mb-1 sm:mb-2 text-center w-full"
+            className="mb-1.5 sm:mb-2 text-center w-full"
           >
             {/* TRIVIO wordmark */}
             <h1
               className="trivio-title select-none leading-none"
               style={{
-                fontSize: 'clamp(52px, 17vw, 114px)',
+                fontSize: 'clamp(52px, 8vw, 92px)',
                 color: '#ffffff',
                 textShadow: [
                   '0 3px 0 rgba(0,0,0,0.30)',
@@ -566,75 +566,23 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.24, duration: 0.52, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-3 sm:mt-5 flex flex-col items-center gap-2.5 sm:gap-3 w-full mb-3 sm:mb-4"
+            className="mt-3 sm:mt-5 flex flex-col items-center gap-2.5 sm:gap-3.5 w-full mb-3 sm:mb-4"
           >
-            {/* First-Time Invitee Welcome Banner */}
-            <AnimatePresence>
-              {activeInvite && (
-                <motion.div
-                  key="invite-banner"
-                  initial={{ opacity: 0, y: -8, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.95 }}
-                  transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-                  className="mb-1 inline-flex items-center gap-2 sm:gap-3 rounded-2xl px-3.5 sm:px-4 py-2 sm:py-2.5 max-w-[94%] sm:max-w-md w-auto text-left shadow-[0_8px_30px_rgba(0,0,0,0.22)] border border-white/35 backdrop-blur-md"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.12) 100%)',
-                  }}
-                >
-                  <div className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-purple-950 font-black text-xs sm:text-sm shadow-xs select-none">
-                    🎉
-                  </div>
-                  <div className="flex-1 min-w-0 pr-1">
-                    <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-purple-200">
-                      Room Invitation
-                    </p>
-                    <p className="text-xs sm:text-sm font-bold text-white truncate leading-tight">
-                      {activeInvite.category ? (
-                        <>
-                          Play <span className="text-amber-300 font-black">{activeInvite.category}</span> in{' '}
-                        </>
-                      ) : (
-                        <>Join Room </>
-                      )}
-                      <span className="font-mono text-amber-300 font-black tracking-wide">#{activeInvite.roomCode}</span>
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleDismissInvite}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-white/60 hover:text-white hover:bg-white/15 transition-all cursor-pointer"
-                    title="Dismiss invite"
-                    aria-label="Dismiss invite"
-                  >
-                    <X size={14} />
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
             {/* 1. Primary Hero Action Button */}
             <button
               onClick={handleGetStarted}
-              className="relative inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-8 py-3.5 sm:px-11 sm:py-4 text-xs sm:text-sm font-black uppercase tracking-wider text-[#1e1b2e] border border-white/60 shadow-[0_8px_25px_rgba(0,0,0,0.24)] transition-all duration-200 hover:scale-105 hover:bg-slate-50 hover:shadow-[0_10px_30px_rgba(0,0,0,0.3)] active:scale-95 cursor-pointer"
+              className="relative inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-8 py-3.5 sm:px-10 sm:py-4 text-xs sm:text-sm font-black uppercase tracking-wider text-[#1e1b2e] border border-white/60 shadow-[0_8px_25px_rgba(0,0,0,0.24)] transition-all duration-200 hover:scale-105 hover:bg-slate-50 hover:shadow-[0_10px_30px_rgba(0,0,0,0.3)] active:scale-95 cursor-pointer"
               style={{
                 letterSpacing: '0.07em',
               }}
             >
-              {activeInvite?.roomCode ? (
-                <>
-                  <span>JOIN ROOM #{activeInvite.roomCode}</span>
-                  <span className="text-purple-700 font-black">→</span>
-                </>
-              ) : (
-                <span>GET STARTED</span>
-              )}
+              <span>GET STARTED</span>
             </button>
 
-            {/* 2. Direct Room Code / Invite Link Fast-Track Input */}
+            {/* 2. Direct Room Code Input */}
             <form
               onSubmit={handleJoinWithCode}
-              className="w-full max-w-[290px] sm:max-w-[325px] px-1 sm:px-0"
+              className="w-full max-w-[280px] sm:max-w-[320px] px-1 sm:px-0"
             >
               <div
                 className="relative flex items-center w-full rounded-2xl p-1 pl-3.5 pr-1.5 transition-all duration-200 focus-within:border-white/60 focus-within:bg-black/35 focus-within:ring-2 focus-within:ring-white/20 shadow-md group"
@@ -662,7 +610,7 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
                 <button
                   type="submit"
                   disabled={!roomCode.trim()}
-                  className="flex h-7 px-2.5 sm:h-7.5 sm:px-3 shrink-0 items-center justify-center rounded-xl bg-white text-[#1e0a3c] font-black text-[11px] sm:text-xs tracking-wider uppercase transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-30 disabled:scale-100 disabled:cursor-not-allowed cursor-pointer shadow-xs select-none"
+                  className="flex h-7 px-2.5 sm:h-8 sm:px-3.5 shrink-0 items-center justify-center rounded-xl bg-white text-[#1e0a3c] font-black text-[11px] sm:text-xs tracking-wider uppercase transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-30 disabled:scale-100 disabled:cursor-not-allowed cursor-pointer shadow-xs select-none"
                   title="Join Room"
                   aria-label="Join Room"
                 >

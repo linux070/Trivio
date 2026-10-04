@@ -22,6 +22,8 @@ export const DICEBEAR_STYLES = [
   { id: 'thumbs', label: 'Playful' },
   { id: 'notionists', label: 'Minimalist' },
   { id: 'shapes', label: 'Abstract' },
+  { id: 'pixel-art', label: 'Pixel Art' },
+  { id: 'fun-emoji', label: 'Fun Emoji' },
 ] as const
 
 export const DEFAULT_AVATAR_SEEDS = [

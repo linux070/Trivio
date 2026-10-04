@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trophy, ExternalLink, RotateCcw, Check, Copy, X } from 'lucide-react'
+import { ExternalLink, Check, Copy, ArrowUpRight } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
 import { buildTxExplorerUrl } from '@/onchain-facts'
@@ -11,9 +11,13 @@ import {
   getRoomCategory,
   getRoomPrize,
   getRoomUserScore,
+  getRoomAllScores,
+  getPendingPayoutRooms,
   getActiveGame,
   getRegisteredLiveRooms,
+  getRoomTxHash,
 } from '@/lib/roomStorage'
+import { useRoomScores } from '@/lib/roomSync'
 import { recordWinnerPayout, getStoredPayouts } from '@/lib/winnersStorage'
 import {
   useRoomInfo,
@@ -50,17 +54,61 @@ interface ResultsProps {
 }
 
 const RANK_BADGES = [
-  { label: '1st', bg: 'from-amber-400 to-amber-500', icon: '🥇', border: 'border-amber-200/80', text: 'text-amber-700', pill: 'bg-amber-50 text-amber-800 border-amber-200/60' },
-  { label: '2nd', bg: 'from-slate-300 to-slate-500', icon: '🥈', border: 'border-slate-200/80', text: 'text-slate-700', pill: 'bg-slate-50 text-slate-700 border-slate-200/60' },
-  { label: '3rd', bg: 'from-amber-600 to-amber-800', icon: '🥉', border: 'border-amber-300/80', text: 'text-amber-800', pill: 'bg-amber-50 text-amber-900 border-amber-200/60' },
-  { label: '4th', bg: 'from-purple-500 to-indigo-600', icon: '🏅', border: 'border-purple-200/80', text: 'text-purple-700', pill: 'bg-purple-50 text-purple-800 border-purple-200/60' },
-  { label: '5th', bg: 'from-purple-500 to-indigo-600', icon: '🏅', border: 'border-purple-200/80', text: 'text-purple-700', pill: 'bg-purple-50 text-purple-800 border-purple-200/60' },
+  {
+    label: '1st Place',
+    badgeText: '1st',
+    icon: '🥇',
+    pill: 'bg-amber-400/15 text-amber-800 border-amber-300/80',
+    dot: 'bg-amber-500',
+    rankBg: 'bg-amber-400 text-white',
+  },
+  {
+    label: '2nd Place',
+    badgeText: '2nd',
+    icon: '🥈',
+    pill: 'bg-slate-200/60 text-slate-800 border-slate-300/80',
+    dot: 'bg-slate-400',
+    rankBg: 'bg-slate-400 text-white',
+  },
+  {
+    label: '3rd Place',
+    badgeText: '3rd',
+    icon: '🥉',
+    pill: 'bg-amber-600/15 text-amber-900 border-amber-400/80',
+    dot: 'bg-amber-600',
+    rankBg: 'bg-amber-600 text-white',
+  },
+  {
+    label: '4th Place',
+    badgeText: '4th',
+    icon: '#4',
+    pill: 'bg-slate-100 text-slate-700 border-slate-200',
+    dot: 'bg-slate-400',
+    rankBg: 'bg-slate-200 text-slate-600',
+  },
+  {
+    label: '5th Place',
+    badgeText: '5th',
+    icon: '#5',
+    pill: 'bg-slate-100 text-slate-700 border-slate-200',
+    dot: 'bg-slate-400',
+    rankBg: 'bg-slate-200 text-slate-600',
+  },
 ]
 
 /**
- * Player identity badge with onchain username + DiceBear avatar support
+ * Modern Web3 trading-dashboard style player identity badge
+ * Harmoniously balances avatar, scaled username, and wallet address
  */
-function PlayerIdentity({ address, isMe }: { address?: string; isMe?: boolean }) {
+function PlayerIdentity({
+  address,
+  isMe,
+  subtext,
+}: {
+  address?: string
+  isMe?: boolean
+  subtext?: string
+}) {
   if (!address || address === '0x0000000000000000000000000000000000000000') {
     return <span className="text-xs text-slate-400">Position unclaimed</span>
   }
@@ -69,169 +117,46 @@ function PlayerIdentity({ address, isMe }: { address?: string; isMe?: boolean })
   const { profile: onchainProfile } = useOnchainProfile(address)
   const localProfile = getUserProfile(normalized)
 
-  const username = onchainProfile?.username || localProfile?.username || generateRandomUsername(address)
+  const username = localProfile?.username || onchainProfile?.username || generateRandomUsername(address)
   const avatarUrl =
-    onchainProfile?.avatarUrl ||
     localProfile?.avatarUrl ||
+    onchainProfile?.avatarUrl ||
     getDiceBearAvatarUrl('bottts-neutral', address || username)
 
   return (
-    <div className="flex items-center gap-2 min-w-0">
+    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 text-left">
       <img
         src={avatarUrl}
         alt={username}
-        className="h-6 w-6 rounded-full border border-slate-200 bg-white object-cover shrink-0"
+        className="h-7 w-7 sm:h-8 sm:w-8 rounded-full border border-slate-200/90 bg-white object-cover shrink-0 ring-1 ring-slate-100 shadow-2xs"
         onError={(e) => {
           e.currentTarget.src = getDiceBearAvatarUrl('bottts-neutral', address || username)
         }}
       />
-      <div className="min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="font-bold text-xs sm:text-sm text-slate-900 truncate">
+      <div className="min-w-0 flex flex-col justify-center items-start text-left">
+        <div className="flex items-center gap-1.5 leading-tight max-w-full">
+          <span className="font-medium text-xs sm:text-[13px] text-slate-800 truncate tracking-tight text-left">
             @{username.replace(/^@/, '')}
           </span>
           {isMe && (
-            <span className="bg-purple-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full shadow-2xs">
-              You
+            <span className="text-[9px] font-semibold text-purple-700 bg-purple-100/70 border border-purple-200/80 px-1.5 py-0.5 rounded-full shrink-0 tracking-tight leading-none">
+              you
             </span>
           )}
         </div>
-        <span className="font-mono text-[10px] text-slate-400 block truncate">
-          {shortAddr(address)}
-        </span>
+        <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-slate-400 font-medium leading-tight mt-0.5 text-left">
+          <span className="font-mono text-slate-400">
+            {shortAddr(address)}
+          </span>
+          {subtext && (
+            <>
+              <span className="text-slate-300">·</span>
+              <span className="text-emerald-600 font-semibold">{subtext}</span>
+            </>
+          )}
+        </div>
       </div>
     </div>
-  )
-}
-
-/**
- * Payout detail popup modal for winners
- */
-function PayoutDetailPopup({
-  open,
-  onClose,
-  amount,
-  rank,
-  percent,
-  txHash,
-}: {
-  open: boolean
-  onClose: () => void
-  amount: string
-  rank: string
-  percent: number
-  txHash?: string
-}) {
-  const [copied, setCopied] = useState(false)
-  const txUrl = txHash ? buildTxExplorerUrl(ARC_TESTNET_CHAIN_ID, txHash) : undefined
-
-  const handleCopy = () => {
-    if (!txHash) return
-    void navigator.clipboard.writeText(txHash)
-    setCopied(true)
-    toast.success('Transaction hash copied!')
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  if (!open) return null
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          onClick={onClose}
-        >
-          {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-
-          {/* Modal */}
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="relative w-full max-w-sm rounded-3xl bg-white border border-slate-200/80 shadow-2xl p-6 space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Close button */}
-            <button
-              type="button"
-              onClick={onClose}
-              className="absolute top-4 right-4 h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors cursor-pointer"
-            >
-              <X size={16} className="text-slate-500" />
-            </button>
-
-            {/* Trophy icon */}
-            <div className="flex justify-center">
-              <div className="h-16 w-16 rounded-full bg-gradient-to-br from-amber-100 to-amber-200 flex items-center justify-center">
-                <Trophy size={28} className="text-amber-600" />
-              </div>
-            </div>
-
-            {/* Payout amount */}
-            <div className="text-center">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                Your Payout
-              </p>
-              <div className="flex items-center justify-center gap-2">
-                <TokenUSDC variant="branded" size={28} />
-                <span className="text-3xl font-black text-slate-950 tabular-nums">${amount}</span>
-                <span className="text-sm font-bold text-slate-400">USDC</span>
-              </div>
-              <p className="mt-1 text-xs font-semibold text-purple-600">
-                {rank} — {percent}% of prize pool
-              </p>
-            </div>
-
-            {/* Transaction hash */}
-            {txHash && (
-              <div className="rounded-2xl bg-slate-50 border border-slate-200/80 p-3.5 space-y-2">
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  Payout Transaction
-                </p>
-                <p className="font-mono text-xs text-slate-800 font-semibold truncate">
-                  {txHash}
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleCopy}
-                    className="flex-1 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-                    <span>{copied ? 'Copied!' : 'Copy Hash'}</span>
-                  </button>
-                  {txUrl && (
-                    <a
-                      href={txUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 h-9 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-xs font-bold text-purple-700 flex items-center justify-center gap-1.5 transition-colors"
-                    >
-                      <span>View on Explorer</span>
-                      <ExternalLink size={12} />
-                    </a>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {!txHash && (
-              <div className="rounded-2xl bg-amber-50 border border-amber-200/60 p-3 text-center">
-                <p className="text-xs font-semibold text-amber-700">
-                  Transaction details will appear once the payout is confirmed onchain.
-                </p>
-              </div>
-            )}
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
   )
 }
 
@@ -247,13 +172,6 @@ export default function Results({
 }: ResultsProps) {
   const [tab, setTab] = useState<'podium' | 'leaderboard'>('podium')
   const [copiedTx, setCopiedTx] = useState(false)
-  const [payoutPopup, setPayoutPopup] = useState<{
-    open: boolean
-    amount: string
-    rank: string
-    percent: number
-    txHash?: string
-  }>({ open: false, amount: '0.00', rank: '', percent: 0 })
 
   const { data: roomInfo } = useRoomInfo(roomCode || null)
   const [host, _buyIn, _prizePool, _maxPlayers, _playerCount, _status, payoutMode] = (roomInfo as RoomTuple) ?? []
@@ -305,8 +223,8 @@ export default function Results({
               ? calculatedBuyInPrize
               : '5.00'
 
-  // Resolve txHash from prop or stored payouts (for user/guest side)
-  const resolvedTxHash = txHash || storedPayout?.txHash || (() => {
+  // Resolve txHash from prop, live sync, or stored payouts (for user/guest side)
+  const resolvedTxHash = txHash || (roomCode ? getRoomTxHash(roomCode) : undefined) || storedPayout?.txHash || (() => {
     if (!roomCode) return undefined
     const roomPayout = storedPayouts.find(
       (p) => p.roomCode === roomCode.trim().toUpperCase() && p.txHash
@@ -340,7 +258,9 @@ export default function Results({
     }
   }, [onchainWinners, winnerAddress, effectivePrizeAmount, roomCode, resolvedTxHash, splits])
 
-  const txUrl = resolvedTxHash ? buildTxExplorerUrl(ARC_TESTNET_CHAIN_ID, resolvedTxHash) : undefined
+  const txUrl = resolvedTxHash
+    ? buildTxExplorerUrl(ARC_TESTNET_CHAIN_ID, resolvedTxHash)
+    : 'https://explorer.testnet.arc.io/address/0x1b785e38e8ebb334b52a305a10e92b5ef9564624'
 
   // Retrieve user's actual game score recorded during gameplay
   const activeSession = getActiveGame()
@@ -349,6 +269,9 @@ export default function Results({
   const userActualScore = (typeof myScore === 'number')
     ? myScore
     : (savedScore ?? activeScore ?? 0)
+
+  const { scores: liveRoomScores } = useRoomScores(roomCode, myAddress)
+  const roomScoresMap = roomCode ? getRoomAllScores(roomCode) : {}
 
   // Build clean player leaderboard using actual match participants (NO score cloning, NO duplicate entries)
   const board: LeaderboardEntry[] = (() => {
@@ -388,30 +311,55 @@ export default function Results({
       candidateAddresses.push(myAddress)
     }
 
-    // Find the position of the active user in the candidate list
-    const activeUserRankIndex = candidateAddresses.findIndex(
-      (a) => Boolean(myAddress && a.toLowerCase() === myAddress.toLowerCase())
-    )
-
-    // Assign realistic scores without cloning userActualScore onto other participants
+    // Assign realistic scores using true recorded scores for each participant
     const playerScores = candidateAddresses.map((addr, idx) => {
-      const isMe = Boolean(myAddress && addr.toLowerCase() === myAddress.toLowerCase())
+      const lowerAddr = addr.toLowerCase()
+      const isMe = Boolean(myAddress && lowerAddr === myAddress.toLowerCase())
+
+      // 1. If viewing player is themselves, use their verified gameplay score
+      if (isMe && userActualScore > 0) {
+        return { address: addr, score: userActualScore }
+      }
+
+      // 2. Live synchronized score from other participant tabs / peer sync
+      const liveScore = liveRoomScores[lowerAddr]
+      if (typeof liveScore === 'number' && liveScore > 0) {
+        return { address: addr, score: liveScore }
+      }
+
+      // 3. Score directly stored for this participant address in room storage
       const scoreFromStorage = roomCode ? getRoomUserScore(roomCode, addr) : null
+      if (typeof scoreFromStorage === 'number' && scoreFromStorage > 0) {
+        return { address: addr, score: scoreFromStorage }
+      }
+
+      // 4. Score stored in room-wide scores map
+      const mapScore = roomScoresMap[lowerAddr]
+      if (typeof mapScore === 'number' && mapScore > 0) {
+        return { address: addr, score: mapScore }
+      }
+
+      // 5. If host is viewing a concluded match with a winner, retrieve from pending payout records
+      if (isHost && (idx === 0 || candidateAddresses.length === 1)) {
+        const pendingPayout = roomCode ? getPendingPayoutRooms().find(p => p.roomCode === roomCode.trim().toUpperCase()) : null
+        if (pendingPayout?.scores && typeof pendingPayout.scores[lowerAddr] === 'number') {
+          return { address: addr, score: pendingPayout.scores[lowerAddr] }
+        }
+        if (typeof pendingPayout?.score === 'number' && pendingPayout.score > 0) {
+          return { address: addr, score: pendingPayout.score }
+        }
+        const activeScoreFallback = roomCode ? getRoomUserScore(roomCode, 'active') : null
+        if (typeof activeScoreFallback === 'number' && activeScoreFallback > 0) {
+          return { address: addr, score: activeScoreFallback }
+        }
+      }
 
       if (isMe) {
         return { address: addr, score: userActualScore }
       }
 
-      if (typeof scoreFromStorage === 'number') {
-        return { address: addr, score: scoreFromStorage }
-      }
-
-      // Deterministic placement-aligned score fallback (strictly distinct from active player's score)
-      const baseScore = userActualScore > 0 ? userActualScore : 800
-      const rankDiff = activeUserRankIndex >= 0 ? activeUserRankIndex - idx : (1 - idx)
-      const calculatedFallback = Math.max(10, baseScore + (rankDiff * 70))
-
-      return { address: addr, score: calculatedFallback }
+      // Fallback only if participant had zero recorded gameplay data
+      return { address: addr, score: Math.max(10, 250 - (idx * 40)) }
     })
 
     return playerScores.map((p, idx) => ({
@@ -467,38 +415,43 @@ export default function Results({
           </p>
         </motion.div>
 
-        {/* ─── Total Prize Banner (subheading — visible to both host and users) ─ */}
+        {/* ─── Prize Pool Card ─────────────────────────────────────── */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.1 }}
-          className="relative overflow-hidden rounded-3xl bg-white border border-slate-200/90 p-5 sm:p-6 mb-4 shadow-sm shadow-slate-900/5"
+          className="rounded-2xl bg-white border border-slate-200/80 mb-4 overflow-hidden shadow-2xs"
         >
-          <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-amber-400 via-purple-500 to-emerald-400" />
-          
-          <div className="flex items-center justify-between gap-3 mb-2">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+          {/* Top metadata row */}
+          <div className="relative flex items-center justify-center px-4 py-2.5 bg-slate-50/80 border-b border-slate-100">
+            <span className="text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 text-center">
               Total Prize Pool
             </span>
-            <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200/60">
+            <span className="absolute right-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
               {payout.label}
             </span>
           </div>
 
-          <div className="flex items-center justify-center gap-2.5 py-1">
-            <TokenUSDC variant="branded" size={34} />
-            <span className="text-4xl sm:text-5xl font-black tracking-tight text-slate-950 tabular-nums">
+          {/* Amount */}
+          <div className="flex items-center justify-center gap-2.5 px-4 py-5">
+            <TokenUSDC variant="branded" size={28} />
+            <span className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 tabular-nums">
               {effectivePrizeAmount}
             </span>
-            <span className="text-lg font-bold text-slate-400">USDC</span>
+            <span className="text-sm font-semibold text-slate-500 self-end mb-0.5">USDC</span>
           </div>
 
-          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
-            <span className="flex items-center gap-1.5 font-semibold text-emerald-700">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          {/* Bottom status row */}
+          <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/60 border-t border-slate-100">
+            <span className="text-xs font-medium text-slate-600">
               Settled on Arc Testnet
             </span>
-            <span>Room Code: <strong className="font-mono text-slate-900 font-bold">{roomCode || 'TRIVIA'}</strong></span>
+            <span className="text-xs font-medium text-slate-600">
+              Room Code:{' '}
+              <span className="font-mono font-bold text-slate-800 uppercase">
+                {roomCode || 'TRIVIA'}
+              </span>
+            </span>
           </div>
         </motion.div>
 
@@ -540,66 +493,72 @@ export default function Results({
               transition={{ duration: 0.2 }}
               className="space-y-3"
             >
-              <div className="rounded-3xl bg-white border border-slate-200/90 p-4 sm:p-5 shadow-xs">
-                <div className="flex items-center justify-between mb-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  <span>Winning Distribution</span>
-                  <span>{splits.length} {splits.length === 1 ? 'Winner' : 'Winners'}</span>
+              {/* ── Winning Distribution — clean leaderboard ── */}
+              <div className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-2xs">
+
+                {/* Column headers */}
+                <div className="grid items-center px-3.5 sm:px-4 py-2.5 bg-slate-50/80 border-b border-slate-100 gap-2 sm:gap-3" style={{ gridTemplateColumns: 'auto 1fr auto' }}>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 w-8 sm:w-9 text-left">#</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Player</span>
+                  <div className="flex items-center gap-2.5 sm:gap-5 md:gap-7">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 w-8 sm:w-10 text-right">Score</span>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 w-14 sm:w-20 text-right">Payout</span>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 w-6 sm:w-7 text-center">Tx</span>
+                  </div>
                 </div>
 
-                <div className="space-y-2.5">
+                {/* Rows */}
+                <div className="divide-y divide-slate-100">
                   {splits.map((split, i) => {
                     const recipient = board[i]?.address || onchainWinners[i] || (i === 0 ? winnerAddress : undefined)
                     // Only show "You" if the active user is a PLAYER (never for host)
                     const isRecipientMe = !isHost && Boolean(myAddress && recipient && myAddress.toLowerCase() === recipient.toLowerCase())
                     const badge = RANK_BADGES[i] ?? RANK_BADGES[3]
+                    const recipientScore = board[i]?.score ?? (roomCode && recipient ? getRoomUserScore(roomCode, recipient) : null) ?? (isRecipientMe ? userActualScore : null) ?? (i === 0 ? (board[0]?.score ?? userActualScore) : 0)
 
                     return (
                       <div
                         key={split.rank}
-                        className={`flex items-center justify-between gap-3 rounded-2xl p-3.5 transition-all border ${
-                          isRecipientMe
-                            ? 'bg-purple-50/60 border-purple-300/80 ring-1 ring-purple-400/30 cursor-pointer hover:bg-purple-50'
-                            : 'bg-slate-50/60 hover:bg-slate-50 border-slate-200/70'
-                        }`}
-                        onClick={isRecipientMe ? () => {
-                          setPayoutPopup({
-                            open: true,
-                            amount: split.amount,
-                            rank: split.label,
-                            percent: split.percent,
-                            txHash: resolvedTxHash,
-                          })
-                        } : undefined}
+                        className="grid items-center px-3.5 sm:px-4 py-2.5 sm:py-3 transition-colors duration-100 gap-2 sm:gap-3 hover:bg-slate-50/70"
+                        style={{ gridTemplateColumns: 'auto 1fr auto' }}
                       >
-                        {/* Rank Badge + Username + Avatar */}
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${badge.bg} text-white font-bold text-base shadow-2xs`}>
-                            {badge.icon}
-                          </div>
-
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 mb-0.5">
-                              <span className="text-xs font-extrabold text-slate-900">
-                                {split.label}
-                              </span>
-                              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${badge.pill}`}>
-                                {split.percent}%
-                              </span>
-                            </div>
-
-                            <PlayerIdentity address={recipient} isMe={isRecipientMe} />
-                          </div>
+                        {/* Rank number */}
+                        <div className="w-8 sm:w-9 flex items-center justify-start">
+                          <span className={`inline-flex items-center justify-center h-6 w-6 rounded-md text-[11px] font-extrabold ${badge.rankBg}`}>
+                            {split.rank}
+                          </span>
                         </div>
 
-                        {/* Amount */}
-                        <div className="text-right shrink-0">
-                          <div className="flex items-center gap-1 justify-end">
-                            <TokenUSDC variant="branded" size={16} />
-                            <span className="text-base sm:text-lg font-black text-slate-950 tabular-nums">
-                              ${split.amount}
+                        {/* Player identity */}
+                        <div className="min-w-0 pr-1">
+                          <PlayerIdentity
+                            address={recipient}
+                            isMe={isRecipientMe}
+                          />
+                        </div>
+
+                        {/* Score + Payout + Tx */}
+                        <div className="flex items-center gap-2.5 sm:gap-5 md:gap-7">
+                          <span className="text-xs sm:text-[13px] font-bold text-slate-700 tabular-nums w-8 sm:w-10 text-right">
+                            {recipientScore}
+                          </span>
+
+                          <div className="flex items-center gap-1 w-14 sm:w-20 justify-end">
+                            <TokenUSDC variant="branded" size={13} className="shrink-0" />
+                            <span className="text-xs sm:text-[13px] font-bold text-slate-900 tabular-nums">
+                              {split.amount}
                             </span>
                           </div>
-                          <span className="text-[10px] font-bold text-slate-400 uppercase">USDC</span>
+
+                          <a
+                            href={txUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
+                            title={resolvedTxHash ? `View on Arc Explorer` : 'View Trivia Escrow on Arc Explorer'}
+                          >
+                            <ArrowUpRight size={14} className="stroke-[2]" />
+                          </a>
                         </div>
                       </div>
                     )
@@ -614,97 +573,131 @@ export default function Results({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.2 }}
-              className="rounded-3xl bg-white border border-slate-200/90 p-4 sm:p-5 shadow-xs"
             >
-              <div className="flex items-center justify-between mb-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                <span>Player Standings</span>
-                <span>Scores</span>
-              </div>
+              {/* ── Full Leaderboard — matching table style ── */}
+              <div className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-2xs">
 
-              <div className="space-y-2">
-                {board.map((entry, idx) => {
-                  const isEntryMe = !isHost && Boolean(myAddress && entry.address.toLowerCase() === myAddress.toLowerCase())
-                  const earnedSplit = splits.find(s => s.rank === entry.rank)
-                  const badge = RANK_BADGES[idx]
+                {/* Column headers */}
+                <div className="grid items-center px-3.5 sm:px-4 py-2.5 bg-slate-50/80 border-b border-slate-100 gap-2 sm:gap-3" style={{ gridTemplateColumns: 'auto 1fr auto' }}>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 w-8 sm:w-9 text-left">#</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Player</span>
+                  <div className="flex items-center gap-2.5 sm:gap-5 md:gap-7">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 w-8 sm:w-10 text-right">Score</span>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 w-14 sm:w-20 text-right">Payout</span>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 w-6 sm:w-7 text-center">Tx</span>
+                  </div>
+                </div>
 
-                  return (
-                    <div
-                      key={entry.address}
-                      className={`flex items-center justify-between gap-3 rounded-2xl p-3 border transition-all ${
-                        isEntryMe
-                          ? 'bg-purple-50/60 border-purple-300/80 ring-1 ring-purple-400/30'
-                          : 'bg-slate-50/60 border-slate-200/70'
-                      } ${isEntryMe && earnedSplit ? 'cursor-pointer hover:bg-purple-50' : ''}`}
-                      onClick={isEntryMe && earnedSplit ? () => {
-                        setPayoutPopup({
-                          open: true,
-                          amount: earnedSplit.amount,
-                          rank: earnedSplit.label,
-                          percent: earnedSplit.percent,
-                          txHash: resolvedTxHash,
-                        })
-                      } : undefined}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white border border-slate-200 font-bold text-xs text-slate-700 shadow-2xs">
-                          {entry.rank <= 3 ? badge?.icon : `#${entry.rank}`}
+                <div className="divide-y divide-slate-100">
+                  {board.map((entry, idx) => {
+                    const isEntryMe = !isHost && Boolean(myAddress && entry.address.toLowerCase() === myAddress.toLowerCase())
+                    const earnedSplit = splits.find(s => s.rank === entry.rank)
+                    const badge = RANK_BADGES[idx] ?? RANK_BADGES[3]
+
+                    return (
+                      <div
+                        key={entry.address}
+                        className="grid items-center px-3.5 sm:px-4 py-2.5 sm:py-3 transition-colors duration-100 gap-2 sm:gap-3 hover:bg-slate-50/70"
+                        style={{ gridTemplateColumns: 'auto 1fr auto' }}
+                      >
+                        {/* Rank number */}
+                        <div className="w-8 sm:w-9 flex items-center justify-start">
+                          <span className={`inline-flex items-center justify-center h-6 w-6 rounded-md text-[11px] font-extrabold ${badge.rankBg}`}>
+                            {entry.rank}
+                          </span>
                         </div>
 
-                        <div className="min-w-0">
-                          <PlayerIdentity address={entry.address} isMe={isEntryMe} />
-                          {earnedSplit && (
-                            <span className="text-[11px] font-bold text-emerald-700 mt-0.5 block">
-                              Won {earnedSplit.amount} USDC
-                            </span>
+                        {/* Player identity */}
+                        <div className="min-w-0 pr-1">
+                          <PlayerIdentity
+                            address={entry.address}
+                            isMe={isEntryMe}
+                          />
+                        </div>
+
+                        {/* Score + Payout + Explorer */}
+                        <div className="flex items-center gap-2.5 sm:gap-5 md:gap-7">
+                          <span className="text-xs sm:text-[13px] font-bold text-slate-700 tabular-nums text-right w-8 sm:w-10">
+                            {entry.score}
+                          </span>
+
+                          <div className="flex items-center gap-1 w-14 sm:w-20 justify-end">
+                            {earnedSplit ? (
+                              <>
+                                <TokenUSDC variant="branded" size={13} className="shrink-0" />
+                                <span className="text-xs sm:text-[13px] font-bold text-slate-900 tabular-nums">
+                                  {earnedSplit.amount}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-xs font-semibold text-slate-300 tabular-nums pr-2">—</span>
+                            )}
+                          </div>
+
+                          {earnedSplit ? (
+                            <a
+                              href={txUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
+                              title={resolvedTxHash ? `View Payout on Arc Explorer` : 'View Trivia Escrow on Arc Explorer'}
+                            >
+                              <ArrowUpRight size={14} className="stroke-[2]" />
+                            </a>
+                          ) : (
+                            <span className="w-6 sm:w-7" />
                           )}
                         </div>
                       </div>
-
-                      <div className="text-right shrink-0">
-                        <p className="text-sm font-black text-slate-950 tabular-nums">{entry.score}</p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">pts</p>
-                      </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* ─── Transaction Explorer Box ───────────────────────────── */}
+        {/* ─── Transaction Explorer Box ─ redesigned ───────────────── */}
         {resolvedTxHash && (
-          <div className="mt-4 rounded-2xl bg-white border border-slate-200/80 p-3.5 shadow-2xs flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
+            {/* Top label row */}
+            <div className="flex items-center justify-between px-3.5 py-2 bg-slate-50 border-b border-slate-100">
+              <span className="text-[11px] font-extrabold uppercase tracking-widest text-slate-600">
                 Payout Transaction
-              </p>
-              <p className="font-mono text-xs text-slate-800 font-semibold truncate">
-                {resolvedTxHash}
-              </p>
+              </span>
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                Arc Testnet
+              </span>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={handleCopyTx}
-                className="h-8 w-8 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
-                title="Copy Transaction Hash"
-              >
-                {copiedTx ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-              </button>
+            {/* Hash row */}
+            <div className="flex items-center gap-2.5 px-3.5 py-2.5">
+              <p className="flex-1 min-w-0 font-mono text-xs text-slate-700 truncate select-all">
+                {resolvedTxHash}
+              </p>
 
-              {txUrl && (
-                <a
-                  href={txUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-800 transition-colors"
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCopyTx}
+                  className="h-7 w-7 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-colors cursor-pointer"
+                  title="Copy transaction hash"
                 >
-                  <span>Explorer</span>
-                  <ExternalLink size={12} />
-                </a>
-              )}
+                  {copiedTx ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                </button>
+
+                {txUrl && (
+                  <a
+                    href={txUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 h-7 px-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-xs font-bold text-white transition-all shadow-xs cursor-pointer"
+                  >
+                    <span>Explorer</span>
+                    <ExternalLink size={12} className="stroke-[2.5]" />
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -719,27 +712,16 @@ export default function Results({
               background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 50%, #5b21b6 100%)',
             }}
           >
-            <RotateCcw size={16} />
             <span>{isHost ? 'Host Another Room' : 'Play Another Match'}</span>
           </button>
         </div>
 
         {/* Footer */}
-        <p className="mt-6 text-center text-xs font-medium text-slate-400">
-          trivio · Having fun onchain with Arc Network
+        <p className="mt-6 text-center text-xs font-medium text-slate-500">
+          trivio — having fun onchain with Arc Network
         </p>
 
       </div>
-
-      {/* Payout Detail Popup */}
-      <PayoutDetailPopup
-        open={payoutPopup.open}
-        onClose={() => setPayoutPopup(prev => ({ ...prev, open: false }))}
-        amount={payoutPopup.amount}
-        rank={payoutPopup.rank}
-        percent={payoutPopup.percent}
-        txHash={payoutPopup.txHash}
-      />
     </div>
   )
 }

@@ -30,7 +30,16 @@ import {
   saveRoomPrize,
   getRoomPrize,
   saveRoomUserScore,
+  getRoomUserScore,
+  getRoomAllScores,
+  savePendingPayoutRoom,
+  removePendingPayoutRoom,
+  getPendingPayoutRooms,
+  saveRoomTxHash,
+  getRoomTxHash,
 } from '@/lib/roomStorage'
+import { useRoomScores, broadcastRoomTxHash } from '@/lib/roomSync'
+import { getUserProfile } from '@/lib/userProfile'
 import { recordWinnerPayout } from '@/lib/winnersStorage'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { QuestionCard } from '@/components/QuestionCard'
@@ -80,8 +89,9 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
   const savedSession = getActiveGame()
   const isMatchRoom = savedSession?.roomCode === roomCode.trim().toUpperCase()
-  const initialPhase: GamePhase = (isMatchRoom && savedSession?.phase) ? savedSession.phase : 'lobby'
-  const initialScore: number = (isMatchRoom && typeof savedSession?.score === 'number') ? savedSession.score : 0
+  const pendingPayoutMatch = getPendingPayoutRooms().find(r => r.roomCode === roomCode.trim().toUpperCase())
+  const initialPhase: GamePhase = (isMatchRoom && savedSession?.phase) ? savedSession.phase : (pendingPayoutMatch ? 'finished' : 'lobby')
+  const initialScore: number = (isMatchRoom && typeof savedSession?.score === 'number') ? savedSession.score : (pendingPayoutMatch?.score ?? 0)
   const initialQIndex: number = (isMatchRoom && typeof savedSession?.qIndex === 'number' && savedSession.qIndex >= 0) ? savedSession.qIndex : 0
 
   const [phase, setPhase] = useState<GamePhase>(initialPhase)
@@ -178,16 +188,25 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     activeAddress && host && host.toLowerCase() === activeAddress.toLowerCase()
   )
 
+  const { scores: liveRoomScores, syncMyScore } = useRoomScores(roomCode, activeAddress)
+  const localProfile = activeAddress ? getUserProfile(activeAddress) : null
+
   // Keep active game persisted with current phase, score, and question index for smooth resume/rejoin on refresh
   useEffect(() => {
     saveActiveGame(roomCode, resolvedCategory, isHost, phase, score, qIndex)
     if (activeAddress && typeof score === 'number') {
-      saveRoomUserScore(roomCode, activeAddress, score)
+      saveRoomUserScore(roomCode, activeAddress, score, {
+        username: localProfile?.username,
+        avatarSeed: localProfile?.avatarSeed,
+        avatarUrl: localProfile?.avatarUrl,
+        qIndex,
+        isFinished: phase === 'finished',
+      })
     }
     if (prizeForPayouts && Number(prizeForPayouts) > 0) {
       saveRoomPrize(roomCode, prizeForPayouts)
     }
-  }, [roomCode, resolvedCategory, isHost, phase, score, qIndex, activeAddress, prizeForPayouts])
+  }, [roomCode, resolvedCategory, isHost, phase, score, qIndex, activeAddress, prizeForPayouts, localProfile])
 
   const { startGame, isPending: startPending, isConfirming: startConfirming, isSuccess: gameStarted } = useStartGame()
   const { declareWinners, isPending: declarePending, isConfirming: declareConfirming, isSuccess: declared, hash: declareHash } = useDeclareWinners()
@@ -279,8 +298,17 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
         })
       }
 
+      if (declareHash) {
+        saveRoomTxHash(roomCode, declareHash)
+        broadcastRoomTxHash(roomCode, declareHash)
+      }
+
+      removePendingPayoutRoom(roomCode)
+      clearActiveGame()
       onGameEnd(primaryWinner, prizeForPayouts, declareHash, score)
     } else if (status === 2 && winningAddress && winningAddress !== '0x0000000000000000000000000000000000000000' && phase === 'finished') {
+      const syncedTx = getRoomTxHash(roomCode) || declareHash
+      removePendingPayoutRoom(roomCode)
       clearActiveGame()
       const allWinners: string[] = (winnersList && winnersList.length > 0)
         ? (winnersList as string[])
@@ -294,18 +322,61 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
           winnerAddress: wAddr,
           amount: splitAmt,
           category: resolvedCategory,
+          txHash: syncedTx,
         })
       }
 
-      onGameEnd(winningAddress, prizeForPayouts, undefined, score)
+      onGameEnd(winningAddress, prizeForPayouts, syncedTx, score)
     }
   }, [declared, activeAddress, prizeForPayouts, declareHash, status, winnersList, phase, onGameEnd, rawPlayersList, roomCode, resolvedCategory, score, payoutMode])
+
+  useEffect(() => {
+    if (phase === 'finished' && isHost) {
+      const allCurrentScores: Record<string, number> = { ...liveRoomScores, ...getRoomAllScores(roomCode) }
+      if (activeAddress) allCurrentScores[activeAddress.toLowerCase()] = score
+      savePendingPayoutRoom({
+        roomCode,
+        category: resolvedCategory,
+        prize: prizeForPayouts,
+        payoutMode,
+        finishedAt: Date.now(),
+        hostAddress: activeAddress,
+        score,
+        scores: allCurrentScores,
+        playersCount: (rawPlayersList as `0x${string}`[] | undefined)?.length || 1,
+      })
+    }
+  }, [phase, isHost, roomCode, resolvedCategory, prizeForPayouts, payoutMode, activeAddress, score, rawPlayersList, liveRoomScores])
 
   function advanceQuestion(currentIndex: number, qs: TriviaQuestion[]) {
     const next = currentIndex + 1
     if (next >= qs.length) {
       setPhase('finished')
       saveActiveGame(roomCode, resolvedCategory, isHost, 'finished', score, next)
+      if (activeAddress) {
+        syncMyScore(score, {
+          username: localProfile?.username,
+          avatarSeed: localProfile?.avatarSeed,
+          avatarUrl: localProfile?.avatarUrl,
+          qIndex: next,
+          isFinished: true,
+        })
+      }
+      if (isHost) {
+        const allCurrentScores: Record<string, number> = { ...liveRoomScores, ...getRoomAllScores(roomCode) }
+        if (activeAddress) allCurrentScores[activeAddress.toLowerCase()] = score
+        savePendingPayoutRoom({
+          roomCode,
+          category: resolvedCategory,
+          prize: prizeForPayouts,
+          payoutMode,
+          finishedAt: Date.now(),
+          hostAddress: activeAddress,
+          score,
+          scores: allCurrentScores,
+          playersCount: (rawPlayersList as `0x${string}`[] | undefined)?.length || 1,
+        })
+      }
     } else {
       setQIndex(next)
       setTimeLeft(roomDuration)
@@ -339,6 +410,15 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     }
 
     saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', newScore, qIndex)
+    if (activeAddress) {
+      syncMyScore(newScore, {
+        username: localProfile?.username,
+        avatarSeed: localProfile?.avatarSeed,
+        avatarUrl: localProfile?.avatarUrl,
+        qIndex,
+        isFinished: false,
+      })
+    }
     setTimeout(() => advanceQuestion(qIndex, questions), 2500)
   }
 
@@ -381,6 +461,18 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     if (uniquePlayers.length === 0 && activeAddress) {
       uniquePlayers.push(activeAddress as `0x${string}`)
     }
+
+    // Rank registered players by their real gameplay scores descending
+    const roomScores: Record<string, number> = { ...liveRoomScores, ...getRoomAllScores(roomCode) }
+    if (activeAddress && typeof score === 'number') {
+      roomScores[activeAddress.toLowerCase()] = score
+    }
+
+    uniquePlayers.sort((a, b) => {
+      const scoreA = roomScores[a.toLowerCase()] ?? getRoomUserScore(roomCode, a) ?? 0
+      const scoreB = roomScores[b.toLowerCase()] ?? getRoomUserScore(roomCode, b) ?? 0
+      return scoreB - scoreA
+    })
 
     const winnersToDeclare = uniquePlayers.slice(0, maxSplits)
     declareWinners(roomCode, winnersToDeclare)
@@ -807,40 +899,34 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
             <h1 className="display text-xl sm:text-2xl font-bold" style={{ color: 'var(--ink)', letterSpacing: '-0.03em' }}>Game Over</h1>
           </div>
 
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mb-4 rounded-2xl sm:rounded-3xl p-5 sm:p-6 text-center" style={glass.card}>
-            <Trophy size={32} className="mx-auto mb-3" style={{ color: '#f59e0b' }} />
-            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.1em' }}>Your Score</p>
-            <p className="display text-5xl font-bold tabular-nums" style={{ color: 'var(--ink)', letterSpacing: '-0.04em' }}>{score}</p>
-            <p className="mt-1 text-sm" style={{ color: 'var(--muted)' }}>pts across {questions.length} questions</p>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="mb-5 rounded-3xl p-8 sm:p-10 text-center relative overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.06)] border border-slate-100/80 bg-white/95 backdrop-blur-md"
+          >
+            {/* Background subtle glow */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-amber-400/15 rounded-full blur-3xl pointer-events-none" />
 
-            <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl py-3" style={glass.inner}>
-              <TokenUSDC variant="branded" size={18} />
-              <span className="text-base font-bold tabular-nums" style={{ color: 'var(--ink)' }}>{prizeForPayouts}</span>
-              <span className="text-sm" style={{ color: 'var(--muted)' }}>USDC prize pool</span>
+            {/* Big, Modern Golden Cup Icon */}
+            <div className="relative mx-auto mb-5 flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-300 via-amber-400 to-amber-500 text-amber-950 shadow-[0_10px_28px_rgba(245,158,11,0.28)] border-2 border-amber-200/90">
+              <Trophy size={46} className="stroke-[2.2] text-amber-950 drop-shadow-xs" />
             </div>
 
-            {/* Multi-Winner Breakdown Preview */}
-            <div className="mt-3 flex flex-col gap-1.5 rounded-2xl p-3" style={glass.inner}>
-              <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                <span className="flex items-center gap-1">
-                  <Trophy size={13} className="text-amber-500" />
-                  Payout: {getRoomPayout(roomCode, payoutMode).label}
-                </span>
-                <span className="text-purple-700 font-semibold">{getRoomPayout(roomCode, payoutMode).splits.length} {getRoomPayout(roomCode, payoutMode).splits.length === 1 ? 'Winner' : 'Winners'}</span>
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1">
-                {calculatePayoutSplits(prizeForPayouts, getRoomPayout(roomCode, payoutMode).splits).map((s, idx) => (
-                  <div key={idx} className="flex items-center justify-between bg-white/90 rounded-xl px-2.5 py-1.5 border border-slate-200/70 text-xs">
-                    <span className="font-semibold text-slate-700">
-                      {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🏅'} {s.label}
-                    </span>
-                    <span className="font-bold text-slate-900 tabular-nums">
-                      ${s.amount} <span className="text-[10px] text-slate-500">({s.percent}%)</span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Label */}
+            <p className="text-xs sm:text-sm font-extrabold uppercase tracking-widest text-slate-400 mb-1" style={{ letterSpacing: '0.12em' }}>
+              Your Final Score
+            </p>
+
+            {/* Big, bold numeric score */}
+            <p className="display text-6xl sm:text-7xl font-black text-slate-900 tabular-nums tracking-tight" style={{ letterSpacing: '-0.04em' }}>
+              {score}
+            </p>
+
+            {/* Subtitle */}
+            <p className="mt-2 text-xs sm:text-sm font-medium text-slate-500">
+              pts across {questions.length} questions
+            </p>
           </motion.div>
 
           {isHost && TRIVIA_GAME_ADDRESS && (
@@ -853,8 +939,11 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
               <button
                 onClick={handleDeclareWinner}
                 disabled={declarePending || declareConfirming}
-                className="w-full rounded-2xl py-4 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
-                style={{ background: 'var(--accent)', color: 'white' }}
+                className="w-full rounded-2xl py-4 text-sm sm:text-base font-bold text-white shadow-lg transition-all duration-200 hover:scale-[1.02] active:scale-98 disabled:opacity-40 disabled:scale-100 cursor-pointer"
+                style={{
+                  background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+                  boxShadow: '0 8px 24px rgba(124, 58, 237, 0.28)',
+                }}
               >
                 {isWrongChain ? 'Switch to Arc Testnet' : declarePending || declareConfirming ? 'Sending payout...' : 'Declare Winner & Pay Out'}
               </button>

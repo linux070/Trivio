@@ -22,7 +22,7 @@ interface OnboardingModalProps {
   onComplete: (profile: UserProfile) => void
 }
 
-const STYLES = ['bottts-neutral', 'thumbs', 'fun-emoji', 'shapes', 'adventurer']
+const STYLES = ['bottts-neutral', 'adventurer', 'lorelei', 'avataaars', 'thumbs', 'notionists', 'shapes', 'fun-emoji']
 
 type OnboardingStep = 'form' | 'submitting' | 'success' | 'error'
 
@@ -124,8 +124,13 @@ export default function OnboardingModal({
     setIsRolling(true)
     setTimeout(() => setIsRolling(false), 400)
     setCustomAvatarUrl(null)
-    setStyleIndex(prev => (prev + 1) % STYLES.length)
-    setSeed('p_' + Math.random().toString(36).substring(2, 8))
+    const nextStyleIdx = (styleIndex + 1 + Math.floor(Math.random() * (STYLES.length - 1))) % STYLES.length
+    setStyleIndex(nextStyleIdx)
+    const freshSeed = `p_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`
+    setSeed(freshSeed)
+    const newUrl = getDiceBearAvatarUrl(STYLES[nextStyleIdx], freshSeed)
+    const img = new Image()
+    img.src = newUrl
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -302,9 +307,13 @@ export default function OnboardingModal({
                           title="Click to upload custom photo"
                         >
                           <img
+                            key={displayedAvatarUrl}
                             src={displayedAvatarUrl}
                             alt="Avatar"
-                            className="h-full w-full rounded-full object-cover"
+                            className="h-full w-full rounded-full object-cover bg-purple-50"
+                            onError={(e) => {
+                              e.currentTarget.src = getDiceBearAvatarUrl('bottts-neutral', seed || 'trivio')
+                            }}
                           />
                         </div>
 

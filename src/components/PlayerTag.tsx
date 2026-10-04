@@ -19,15 +19,15 @@ export function PlayerTag({ address, className = '' }: PlayerTagProps) {
   const localProfile = getUserProfile(normalized)
 
   const rawUsername =
-    onchainProfile?.username ||
     localProfile?.username ||
+    onchainProfile?.username ||
     generateRandomUsername(address)
 
   const username = rawUsername.replace(/^@/, '')
 
   const avatarUrl =
-    onchainProfile?.avatarUrl ||
     localProfile?.avatarUrl ||
+    onchainProfile?.avatarUrl ||
     getDiceBearAvatarUrl('bottts-neutral', address || username)
 
   return (
