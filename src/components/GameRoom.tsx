@@ -38,7 +38,8 @@ import {
   saveRoomTxHash,
   getRoomTxHash,
 } from '@/lib/roomStorage'
-import { useRoomScores, broadcastRoomTxHash } from '@/lib/roomSync'
+import { useRoomScores, broadcastRoomTxHash, broadcastGameStart } from '@/lib/roomSync'
+import { fetchAuthoritativeScores } from '@/lib/roomDb'
 import { getUserProfile } from '@/lib/userProfile'
 import { recordWinnerPayout } from '@/lib/winnersStorage'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
@@ -188,7 +189,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     activeAddress && host && host.toLowerCase() === activeAddress.toLowerCase()
   )
 
-  const { scores: liveRoomScores, syncMyScore } = useRoomScores(roomCode, activeAddress)
+  const { scores: liveRoomScores, isGameStarted, syncMyScore } = useRoomScores(roomCode, activeAddress)
   const localProfile = activeAddress ? getUserProfile(activeAddress) : null
 
   // Keep active game persisted with current phase, score, and question index for smooth resume/rejoin on refresh
@@ -233,9 +234,9 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     cancelRoom(roomCode)
   }
 
-  // When game starts onchain (either via host tx confirmation OR polled status === 1), move all players to playing phase
+  // When game starts onchain or via cloud broadcast, immediately move all players to playing phase without page refresh
   useEffect(() => {
-    const isGameActive = gameStarted || status === 1
+    const isGameActive = gameStarted || status === 1 || isGameStarted
     if (isGameActive && phase === 'lobby') {
       toast.success('Game started!')
       const qs = getQuestions(resolvedCategory, 10, roomCode)
@@ -251,7 +252,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       answerStartRef.current = Date.now()
       saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', 0, 0)
     }
-  }, [gameStarted, status, phase, resolvedCategory, roomCode, roomDuration, isHost])
+  }, [gameStarted, status, isGameStarted, phase, resolvedCategory, roomCode, roomDuration, isHost])
 
   // Timer for questions
   useEffect(() => {
@@ -424,10 +425,11 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
   const handleStartGame = () => {
     if (isWrongChain) { switchChain({ chainId: ARC_TESTNET_CHAIN_ID }); return }
+    broadcastGameStart(roomCode, resolvedCategory, roomDuration)
     startGame(roomCode)
   }
 
-  const handleDeclareWinner = () => {
+  const handleDeclareWinner = async () => {
     if (!activeAddress || isWrongChain) { switchChain({ chainId: ARC_TESTNET_CHAIN_ID }); return }
 
     const players = ((rawPlayersList as `0x${string}`[] | undefined) || []).filter(
@@ -462,8 +464,14 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       uniquePlayers.push(activeAddress as `0x${string}`)
     }
 
-    // Rank registered players by their real gameplay scores descending
+    // Rank registered players by their real gameplay scores descending from cloud + local
+    const cloudScores = await fetchAuthoritativeScores(roomCode).catch(() => ({}))
     const roomScores: Record<string, number> = { ...liveRoomScores, ...getRoomAllScores(roomCode) }
+    for (const [addr, p] of Object.entries(cloudScores)) {
+      if (typeof p.score === 'number') {
+        roomScores[addr.toLowerCase()] = p.score
+      }
+    }
     if (activeAddress && typeof score === 'number') {
       roomScores[activeAddress.toLowerCase()] = score
     }

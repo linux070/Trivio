@@ -8,9 +8,17 @@ import {
   EVENT_ROOM_SCORES_UPDATED,
   type PlayerRoomScore,
 } from './roomStorage'
+import {
+  submitPlayerScore,
+  subscribeToRoom,
+  submitAuthoritativeTxHash,
+  submitGameStart,
+  type CloudRoomPlayer,
+  type CloudRoomMeta,
+} from './roomDb'
 
 export interface RoomScoreSyncMessage {
-  type: 'SCORE_BROADCAST' | 'REQUEST_ROOM_SCORES' | 'SYNC_HEARTBEAT' | 'TX_HASH_BROADCAST'
+  type: 'SCORE_BROADCAST' | 'REQUEST_ROOM_SCORES' | 'SYNC_HEARTBEAT' | 'TX_HASH_BROADCAST' | 'GAME_START_BROADCAST'
   roomCode: string
   address?: string
   score?: number
@@ -21,6 +29,8 @@ export interface RoomScoreSyncMessage {
     avatarUrl?: string
     qIndex?: number
     isFinished?: boolean
+    category?: string
+    duration?: number
   }
   timestamp: number
 }
@@ -36,23 +46,19 @@ try {
 }
 
 /**
- * Public zero-config relay endpoint for cross-browser / cross-device score broadcasting
- */
-function getRelayTopic(code: string): string {
-  return `trivio_room_score_${code.trim().toUpperCase()}`
-}
-
-/**
- * Hook to track and sync all players' real scores in a specific trivia room in real-time.
+ * Hook to track and sync all players' real scores and room status in real-time.
  * Synchronizes across:
  * 1. Same-tab state
  * 2. Cross-tab BroadcastChannel
- * 3. Cross-device / cross-browser WebSocket relay (via public lightweight pub/sub)
+ * 3. Authoritative Cloud Database & SSE Stream (works across distinct devices/browsers)
  */
 export function useRoomScores(roomCode: string | null | undefined, myAddress?: string) {
   const code = roomCode ? roomCode.trim().toUpperCase() : null
   const [scores, setScores] = useState<Record<string, number>>(() => (code ? getRoomAllScores(code) : {}))
   const [playerDetails, setPlayerDetails] = useState<Record<string, PlayerRoomScore>>(() => (code ? getRoomAllPlayerScores(code) : {}))
+  const [isGameStarted, setIsGameStarted] = useState(false)
+  const [gameMeta, setGameMeta] = useState<{ startedAt?: number; category?: string; duration?: number } | null>(null)
+  
   const myAddressRef = useRef(myAddress)
   myAddressRef.current = myAddress
 
@@ -74,7 +80,7 @@ export function useRoomScores(roomCode: string | null | undefined, myAddress?: s
     setPlayerDetails(details)
   }, [code])
 
-  // Initial load + event listeners + WebSocket relay
+  // Initial load + event listeners + Authoritative Cloud Stream
   useEffect(() => {
     if (!code) return
 
@@ -130,6 +136,13 @@ export function useRoomScores(roomCode: string | null | undefined, myAddress?: s
         refreshScores()
       } else if (data.type === 'TX_HASH_BROADCAST' && data.roomCode === code && data.txHash) {
         saveRoomTxHash(code, data.txHash)
+      } else if (data.type === 'GAME_START_BROADCAST' && data.roomCode === code) {
+        setIsGameStarted(true)
+        setGameMeta({
+          startedAt: data.timestamp,
+          category: data.options?.category,
+          duration: data.options?.duration,
+        })
       }
     }
 
@@ -139,33 +152,24 @@ export function useRoomScores(roomCode: string | null | undefined, myAddress?: s
       globalChannel.addEventListener('message', handleBroadcastMessage)
     }
 
-    // 2. Real-time Cross-Device WebSocket Relay connection
-    let ws: WebSocket | null = null
-    try {
-      const topic = getRelayTopic(code)
-      ws = new WebSocket(`wss://ntfy.sh/${topic}/ws`)
-      ws.onmessage = (event) => {
-        try {
-          const parsed = JSON.parse(event.data)
-          if (parsed?.event === 'message' && parsed?.message) {
-            const payload = JSON.parse(parsed.message)
-            if (payload?.roomCode === code && payload?.address && typeof payload?.score === 'number') {
-              saveRoomUserScore(code, payload.address, payload.score, payload.options)
-              refreshScores()
-            } else if (payload?.roomCode === code && payload?.type === 'TX_HASH_BROADCAST' && payload?.txHash) {
-              saveRoomTxHash(code, payload.txHash)
-            }
-          }
-        } catch {
-          // ignore parsing error
+    // 2. Authoritative Cloud Database Real-time Subscription (Cross-Device & Cross-Browser)
+    const unsubscribe = subscribeToRoom(
+      code,
+      (_cloudScores: Record<string, CloudRoomPlayer>, txHash?: string, meta?: CloudRoomMeta) => {
+        if (txHash) {
+          saveRoomTxHash(code, txHash)
         }
+        if (meta?.isStarted || meta?.status === 'playing') {
+          setIsGameStarted(true)
+          setGameMeta({
+            startedAt: meta.startedAt,
+            category: meta.category,
+            duration: meta.duration,
+          })
+        }
+        refreshScores()
       }
-    } catch {
-      // WebSocket relay fallback gracefully
-    }
-
-    // Fast polling interval (750ms) to ensure instant synchronization
-    const interval = setInterval(refreshScores, 750)
+    )
 
     return () => {
       window.removeEventListener(EVENT_ROOM_SCORES_UPDATED, handleCustomUpdate)
@@ -173,10 +177,7 @@ export function useRoomScores(roomCode: string | null | undefined, myAddress?: s
       if (globalChannel) {
         globalChannel.removeEventListener('message', handleBroadcastMessage)
       }
-      if (ws) {
-        ws.close()
-      }
-      clearInterval(interval)
+      unsubscribe()
     }
   }, [code, refreshScores])
 
@@ -197,26 +198,23 @@ export function useRoomScores(roomCode: string | null | undefined, myAddress?: s
       saveRoomUserScore(code, myAddress, score, options)
       refreshScores()
 
-      // 2. Relay via public HTTP endpoint to cross-device peers
-      try {
-        const topic = getRelayTopic(code)
-        const payload = JSON.stringify({
-          roomCode: code,
-          address: myAddress.toLowerCase(),
-          score,
-          options,
-          timestamp: Date.now(),
-        })
-        void fetch(`https://ntfy.sh/${topic}`, {
-          method: 'POST',
-          body: payload,
-          headers: { 'Content-Type': 'application/json' },
-        }).catch(() => {
-          // relay fallback
-        })
-      } catch {
-        // ignore
+      if (globalChannel) {
+        try {
+          globalChannel.postMessage({
+            type: 'SCORE_BROADCAST',
+            roomCode: code,
+            address: myAddress.toLowerCase(),
+            score,
+            options,
+            timestamp: Date.now(),
+          })
+        } catch {
+          // ignore
+        }
       }
+
+      // 2. Submit to Authoritative Cloud DB
+      void submitPlayerScore(code, myAddress, score, options)
     },
     [code, myAddress, refreshScores]
   )
@@ -224,13 +222,38 @@ export function useRoomScores(roomCode: string | null | undefined, myAddress?: s
   return {
     scores,
     playerDetails,
+    isGameStarted,
+    gameMeta,
     refreshScores,
     syncMyScore,
   }
 }
 
 /**
- * Broadcast onchain payout transaction hash to all players in the room across tabs and devices
+ * Broadcast game start event across all devices, tabs, and browsers
+ */
+export function broadcastGameStart(roomCode: string, category?: string, duration?: number): void {
+  if (!roomCode) return
+  const code = roomCode.trim().toUpperCase()
+
+  if (globalChannel) {
+    try {
+      globalChannel.postMessage({
+        type: 'GAME_START_BROADCAST',
+        roomCode: code,
+        options: { category, duration },
+        timestamp: Date.now(),
+      })
+    } catch {
+      // ignore
+    }
+  }
+
+  void submitGameStart(code, category, duration)
+}
+
+/**
+ * Broadcast onchain payout transaction hash to all players in the room across tabs, browsers and devices
  */
 export function broadcastRoomTxHash(roomCode: string, txHash: string): void {
   if (!roomCode || !txHash) return
@@ -250,22 +273,5 @@ export function broadcastRoomTxHash(roomCode: string, txHash: string): void {
     }
   }
 
-  try {
-    const topic = getRelayTopic(code)
-    void fetch(`https://ntfy.sh/${topic}`, {
-      method: 'POST',
-      body: JSON.stringify({
-        type: 'TX_HASH_BROADCAST',
-        roomCode: code,
-        txHash,
-        timestamp: Date.now(),
-      }),
-      headers: { 'Content-Type': 'application/json' },
-    }).catch(() => {
-      // ignore
-    })
-  } catch {
-    // ignore
-  }
+  void submitAuthoritativeTxHash(code, txHash)
 }
-

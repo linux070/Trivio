@@ -280,7 +280,7 @@ export default function Results({
     const candidateAddresses: string[] = []
     const seen = new Set<string>()
 
-    // 1. Declared winners first (preserves 1st, 2nd, 3rd onchain ranking)
+    // 1. Declared winners first
     const declaredList = onchainWinners.length > 0
       ? onchainWinners
       : (winnerAddress && winnerAddress !== '0x0000000000000000000000000000000000000000' ? [winnerAddress] : [])
@@ -306,13 +306,21 @@ export default function Results({
       }
     }
 
+    // 4. Any players with recorded scores in cloud / room storage
+    for (const addr of [...Object.keys(liveRoomScores), ...Object.keys(roomScoresMap)]) {
+      if (addr && !seen.has(addr.toLowerCase()) && addr.startsWith('0x')) {
+        candidateAddresses.push(addr)
+        seen.add(addr.toLowerCase())
+      }
+    }
+
     // Fallback if viewing as host and no other players were collected
     if (candidateAddresses.length === 0 && myAddress) {
       candidateAddresses.push(myAddress)
     }
 
-    // Assign realistic scores using true recorded scores for each participant
-    const playerScores = candidateAddresses.map((addr, idx) => {
+    // Assign true recorded gameplay scores
+    const playerScores = candidateAddresses.map((addr) => {
       const lowerAddr = addr.toLowerCase()
       const isMe = Boolean(myAddress && lowerAddr === myAddress.toLowerCase())
 
@@ -321,7 +329,7 @@ export default function Results({
         return { address: addr, score: userActualScore }
       }
 
-      // 2. Live synchronized score from other participant tabs / peer sync
+      // 2. Live synchronized score from cloud room database
       const liveScore = liveRoomScores[lowerAddr]
       if (typeof liveScore === 'number' && liveScore > 0) {
         return { address: addr, score: liveScore }
@@ -339,28 +347,21 @@ export default function Results({
         return { address: addr, score: mapScore }
       }
 
-      // 5. If host is viewing a concluded match with a winner, retrieve from pending payout records
-      if (isHost && (idx === 0 || candidateAddresses.length === 1)) {
-        const pendingPayout = roomCode ? getPendingPayoutRooms().find(p => p.roomCode === roomCode.trim().toUpperCase()) : null
-        if (pendingPayout?.scores && typeof pendingPayout.scores[lowerAddr] === 'number') {
-          return { address: addr, score: pendingPayout.scores[lowerAddr] }
-        }
-        if (typeof pendingPayout?.score === 'number' && pendingPayout.score > 0) {
-          return { address: addr, score: pendingPayout.score }
-        }
-        const activeScoreFallback = roomCode ? getRoomUserScore(roomCode, 'active') : null
-        if (typeof activeScoreFallback === 'number' && activeScoreFallback > 0) {
-          return { address: addr, score: activeScoreFallback }
-        }
+      // 5. Host payout record lookup
+      const pendingPayout = roomCode ? getPendingPayoutRooms().find(p => p.roomCode === roomCode.trim().toUpperCase()) : null
+      if (pendingPayout?.scores && typeof pendingPayout.scores[lowerAddr] === 'number') {
+        return { address: addr, score: pendingPayout.scores[lowerAddr] }
       }
 
       if (isMe) {
         return { address: addr, score: userActualScore }
       }
 
-      // Fallback only if participant had zero recorded gameplay data
-      return { address: addr, score: Math.max(10, 250 - (idx * 40)) }
+      return { address: addr, score: 0 }
     })
+
+    // Strict descending sort by real score
+    playerScores.sort((a, b) => b.score - a.score)
 
     return playerScores.map((p, idx) => ({
       address: p.address,
