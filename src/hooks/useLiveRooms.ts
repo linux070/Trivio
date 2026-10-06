@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useReadContracts } from 'wagmi'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { TRIVIA_ABI, roomCodeToBytes32, formatUSDCRaw, type RoomTuple } from '@/hooks/useTriviaContract'
-import { getRegisteredLiveRooms, removeLiveRoom, EVENT_LIVE_ROOMS_UPDATED, type RegisteredLiveRoom } from '@/lib/roomStorage'
+import { getRegisteredLiveRooms, removeLiveRoom, saveRoomCategory, EVENT_LIVE_ROOMS_UPDATED, type RegisteredLiveRoom } from '@/lib/roomStorage'
+import { fetchCloudLiveRooms } from '@/lib/roomDb'
 import type { Category } from '@/lib/questions'
 
 export interface LiveRoomItem {
@@ -21,18 +22,45 @@ export interface LiveRoomItem {
 
 export function useLiveRooms(pollInterval: number = 1500) {
   const [registered, setRegistered] = useState<RegisteredLiveRoom[]>(() => getRegisteredLiveRooms())
+  const isMountedRef = useRef(true)
 
-  const syncRegistered = useCallback(() => {
-    setRegistered(getRegisteredLiveRooms())
+  const syncRegistered = useCallback(async () => {
+    // 1. Get local rooms
+    const localRooms = getRegisteredLiveRooms()
+    const map = new Map<string, RegisteredLiveRoom>()
+    for (const r of localRooms) {
+      map.set(r.roomCode.toUpperCase(), r)
+    }
+
+    // 2. Fetch authoritative cloud live rooms
+    try {
+      const cloudRooms = await fetchCloudLiveRooms()
+      for (const cr of cloudRooms) {
+        if (!map.has(cr.roomCode.toUpperCase())) {
+          map.set(cr.roomCode.toUpperCase(), cr)
+        }
+        saveRoomCategory(cr.roomCode, cr.category)
+      }
+    } catch {
+      // ignore
+    }
+
+    if (isMountedRef.current) {
+      const merged = Array.from(map.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      setRegistered(merged)
+    }
   }, [])
 
   // Keep registered rooms list refreshed with real-time events + fast interval
   useEffect(() => {
-    syncRegistered()
-    const interval = setInterval(syncRegistered, pollInterval)
+    isMountedRef.current = true
+    void syncRegistered()
+    const interval = setInterval(() => {
+      void syncRegistered()
+    }, pollInterval)
 
     const handleRealtimeUpdate = () => {
-      syncRegistered()
+      void syncRegistered()
     }
 
     window.addEventListener(EVENT_LIVE_ROOMS_UPDATED, handleRealtimeUpdate)
@@ -40,6 +68,7 @@ export function useLiveRooms(pollInterval: number = 1500) {
     window.addEventListener('focus', handleRealtimeUpdate)
 
     return () => {
+      isMountedRef.current = false
       clearInterval(interval)
       window.removeEventListener(EVENT_LIVE_ROOMS_UPDATED, handleRealtimeUpdate)
       window.removeEventListener('storage', handleRealtimeUpdate)

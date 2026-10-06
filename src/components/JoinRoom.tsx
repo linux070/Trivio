@@ -31,6 +31,7 @@ import {
   getPendingJoin,
   extractRoomCode,
 } from '@/lib/roomStorage'
+import { fetchRoomMetadata } from '@/lib/roomDb'
 
 const ROOM_STATUS = ['Open', 'In Progress', 'Finished', 'Cancelled']
 
@@ -102,6 +103,9 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   const initialCode = resolveInitialCode()
   const [input, setInput] = useState(initialCode)
   const [checkedCode, setCheckedCode] = useState<string | null>(initialCode || null)
+  const [cloudCategory, setCloudCategory] = useState<Category | null>(() => {
+    return initialCode ? (getRoomCategory(initialCode) || inferCategoryFromCode(initialCode)) : null
+  })
 
   // Keep input and checkedCode synchronized whenever prefillCode prop updates
   useEffect(() => {
@@ -124,18 +128,40 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
     }
   }, [prefillCode])
 
+  // Fetch authoritative cloud metadata & category whenever checkedCode changes
+  useEffect(() => {
+    if (!checkedCode) {
+      setCloudCategory(null)
+      return
+    }
+    const cleanCode = checkedCode.trim().toUpperCase()
+    const localCat = getRoomCategory(cleanCode) || inferCategoryFromCode(cleanCode)
+    if (localCat) {
+      setCloudCategory(localCat)
+    }
+
+    let isCancelled = false
+    void fetchRoomMetadata(cleanCode).then((meta) => {
+      if (!isCancelled && meta?.category) {
+        setCloudCategory(meta.category)
+        saveRoomCategory(cleanCode, meta.category)
+      }
+    })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [checkedCode])
+
   const hostRoomCat = checkedCode ? getRoomCategory(checkedCode) : null
-  const resolvedCategory = hostRoomCat || (checkedCode ? inferCategoryFromCode(checkedCode) : null) || initialCategory || 'General Knowledge'
+  const resolvedCategory = cloudCategory || hostRoomCat || (checkedCode ? inferCategoryFromCode(checkedCode) : null) || initialCategory || 'General Knowledge'
 
   // Persist resolved host category once determined
   useEffect(() => {
-    if (checkedCode) {
-      const catToSave = hostRoomCat || inferCategoryFromCode(checkedCode)
-      if (catToSave) {
-        saveRoomCategory(checkedCode, catToSave)
-      }
+    if (checkedCode && resolvedCategory && resolvedCategory !== 'General Knowledge') {
+      saveRoomCategory(checkedCode, resolvedCategory)
     }
-  }, [checkedCode, hostRoomCat])
+  }, [checkedCode, resolvedCategory])
 
   const { data: roomInfo, isLoading: roomLoading, error: roomError } = useRoomInfo(checkedCode)
   const { data: rawPlayersList } = useRoomPlayers(checkedCode)

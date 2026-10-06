@@ -39,7 +39,7 @@ import {
   getRoomTxHash,
 } from '@/lib/roomStorage'
 import { useRoomScores, broadcastRoomTxHash, broadcastGameStart } from '@/lib/roomSync'
-import { fetchAuthoritativeScores } from '@/lib/roomDb'
+import { fetchAuthoritativeScores, fetchRoomMetadata } from '@/lib/roomDb'
 import { getUserProfile } from '@/lib/userProfile'
 import { recordWinnerPayout } from '@/lib/winnersStorage'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
@@ -77,13 +77,41 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const privyWalletAddress = user?.wallet?.address as `0x${string}` | undefined
   const activeAddress = wagmiAddress || privyWalletAddress || ''
 
+  const [cloudCategory, setCloudCategory] = useState<Category | null>(() => {
+    return getRoomCategory(roomCode) || (roomCode ? inferCategoryFromCode(roomCode) : null)
+  })
+
+  // Fetch authoritative cloud metadata & category for the room
+  useEffect(() => {
+    if (!roomCode) return
+    const cleanCode = roomCode.trim().toUpperCase()
+    const localCat = getRoomCategory(cleanCode) || inferCategoryFromCode(cleanCode)
+    if (localCat) {
+      setCloudCategory(localCat)
+    }
+
+    let isCancelled = false
+    void fetchRoomMetadata(cleanCode).then((meta) => {
+      if (!isCancelled && meta?.category) {
+        setCloudCategory(meta.category)
+        saveRoomCategory(cleanCode, meta.category)
+      }
+    })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [roomCode])
+
+  const { scores: liveRoomScores, isGameStarted, gameMeta, syncMyScore } = useRoomScores(roomCode, activeAddress)
+
   const hostRoomCategory = getRoomCategory(roomCode)
-  const resolvedCategory = hostRoomCategory || (roomCode ? inferCategoryFromCode(roomCode) : null) || category || 'General Knowledge'
+  const resolvedCategory = cloudCategory || (gameMeta?.category as Category) || hostRoomCategory || (roomCode ? inferCategoryFromCode(roomCode) : null) || category || 'General Knowledge'
   const roomDuration = getRoomDuration(roomCode, 15)
 
   // Ensure persistent storage of the host-assigned category
   useEffect(() => {
-    if (roomCode && resolvedCategory) {
+    if (roomCode && resolvedCategory && resolvedCategory !== 'General Knowledge') {
       saveRoomCategory(roomCode, resolvedCategory)
     }
   }, [roomCode, resolvedCategory])
@@ -189,7 +217,6 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     activeAddress && host && host.toLowerCase() === activeAddress.toLowerCase()
   )
 
-  const { scores: liveRoomScores, isGameStarted, syncMyScore } = useRoomScores(roomCode, activeAddress)
   const localProfile = activeAddress ? getUserProfile(activeAddress) : null
 
   // Keep active game persisted with current phase, score, and question index for smooth resume/rejoin on refresh
@@ -239,7 +266,8 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     const isGameActive = gameStarted || status === 1 || isGameStarted
     if (isGameActive && phase === 'lobby') {
       toast.success('Game started!')
-      const qs = getQuestions(resolvedCategory, 10, roomCode)
+      const activeCategory = (gameMeta?.category as Category) || cloudCategory || resolvedCategory
+      const qs = getQuestions(activeCategory, 10, roomCode)
       startTransition(() => {
         setQuestions(qs)
         setQIndex(0)
@@ -250,9 +278,9 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
         setPhase('playing')
       })
       answerStartRef.current = Date.now()
-      saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', 0, 0)
+      saveActiveGame(roomCode, activeCategory, isHost, 'playing', 0, 0)
     }
-  }, [gameStarted, status, isGameStarted, phase, resolvedCategory, roomCode, roomDuration, isHost])
+  }, [gameStarted, status, isGameStarted, phase, resolvedCategory, cloudCategory, gameMeta?.category, roomCode, roomDuration, isHost])
 
   // Timer for questions
   useEffect(() => {

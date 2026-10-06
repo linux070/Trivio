@@ -1,5 +1,6 @@
 import type { Category } from './questions'
 import { ALL_CATEGORIES } from './questions'
+import { submitRoomCategory, publishLiveRoomToCloud, removeLiveRoomFromCloud } from './roomDb'
 
 const STORAGE_ROOM_CAT_PREFIX = 'trivio_room_cat_'
 const STORAGE_ROOM_DUR_PREFIX = 'trivio_room_dur_'
@@ -201,6 +202,13 @@ export function saveRoomCategory(roomCode: string, category: Category): void {
   } catch {
     // ignore
   }
+
+  // Synchronize to cloud database
+  try {
+    void submitRoomCategory(code, category)
+  } catch {
+    // ignore
+  }
 }
 
 /** Smart category inference from room code prefix or keywords */
@@ -382,10 +390,24 @@ export function getRoomCategory(roomCode: string | null | undefined): Category |
   return null
 }
 
-/** Generate a random 6-character room code (letters + digits, no ambiguous chars) */
-export function generateCategoryRoomCode(_cat?: Category): string {
+/** Generate a category-branded 6-character room code (e.g. BOMB88, CRYP42, etc.) */
+export function generateCategoryRoomCode(cat?: Category): string {
   const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
-  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+  let prefix = 'TRIV'
+  if (cat === 'Bomb Tag') prefix = 'BOMB'
+  else if (cat === 'Crypto') prefix = 'CRYP'
+  else if (cat === 'Candle Rush') prefix = 'RUSH'
+  else if (cat === 'Word Blitz') prefix = 'BLTZ'
+  else if (cat === 'Emoji Decoder') prefix = 'EMOJ'
+  else if (cat === 'Logic & Math Arena') prefix = 'MATH'
+  else if (cat === 'Sports') prefix = 'SPRT'
+  else if (cat === 'Pop Culture') prefix = 'POPC'
+  else if (cat === 'Science') prefix = 'SCIE'
+  else if (cat === 'History') prefix = 'HIST'
+  else if (cat === 'General Knowledge') prefix = 'TRIV'
+
+  const suffix = Array.from({ length: 2 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+  return `${prefix}${suffix}`
 }
 
 /** Save the round duration (in seconds) for a room code */
@@ -983,6 +1005,13 @@ export function registerLiveRoom(room: RegisteredLiveRoom): void {
   } catch {
     // ignore
   }
+
+  // Publish to cloud DB so all devices and browsers see the live room
+  try {
+    void publishLiveRoomToCloud({ ...room, roomCode: room.roomCode.trim().toUpperCase() })
+  } catch {
+    // ignore
+  }
 }
 
 /** Retrieve all actively registered live rooms */
@@ -1016,9 +1045,9 @@ export function getRegisteredLiveRooms(): RegisteredLiveRoom[] {
 
 /** Remove a live room once completed, cancelled, or closed */
 export function removeLiveRoom(roomCode: string): void {
+  const code = roomCode.trim().toUpperCase()
   try {
     const existing = getRegisteredLiveRooms()
-    const code = roomCode.trim().toUpperCase()
     const filtered = existing.filter(r => r.roomCode.toUpperCase() !== code)
     const json = JSON.stringify(filtered)
     localStorage.setItem(STORAGE_LIVE_ROOMS_KEY, json)
@@ -1028,6 +1057,13 @@ export function removeLiveRoom(roomCode: string): void {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(EVENT_LIVE_ROOMS_UPDATED, { detail: { roomCode: code, action: 'removed' } }))
     }
+  } catch {
+    // ignore
+  }
+
+  // Remove from cloud database
+  try {
+    void removeLiveRoomFromCloud(code)
   } catch {
     // ignore
   }

@@ -58,7 +58,7 @@ export function useRoomScores(roomCode: string | null | undefined, myAddress?: s
   const [playerDetails, setPlayerDetails] = useState<Record<string, PlayerRoomScore>>(() => (code ? getRoomAllPlayerScores(code) : {}))
   const [isGameStarted, setIsGameStarted] = useState(false)
   const [gameMeta, setGameMeta] = useState<{ startedAt?: number; category?: string; duration?: number } | null>(null)
-  
+
   const myAddressRef = useRef(myAddress)
   myAddressRef.current = myAddress
 

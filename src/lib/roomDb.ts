@@ -14,7 +14,10 @@ import {
   saveRoomUserScore,
   getRoomAllPlayerScores,
   saveRoomTxHash,
+  saveRoomCategory,
+  saveRoomDuration,
 } from './roomStorage'
+import type { Category } from './questions'
 
 export interface CloudRoomPlayer {
   address: string
@@ -35,11 +38,26 @@ export interface CloudRoomMeta {
   duration?: number
 }
 
+export interface CloudRoomInfo {
+  roomCode: string
+  category: string
+  hostName?: string
+  hostAddress?: string
+  maxPlayers?: number
+  buyIn?: string
+  isSponsored?: boolean
+  prizePool?: string
+  roundDuration?: number
+  createdAt?: number
+  updatedAt?: number
+}
+
 export interface CloudRoomState {
   roomCode: string
   scores: Record<string, CloudRoomPlayer>
   txHash?: string
   meta?: CloudRoomMeta
+  info?: CloudRoomInfo
   updatedAt: number
 }
 
@@ -48,6 +66,7 @@ const memoryCache: Record<string, CloudRoomState> = {}
 
 // Primary cloud storage endpoint
 const CLOUD_BASE_URL = 'https://trivio-arc-default-rtdb.firebaseio.com/rooms'
+const CLOUD_LIVE_ROOMS_URL = 'https://trivio-arc-default-rtdb.firebaseio.com/liveRooms'
 // Secondary fallback relay
 const FALLBACK_RELAY_URL = 'https://ntfy.sh'
 
@@ -62,6 +81,250 @@ function getCloudUrl(roomCode: string, path = ''): string {
 
 function getFallbackTopic(roomCode: string): string {
   return `trivio_room_score_${roomCode.trim().toUpperCase()}`
+}
+
+/**
+ * Publish created room to cloud database so all online players see it in their Live Rooms list
+ */
+export async function publishLiveRoomToCloud(room: {
+  roomCode: string
+  category: string
+  hostName: string
+  hostAddress: string
+  maxPlayers: number
+  buyIn: string
+  isSponsored: boolean
+  prizePool: string
+  createdAt: number
+  roundDuration?: number
+}): Promise<void> {
+  if (!room?.roomCode) return
+  const code = room.roomCode.trim().toUpperCase()
+  const payload = {
+    ...room,
+    roomCode: code,
+    updatedAt: Date.now(),
+  }
+
+  // 1. Write to liveRooms collection
+  try {
+    void fetch(`${CLOUD_LIVE_ROOMS_URL}/${code}.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => {})
+  } catch {
+    // ignore
+  }
+
+  // 2. Write to room info & meta
+  try {
+    void fetch(getCloudUrl(code, '/info'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => {})
+
+    void fetch(getCloudUrl(code, '/meta'), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        category: room.category,
+        duration: room.roundDuration || 15,
+      }),
+    }).catch(() => {})
+  } catch {
+    // ignore
+  }
+
+  // 3. Fallback relay
+  void sendFallbackRelay(code, { type: 'LIVE_ROOM_REGISTERED', ...payload })
+}
+
+/**
+ * Remove room from cloud live rooms when game begins, cancels, or finishes
+ */
+export async function removeLiveRoomFromCloud(roomCode: string): Promise<void> {
+  if (!roomCode) return
+  const code = roomCode.trim().toUpperCase()
+  try {
+    void fetch(`${CLOUD_LIVE_ROOMS_URL}/${code}.json`, {
+      method: 'DELETE',
+    }).catch(() => {})
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Fetch all actively open live rooms from cloud database
+ */
+export async function fetchCloudLiveRooms(): Promise<Array<{
+  roomCode: string
+  category: Category
+  hostName: string
+  hostAddress: string
+  maxPlayers: number
+  buyIn: string
+  isSponsored: boolean
+  prizePool: string
+  createdAt: number
+}>> {
+  try {
+    const res = await fetch(`${CLOUD_LIVE_ROOMS_URL}.json`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (data && typeof data === 'object') {
+        const results: any[] = []
+        const now = Date.now()
+        for (const [codeKey, item] of Object.entries(data)) {
+          const room = item as any
+          if (room && typeof room === 'object' && room.category) {
+            const cleanCode = (room.roomCode || codeKey).trim().toUpperCase()
+            // Only include rooms created within last 24 hours
+            if (now - (room.createdAt || 0) < 24 * 60 * 60 * 1000) {
+              const liveItem = {
+                roomCode: cleanCode,
+                category: room.category as Category,
+                hostName: room.hostName || 'Host',
+                hostAddress: room.hostAddress || '',
+                maxPlayers: Number(room.maxPlayers) || 4,
+                buyIn: String(room.buyIn || '0.00'),
+                isSponsored: Boolean(room.isSponsored),
+                prizePool: String(room.prizePool || '0.00'),
+                createdAt: Number(room.createdAt) || now,
+              }
+              results.push(liveItem)
+              // Cache category & duration locally so lookup is instantaneous
+              saveRoomCategory(cleanCode, room.category as Category)
+              if (room.roundDuration) {
+                saveRoomDuration(cleanCode, Number(room.roundDuration))
+              }
+            }
+          }
+        }
+        return results
+      }
+    }
+  } catch {
+    // ignore fetch error
+  }
+  return []
+}
+
+/**
+ * Submit category for a room code to cloud database
+ */
+export async function submitRoomCategory(roomCode: string, category: string, duration?: number): Promise<void> {
+  if (!roomCode || !category) return
+  const code = roomCode.trim().toUpperCase()
+  try {
+    void fetch(getCloudUrl(code, '/info'), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category, roundDuration: duration, updatedAt: Date.now() }),
+    }).catch(() => {})
+
+    void fetch(getCloudUrl(code, '/meta'), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category, duration, updatedAt: Date.now() }),
+    }).catch(() => {})
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Fetch authoritative metadata for a specific room code from cloud
+ */
+export async function fetchRoomMetadata(roomCode: string): Promise<{
+  category?: Category
+  roundDuration?: number
+  hostName?: string
+  hostAddress?: string
+  prizePool?: string
+  isStarted?: boolean
+  status?: string
+} | null> {
+  if (!roomCode) return null
+  const code = roomCode.trim().toUpperCase()
+
+  // 1. Try room info endpoint
+  try {
+    const res = await fetch(getCloudUrl(code, '/info'), {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (data && data.category) {
+        saveRoomCategory(code, data.category as Category)
+        if (data.roundDuration) saveRoomDuration(code, Number(data.roundDuration))
+        return {
+          category: data.category as Category,
+          roundDuration: data.roundDuration,
+          hostName: data.hostName,
+          hostAddress: data.hostAddress,
+          prizePool: data.prizePool,
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Try liveRooms endpoint
+  try {
+    const resLive = await fetch(`${CLOUD_LIVE_ROOMS_URL}/${code}.json`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    })
+    if (resLive.ok) {
+      const data = await resLive.json()
+      if (data && data.category) {
+        saveRoomCategory(code, data.category as Category)
+        if (data.roundDuration) saveRoomDuration(code, Number(data.roundDuration))
+        return {
+          category: data.category as Category,
+          roundDuration: data.roundDuration,
+          hostName: data.hostName,
+          hostAddress: data.hostAddress,
+          prizePool: data.prizePool,
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Try room meta endpoint
+  try {
+    const resMeta = await fetch(getCloudUrl(code, '/meta'), {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    })
+    if (resMeta.ok) {
+      const data = await resMeta.json()
+      if (data && data.category) {
+        saveRoomCategory(code, data.category as Category)
+        if (data.duration) saveRoomDuration(code, Number(data.duration))
+        return {
+          category: data.category as Category,
+          roundDuration: data.duration,
+          isStarted: data.isStarted,
+          status: data.status,
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return null
 }
 
 /**
