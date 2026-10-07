@@ -104,9 +104,9 @@ function getInitialScreen(): Screen {
     if (joinParams || pendingJoin) {
       const pendingObj = joinParams || pendingJoin
       if (pendingObj?.roomCode) {
-        const cat = getRoomCategory(pendingObj.roomCode) || pendingObj.category || 'General Knowledge'
-        saveRoomCategory(pendingObj.roomCode, cat)
-        return { name: 'join', category: cat, prefillCode: pendingObj.roomCode }
+        const cat = pendingObj.category || getRoomCategory(pendingObj.roomCode)
+        if (cat) saveRoomCategory(pendingObj.roomCode, cat)
+        return { name: 'join', category: cat || 'General Knowledge', prefillCode: pendingObj.roomCode }
       }
     }
 
@@ -179,15 +179,15 @@ export default function App() {
   const restoreGameScreen = () => {
     const pendingJoin = getPendingJoin() || getJoinParamsFromUrl()
     if (pendingJoin && pendingJoin.roomCode) {
-      const cat = getRoomCategory(pendingJoin.roomCode) || pendingJoin.category || 'General Knowledge'
-      saveRoomCategory(pendingJoin.roomCode, cat)
+      const cat = pendingJoin.category || getRoomCategory(pendingJoin.roomCode)
+      if (cat) saveRoomCategory(pendingJoin.roomCode, cat)
       const url = new URL(window.location.href)
       url.searchParams.delete('join')
       url.searchParams.delete('code')
       url.searchParams.delete('cat')
       url.searchParams.delete('category')
       window.history.replaceState({}, '', url.pathname + '#/join')
-      setScreen({ name: 'join', category: cat, prefillCode: pendingJoin.roomCode })
+      setScreen({ name: 'join', category: cat || 'General Knowledge', prefillCode: pendingJoin.roomCode })
       return
     }
 
@@ -322,14 +322,14 @@ export default function App() {
     if (ready && authenticated && hasUserProfile(activeAddress) && screen.name !== 'landing') {
       const joinParams = getJoinParamsFromUrl()
       if (joinParams) {
-        const cat = getRoomCategory(joinParams.roomCode) || joinParams.category || 'General Knowledge'
-        saveRoomCategory(joinParams.roomCode, cat)
+        const cat = joinParams.category || getRoomCategory(joinParams.roomCode)
+        if (cat) saveRoomCategory(joinParams.roomCode, cat)
         const url = new URL(window.location.href)
         url.searchParams.delete('join')
         url.searchParams.delete('cat')
         url.searchParams.delete('category')
         window.history.replaceState({}, '', url.pathname + '#/join')
-        setScreen({ name: 'join', category: cat, prefillCode: joinParams.roomCode })
+        setScreen({ name: 'join', category: cat || 'General Knowledge', prefillCode: joinParams.roomCode })
       }
     }
   }, [ready, authenticated, activeAddress, screen.name])

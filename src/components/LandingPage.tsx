@@ -13,11 +13,13 @@ import {
   getPendingJoin,
   getRoomCategory,
   saveRoomCategory,
+  saveRoomDuration,
   extractRoomCode,
   clearPendingJoin,
   getJoinParamsFromUrl,
   isValidCategory,
 } from '@/lib/roomStorage'
+import { fetchRoomMetadata } from '@/lib/roomDb'
 import type { Category } from '@/lib/questions'
 
 /* ── Typewriter hook ─────────────────────────────────────────────────────── */
@@ -398,6 +400,30 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
   const [roomCode, setRoomCode] = useState(() => activeInvite?.roomCode || '')
   const { displayed, done } = useTypewriter('having fun onchain', 52, 800)
 
+  // Asynchronously query authoritative host game mode whenever a code is present
+  useEffect(() => {
+    const code = (activeInvite?.roomCode || roomCode.trim()).toUpperCase()
+    if (!code || code.length < 4) return
+    let isCancelled = false
+
+    void fetchRoomMetadata(code).then((meta) => {
+      if (isCancelled || !meta?.category) return
+      saveRoomCategory(code, meta.category)
+      if (meta.roundDuration) saveRoomDuration(code, meta.roundDuration)
+      setPendingJoin(code, meta.category)
+      setActiveInvite((prev) => {
+        if (!prev || prev.roomCode === code) {
+          return { roomCode: code, category: meta.category }
+        }
+        return prev
+      })
+    })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [activeInvite?.roomCode, roomCode])
+
   // If already authenticated via Privy, immediately notify parent
   useEffect(() => {
     if (authenticated) {
@@ -406,12 +432,20 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
     }
   }, [authenticated, onConnected])
 
-  const handleGetStarted = () => {
+  const handleGetStarted = async () => {
     const codeToJoin = activeInvite?.roomCode || roomCode.trim()
     if (codeToJoin) {
       const extracted = extractRoomCode(codeToJoin)
       if (extracted?.roomCode) {
-        const cat = activeInvite?.category || getRoomCategory(extracted.roomCode) || extracted.category || undefined
+        let cat = activeInvite?.category || getRoomCategory(extracted.roomCode) || extracted.category || undefined
+        if (!cat) {
+          const meta = await fetchRoomMetadata(extracted.roomCode)
+          if (meta?.category) {
+            cat = meta.category
+            saveRoomCategory(extracted.roomCode, meta.category)
+            if (meta.roundDuration) saveRoomDuration(extracted.roomCode, meta.roundDuration)
+          }
+        }
         if (cat) saveRoomCategory(extracted.roomCode, cat)
         setPendingJoin(extracted.roomCode, cat)
         if (authenticated) {
@@ -453,6 +487,14 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
       setPendingJoin(extracted.roomCode, cat)
       setActiveInvite({ roomCode: extracted.roomCode, category: cat })
       toast.success(`Room code detected: #${extracted.roomCode}`)
+      void fetchRoomMetadata(extracted.roomCode).then((meta) => {
+        if (meta?.category) {
+          saveRoomCategory(extracted.roomCode, meta.category)
+          if (meta.roundDuration) saveRoomDuration(extracted.roomCode, meta.roundDuration)
+          setPendingJoin(extracted.roomCode, meta.category)
+          setActiveInvite({ roomCode: extracted.roomCode, category: meta.category })
+        }
+      })
     }
   }
 
@@ -464,6 +506,14 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
       if (cat) saveRoomCategory(extracted.roomCode, cat)
       setPendingJoin(extracted.roomCode, cat)
       setActiveInvite({ roomCode: extracted.roomCode, category: cat })
+      void fetchRoomMetadata(extracted.roomCode).then((meta) => {
+        if (meta?.category) {
+          saveRoomCategory(extracted.roomCode, meta.category)
+          if (meta.roundDuration) saveRoomDuration(extracted.roomCode, meta.roundDuration)
+          setPendingJoin(extracted.roomCode, meta.category)
+          setActiveInvite({ roomCode: extracted.roomCode, category: meta.category })
+        }
+      })
       return
     }
 
@@ -473,13 +523,21 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
       const cat = getRoomCategory(clean) || undefined
       setActiveInvite({ roomCode: clean, category: cat })
       setPendingJoin(clean, cat)
+      void fetchRoomMetadata(clean).then((meta) => {
+        if (meta?.category) {
+          saveRoomCategory(clean, meta.category)
+          if (meta.roundDuration) saveRoomDuration(clean, meta.roundDuration)
+          setPendingJoin(clean, meta.category)
+          setActiveInvite({ roomCode: clean, category: meta.category })
+        }
+      })
     } else if (clean.length === 0) {
       setActiveInvite(null)
       clearPendingJoin()
     }
   }
 
-  const handleJoinWithCode = (e: React.FormEvent) => {
+  const handleJoinWithCode = async (e: React.FormEvent) => {
     e.preventDefault()
     const extracted = extractRoomCode(roomCode)
     if (!extracted || !extracted.roomCode) {
@@ -488,7 +546,15 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
     }
 
     const code = extracted.roomCode
-    const category = activeInvite?.category || getRoomCategory(code) || extracted.category || undefined
+    let category = activeInvite?.category || getRoomCategory(code) || extracted.category || undefined
+    if (!category) {
+      const meta = await fetchRoomMetadata(code)
+      if (meta?.category) {
+        category = meta.category
+        saveRoomCategory(code, meta.category)
+        if (meta.roundDuration) saveRoomDuration(code, meta.roundDuration)
+      }
+    }
     if (category) saveRoomCategory(code, category)
     setPendingJoin(code, category)
 

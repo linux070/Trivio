@@ -145,6 +145,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
         isSponsored: mode === 'sponsored',
         prizePool: totalEstimatedPool,
         createdAt: Date.now(),
+        roundDuration: roundDuration || 15,
       })
 
       onRoomCreated(roomCode, category)

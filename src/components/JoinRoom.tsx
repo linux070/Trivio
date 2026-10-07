@@ -31,8 +31,10 @@ import {
   clearPendingJoin,
   getJoinParamsFromUrl,
   extractRoomCode,
+  getRoomDuration,
+  saveRoomDuration,
 } from '@/lib/roomStorage'
-import { fetchRoomMetadata } from '@/lib/roomDb'
+import { fetchRoomMetadata, fetchCloudLiveRooms } from '@/lib/roomDb'
 
 const ROOM_STATUS = ['Open', 'In Progress', 'Finished', 'Cancelled']
 
@@ -93,16 +95,23 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   const initialCode = resolveInitialCode()
   const [input, setInput] = useState(initialCode)
   const [checkedCode, setCheckedCode] = useState<string | null>(initialCode || null)
-  const [cloudCategory, setCloudCategory] = useState<Category | null>(() => {
+  const [hostCategory, setHostCategory] = useState<Category | null>(() => {
     return initialCode ? (getRoomCategory(initialCode) || inferCategoryFromCode(initialCode)) : null
   })
+  const [hostDuration, setHostDuration] = useState<number | null>(() => {
+    return initialCode ? getRoomDuration(initialCode) : null
+  })
+  const [isResolvingCategory, setIsResolvingCategory] = useState(false)
 
   // Keep input and checkedCode synchronized whenever prefillCode prop updates or pending join exists
   useEffect(() => {
     if (prefillCode && prefillCode.trim()) {
       const extracted = extractRoomCode(prefillCode.trim())
       const code = extracted ? extracted.roomCode : prefillCode.trim().toUpperCase()
-      if (extracted?.category) saveRoomCategory(code, extracted.category)
+      if (extracted?.category) {
+        setHostCategory(extracted.category)
+        saveRoomCategory(code, extracted.category)
+      }
       setInput(code)
       setCheckedCode(code)
     } else {
@@ -111,31 +120,63 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
         const extracted = extractRoomCode(pending.roomCode)
         const code = extracted ? extracted.roomCode : pending.roomCode.trim().toUpperCase()
         const cat = extracted?.category || pending.category
-        if (cat) saveRoomCategory(code, cat)
+        if (cat) {
+          setHostCategory(cat)
+          saveRoomCategory(code, cat)
+        }
         setInput(code)
         setCheckedCode(code)
       }
     }
   }, [prefillCode])
 
-  // Fetch authoritative cloud metadata & category whenever checkedCode changes
+  // Fetch authoritative cloud metadata & host game mode whenever checkedCode changes
   useEffect(() => {
     if (!checkedCode) {
-      setCloudCategory(null)
+      setHostCategory(null)
+      setHostDuration(null)
+      setIsResolvingCategory(false)
       return
     }
     const cleanCode = checkedCode.trim().toUpperCase()
-    const localCat = getRoomCategory(cleanCode) || inferCategoryFromCode(cleanCode)
-    if (localCat) {
-      setCloudCategory(localCat)
-    }
+    const cachedCat = getRoomCategory(cleanCode) || inferCategoryFromCode(cleanCode)
+    const cachedDur = getRoomDuration(cleanCode)
+    if (cachedCat) setHostCategory(cachedCat)
+    if (cachedDur) setHostDuration(cachedDur)
 
+    setIsResolvingCategory(true)
     let isCancelled = false
-    void fetchRoomMetadata(cleanCode).then((meta) => {
-      if (!isCancelled && meta?.category) {
-        setCloudCategory(meta.category)
+
+    void fetchRoomMetadata(cleanCode).then(async (meta) => {
+      if (isCancelled) return
+      if (meta?.category) {
+        setHostCategory(meta.category)
         saveRoomCategory(cleanCode, meta.category)
+        if (meta.roundDuration) {
+          setHostDuration(meta.roundDuration)
+          saveRoomDuration(cleanCode, meta.roundDuration)
+        }
+        setIsResolvingCategory(false)
+        return
       }
+
+      // Secondary check: live rooms cloud registry
+      try {
+        const liveRooms = await fetchCloudLiveRooms()
+        if (isCancelled) return
+        const match = liveRooms.find((r) => r.roomCode.toUpperCase() === cleanCode)
+        if (match?.category) {
+          setHostCategory(match.category)
+          saveRoomCategory(cleanCode, match.category)
+          if (match.roundDuration) {
+            setHostDuration(match.roundDuration)
+            saveRoomDuration(cleanCode, match.roundDuration)
+          }
+        }
+      } catch {
+        // ignore
+      }
+      if (!isCancelled) setIsResolvingCategory(false)
     })
 
     return () => {
@@ -143,15 +184,12 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
     }
   }, [checkedCode])
 
-  const hostRoomCat = checkedCode ? getRoomCategory(checkedCode) : null
-  const resolvedCategory = cloudCategory || hostRoomCat || (checkedCode ? inferCategoryFromCode(checkedCode) : null) || initialCategory || 'General Knowledge'
-
-  // Persist resolved host category once determined
-  useEffect(() => {
-    if (checkedCode && resolvedCategory && resolvedCategory !== 'General Knowledge') {
-      saveRoomCategory(checkedCode, resolvedCategory)
-    }
-  }, [checkedCode, resolvedCategory])
+  // Resolving game mode: strictly prioritize host category over player's local lobby selection
+  const resolvedCategory: Category =
+    hostCategory ||
+    (checkedCode ? getRoomCategory(checkedCode) : null) ||
+    (checkedCode ? inferCategoryFromCode(checkedCode) : null) ||
+    'General Knowledge'
 
   const { data: roomInfo, isLoading: roomLoading, error: roomError } = useRoomInfo(checkedCode)
   const { data: rawPlayersList } = useRoomPlayers(checkedCode)
@@ -196,14 +234,15 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   useEffect(() => {
     if (joined && checkedCode) {
       toast.success(`Joined room ${checkedCode}!`)
-      saveRoomCategory(checkedCode, resolvedCategory)
+      const finalCat = hostCategory || getRoomCategory(checkedCode) || resolvedCategory
+      saveRoomCategory(checkedCode, finalCat)
       if (prizeForPayouts && Number(prizeForPayouts) > 0) {
         saveRoomPrize(checkedCode, prizeForPayouts)
       }
       clearPendingJoin()
-      onJoined(checkedCode, resolvedCategory)
+      onJoined(checkedCode, finalCat)
     }
-  }, [joined, checkedCode, resolvedCategory, prizeForPayouts, onJoined])
+  }, [joined, checkedCode, hostCategory, resolvedCategory, prizeForPayouts, onJoined])
 
   const isWrongChain = chainId !== ARC_TESTNET_CHAIN_ID
   const isRoomOpen = status === 0
@@ -215,6 +254,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       setInput(extracted.roomCode)
       setCheckedCode(extracted.roomCode)
       if (extracted.category) {
+        setHostCategory(extracted.category)
         saveRoomCategory(extracted.roomCode, extracted.category)
       }
     } else {
@@ -227,12 +267,13 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
     }
   }
 
-  const handleLookupOrJoin = () => {
+  const handleLookupOrJoin = async () => {
     const extracted = extractRoomCode(input)
     const code = extracted ? extracted.roomCode : input.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
     if (code.length < 4) return
 
     if (extracted?.category) {
+      setHostCategory(extracted.category)
       saveRoomCategory(code, extracted.category)
     }
 
@@ -248,7 +289,17 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       }
       if (isAlreadyJoined) {
         clearPendingJoin()
-        onJoined(checkedCode, resolvedCategory)
+        let catToUse = hostCategory || getRoomCategory(checkedCode)
+        if (!catToUse) {
+          const meta = await fetchRoomMetadata(checkedCode)
+          if (meta?.category) {
+            catToUse = meta.category
+            setHostCategory(meta.category)
+            saveRoomCategory(checkedCode, meta.category)
+          }
+        }
+        const finalCat = catToUse || (checkedCode ? inferCategoryFromCode(checkedCode) : null) || 'General Knowledge'
+        onJoined(checkedCode, finalCat)
         return
       }
       if (requiresApproval && !approved) {
@@ -256,7 +307,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
         return
       }
       if (isRoomOpen) {
-        handleJoin()
+        void handleJoin()
         return
       }
     } else {
@@ -269,13 +320,25 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
     approve(parseUSDC(buyInHuman ?? '0') === buyIn ? (buyInHuman ?? '0') : formatUSDCRaw(buyIn))
   }
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     if (isWrongChain) { switchChain({ chainId: ARC_TESTNET_CHAIN_ID }); return }
     if (!checkedCode) return
-    saveRoomCategory(checkedCode, resolvedCategory)
+
+    let catToUse = hostCategory || getRoomCategory(checkedCode)
+    if (!catToUse) {
+      const meta = await fetchRoomMetadata(checkedCode)
+      if (meta?.category) {
+        catToUse = meta.category
+        setHostCategory(meta.category)
+        saveRoomCategory(checkedCode, meta.category)
+      }
+    }
+    const finalCat = catToUse || (checkedCode ? inferCategoryFromCode(checkedCode) : null) || 'General Knowledge'
+    saveRoomCategory(checkedCode, finalCat)
+
     if (isAlreadyJoined) {
       clearPendingJoin()
-      onJoined(checkedCode, resolvedCategory)
+      onJoined(checkedCode, finalCat)
       return
     }
     joinRoom(checkedCode)
@@ -358,10 +421,24 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                   <div className="space-y-2">
                     <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5" style={glass.inner}>
                       <span className="text-xs" style={{ color: 'var(--muted)' }}>Game Mode</span>
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 border border-slate-200/90 shadow-2xs">
-                        <span>{CATEGORY_GROUPS.flatMap(g => g.subcategories).find(s => s.id === resolvedCategory)?.emoji ?? '🎮'}</span>
-                        <span>{resolvedCategory}</span>
-                      </span>
+                      {isResolvingCategory && !hostCategory ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-xs font-medium text-slate-500 border border-slate-200/90 shadow-2xs animate-pulse">
+                          <span>🔄</span>
+                          <span>Detecting host mode...</span>
+                        </span>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 border border-slate-200/90 shadow-2xs">
+                            <span>{CATEGORY_GROUPS.flatMap(g => g.subcategories).find(s => s.id === resolvedCategory)?.emoji ?? '🎮'}</span>
+                            <span>{resolvedCategory}</span>
+                          </span>
+                          {hostDuration && (
+                            <span className="inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-bold text-purple-700 border border-purple-200/70">
+                              {hostDuration}s
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5" style={glass.inner}>

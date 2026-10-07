@@ -1015,6 +1015,7 @@ export interface RegisteredLiveRoom {
   isSponsored: boolean
   prizePool: string
   createdAt: number
+  roundDuration?: number
 }
 
 /** Save an actual created room so it displays dynamically in the Live Rooms list */
