@@ -189,6 +189,7 @@ export async function fetchCloudLiveRooms(): Promise<Array<{
   isSponsored: boolean
   prizePool: string
   createdAt: number
+  roundDuration?: number
 }>> {
   try {
     const res = await fetch(`${CLOUD_LIVE_ROOMS_URL}.json`, {
@@ -216,6 +217,7 @@ export async function fetchCloudLiveRooms(): Promise<Array<{
                 isSponsored: Boolean(room.isSponsored),
                 prizePool: String(room.prizePool || '0.00'),
                 createdAt: Number(room.createdAt) || now,
+                roundDuration: room.roundDuration ? Number(room.roundDuration) : undefined,
               }
               results.push(liveItem)
               // Cache category & duration locally so lookup is instantaneous

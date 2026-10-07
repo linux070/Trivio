@@ -168,9 +168,10 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
         if (match?.category) {
           setHostCategory(match.category)
           saveRoomCategory(cleanCode, match.category)
-          if (match.roundDuration) {
-            setHostDuration(match.roundDuration)
-            saveRoomDuration(cleanCode, match.roundDuration)
+          const matchedDuration = (match as any)?.roundDuration
+          if (matchedDuration) {
+            setHostDuration(Number(matchedDuration))
+            saveRoomDuration(cleanCode, Number(matchedDuration))
           }
         }
       } catch {
