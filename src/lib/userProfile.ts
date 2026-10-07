@@ -9,6 +9,7 @@ export interface UserProfile {
   avatarSeed: string
   avatarStyle: string
   createdAt: number
+  updatedAt?: number
   isOnchainVerified?: boolean
 }
 
@@ -51,15 +52,28 @@ export function getDiceBearAvatarUrl(style: string = 'bottts-neutral', seed: str
 export function getUserProfile(address?: string): UserProfile | null {
   try {
     if (address && address.startsWith('0x') && address.length === 42 && address !== '0x0000000000000000000000000000000000000000') {
-      const scoped = localStorage.getItem(`trivio_profile_${address.toLowerCase()}`)
+      const lower = address.toLowerCase()
+      const scoped = localStorage.getItem(`trivio_profile_${lower}`)
       if (scoped) {
         try {
           return JSON.parse(scoped) as UserProfile
         } catch {
-          return null
+          // parse failed
         }
       }
-      // CRITICAL: When address is provided, never fall back to another user's global profile!
+      // If scoped profile is not yet stored but global active profile exists, migrate it
+      const globalRaw = localStorage.getItem(STORAGE_PROFILE_KEY)
+      if (globalRaw) {
+        try {
+          const parsed = JSON.parse(globalRaw) as UserProfile
+          if (parsed && parsed.username) {
+            localStorage.setItem(`trivio_profile_${lower}`, globalRaw)
+            return parsed
+          }
+        } catch {
+          // ignore
+        }
+      }
       return null
     }
     const raw = localStorage.getItem(STORAGE_PROFILE_KEY)
@@ -82,9 +96,22 @@ export function hasUserProfile(address?: string): boolean {
  */
 export function saveUserProfile(profile: UserProfile, address?: string): void {
   try {
-    localStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(profile))
+    const stamped: UserProfile = {
+      ...profile,
+      updatedAt: profile.updatedAt || Date.now(),
+    }
+    const serialized = JSON.stringify(stamped)
+    localStorage.setItem(STORAGE_PROFILE_KEY, serialized)
     if (address && address.startsWith('0x') && address.length === 42 && address !== '0x0000000000000000000000000000000000000000') {
-      localStorage.setItem(`trivio_profile_${address.toLowerCase()}`, JSON.stringify(profile))
+      localStorage.setItem(`trivio_profile_${address.toLowerCase()}`, serialized)
+    }
+    // Broadcast event across same-window components
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('trivio_profile_updated', {
+          detail: { address: address?.toLowerCase(), profile: stamped },
+        })
+      )
     }
   } catch (err) {
     console.error('Failed to save user profile:', err)

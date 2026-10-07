@@ -325,9 +325,22 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
   const [profile, setProfile] = useState<UserProfile | null>(() => getUserProfile(activeAddress) || getUserProfile())
   const [avatarImgError, setAvatarImgError] = useState(false)
 
+  // Listen to profile updates broadcasted across the entire application
   useEffect(() => {
-    setAvatarImgError(false)
-  }, [profile?.avatarUrl])
+    const handleProfileUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<{ address?: string; profile?: UserProfile }>).detail
+      if (detail?.profile) {
+        if (!activeAddress || !detail.address || detail.address.toLowerCase() === activeAddress.toLowerCase()) {
+          setProfile(detail.profile)
+          setAvatarImgError(false)
+        }
+      }
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('trivio_profile_updated', handleProfileUpdated)
+      return () => window.removeEventListener('trivio_profile_updated', handleProfileUpdated)
+    }
+  }, [activeAddress])
 
   useEffect(() => {
     if (activeAddress && activeAddress !== '0x0000000000000000000000000000000000000000') {
@@ -381,17 +394,27 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
   useEffect(() => {
     if (hasOnchainProfile && onchainProfile) {
       const existingLocal = getUserProfile(activeAddress)
-      const p: UserProfile = {
-        username: onchainProfile.username || existingLocal?.username || 'player',
-        // Preserve locally chosen/rolled avatar if present
-        avatarUrl: existingLocal?.avatarUrl || onchainProfile.avatarUrl || getDiceBearAvatarUrl(onchainProfile.avatarStyle || 'bottts-neutral', onchainProfile.avatarSeed || onchainProfile.username),
-        avatarSeed: existingLocal?.avatarSeed || onchainProfile.avatarSeed || onchainProfile.username,
-        avatarStyle: existingLocal?.avatarStyle || onchainProfile.avatarStyle || 'bottts-neutral',
-        createdAt: Number(onchainProfile.updatedAt) * 1000 || existingLocal?.createdAt || Date.now(),
-        isOnchainVerified: true,
+      const onchainTime = Number(onchainProfile.updatedAt) * 1000
+      const localTime = existingLocal ? (existingLocal.updatedAt || existingLocal.createdAt || 0) : 0
+      const localIsNewer = Boolean(existingLocal?.username && localTime > onchainTime)
+
+      if (localIsNewer && existingLocal) {
+        // Keep the user's fresh local modifications without letting stale onchain data overwrite it
+        setProfile(existingLocal)
+      } else {
+        const p: UserProfile = {
+          username: onchainProfile.username || existingLocal?.username || 'player',
+          // Preserve locally chosen/rolled avatar if present
+          avatarUrl: existingLocal?.avatarUrl || onchainProfile.avatarUrl || getDiceBearAvatarUrl(onchainProfile.avatarStyle || 'bottts-neutral', onchainProfile.avatarSeed || onchainProfile.username),
+          avatarSeed: existingLocal?.avatarSeed || onchainProfile.avatarSeed || onchainProfile.username,
+          avatarStyle: existingLocal?.avatarStyle || onchainProfile.avatarStyle || 'bottts-neutral',
+          createdAt: onchainTime || existingLocal?.createdAt || Date.now(),
+          updatedAt: onchainTime || Date.now(),
+          isOnchainVerified: true,
+        }
+        saveUserProfile(p, activeAddress)
+        setProfile(p)
       }
-      saveUserProfile(p, activeAddress)
-      setProfile(p)
     } else {
       const local = getUserProfile(activeAddress)
       if (local) {
@@ -494,17 +517,20 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
       toast.error('Username already taken.')
       return
     }
+    const now = Date.now()
     const updated: UserProfile = {
       username: cleaned,
-      avatarUrl: profile?.avatarUrl || getDiceBearAvatarUrl('bottts-neutral', cleaned),
+      avatarUrl: profile?.avatarUrl || getDiceBearAvatarUrl(profile?.avatarStyle || 'bottts-neutral', profile?.avatarSeed || cleaned),
       avatarSeed: profile?.avatarSeed || cleaned,
       avatarStyle: profile?.avatarStyle || 'bottts-neutral',
-      createdAt: profile?.createdAt || Date.now(),
+      createdAt: profile?.createdAt || now,
+      updatedAt: now,
+      isOnchainVerified: false,
     }
     saveUserProfile(updated, activeAddress)
     setProfile(updated)
     setIsEditingName(false)
-    toast.info('Registering username on Arc blockchain...')
+    toast.success(`Username updated to @${cleaned}!`)
 
     if (activeAddress && activeAddress !== '0x0000000000000000000000000000000000000000') {
       try {
@@ -549,16 +575,20 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
           ctx.drawImage(img, 0, 0, 128, 128)
           const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85)
 
+          const now = Date.now()
           const currentUsername = profile?.username || 'player'
           const updated: UserProfile = {
             username: currentUsername,
             avatarUrl: compressedDataUrl,
             avatarSeed: 'custom_upload',
             avatarStyle: 'custom',
-            createdAt: profile?.createdAt || Date.now(),
+            createdAt: profile?.createdAt || now,
+            updatedAt: now,
+            isOnchainVerified: false,
           }
           saveUserProfile(updated, activeAddress)
           setProfile(updated)
+          setAvatarImgError(false)
           toast.success('Avatar updated!')
         }
       }
@@ -588,13 +618,15 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
     const img = new Image()
     img.src = newAvatarUrl
 
+    const now = Date.now()
     const updated: UserProfile = {
       username: profile?.username || (displayName.replace(/^@/, '') || 'player'),
       avatarUrl: newAvatarUrl,
       avatarSeed: randomSeed,
       avatarStyle: chosenStyle,
-      createdAt: profile?.createdAt || Date.now(),
-      isOnchainVerified: profile?.isOnchainVerified ?? isProfileVerified,
+      createdAt: profile?.createdAt || now,
+      updatedAt: now,
+      isOnchainVerified: false,
     }
     saveUserProfile(updated, activeAddress)
     setProfile(updated)
@@ -637,9 +669,9 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
     ? `${activeAddress.slice(0, 6)}...${activeAddress.slice(-4)}`
     : ''
   const localStoredProfile = getUserProfile(activeAddress)
-  const effectiveProfile = profile || localStoredProfile || (onchainProfile ? { username: onchainProfile.username, avatarUrl: onchainProfile.avatarUrl } : null) || getUserProfile()
+  const effectiveProfile = profile || localStoredProfile || getUserProfile() || (onchainProfile ? { username: onchainProfile.username, avatarUrl: onchainProfile.avatarUrl } : null)
   const displayName = effectiveProfile?.username ? `@${effectiveProfile.username.replace(/^@/, '')}` : (shortAddr || 'player')
-  const effectiveAvatar = effectiveProfile?.avatarUrl || profile?.avatarUrl || localStoredProfile?.avatarUrl || (effectiveProfile?.username ? getDiceBearAvatarUrl('bottts-neutral', effectiveProfile.username) : '')
+  const effectiveAvatar = effectiveProfile?.avatarUrl || profile?.avatarUrl || localStoredProfile?.avatarUrl || (effectiveProfile?.username ? getDiceBearAvatarUrl(effectiveProfile?.avatarStyle || 'bottts-neutral', effectiveProfile?.avatarSeed || effectiveProfile.username) : '')
 
   return (
     <div className="relative" ref={dropdownRef}>

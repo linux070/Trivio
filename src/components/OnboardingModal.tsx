@@ -193,12 +193,14 @@ export default function OnboardingModal({
       return
     }
 
+    const now = Date.now()
     const profile: UserProfile = {
       username: clean,
       avatarUrl: displayedAvatarUrl,
       avatarSeed: seed,
       avatarStyle: customAvatarUrl ? 'custom' : currentStyle,
-      createdAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
     }
 
     // Save profile to local storage immediately
@@ -210,12 +212,14 @@ export default function OnboardingModal({
   }
 
   const handleFinishSuccess = () => {
+    const now = Date.now()
     const profile = pendingProfile || {
       username: cleanUsername || suggestions.username,
       avatarUrl: displayedAvatarUrl,
       avatarSeed: seed,
       avatarStyle: customAvatarUrl ? 'custom' : currentStyle,
-      createdAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
     }
     // Commit profile to local storage now that onboarding is complete
     saveUserProfile(profile, address)

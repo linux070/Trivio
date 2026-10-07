@@ -126,7 +126,7 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
       saveRoomPayout(roomCode, activePayoutStructure)
       saveActiveGame(roomCode, category, true)
 
-      const myProfile = getUserProfile(activeAddress)
+      const myProfile = activeAddress ? (getUserProfile(activeAddress) || getUserProfile()) : getUserProfile()
       const hostName = myProfile?.username || (activeAddress ? generateRandomUsername(activeAddress) : 'Host')
 
       const totalEstimatedPool = mode === 'sponsored'

@@ -39,7 +39,7 @@ import {
   getRoomTxHash,
 } from '@/lib/roomStorage'
 import { useRoomScores, broadcastRoomTxHash, broadcastGameStart } from '@/lib/roomSync'
-import { fetchAuthoritativeScores, fetchRoomMetadata } from '@/lib/roomDb'
+import { fetchAuthoritativeScores, fetchRoomMetadata, submitFinalLeaderboard } from '@/lib/roomDb'
 import { getUserProfile } from '@/lib/userProfile'
 import { recordWinnerPayout } from '@/lib/winnersStorage'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
@@ -103,7 +103,15 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     }
   }, [roomCode])
 
-  const { scores: liveRoomScores, isGameStarted, gameMeta, syncMyScore } = useRoomScores(roomCode, activeAddress)
+  const { scores: liveRoomScores, playerDetails: livePlayerDetails, isGameStarted, gameMeta, syncMyScore } = useRoomScores(roomCode, activeAddress)
+
+  const [hostGraceSeconds, setHostGraceSeconds] = useState(30)
+  useEffect(() => {
+    if (phase !== 'finished' || !isHost) return
+    if (hostGraceSeconds <= 0) return
+    const timer = setTimeout(() => setHostGraceSeconds((s) => s - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [phase, isHost, hostGraceSeconds])
 
   const hostRoomCategory = getRoomCategory(roomCode)
   const resolvedCategory = cloudCategory || (gameMeta?.category as Category) || hostRoomCategory || (roomCode ? inferCategoryFromCode(roomCode) : null) || category || 'General Knowledge'
@@ -217,7 +225,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     activeAddress && host && host.toLowerCase() === activeAddress.toLowerCase()
   )
 
-  const localProfile = activeAddress ? getUserProfile(activeAddress) : null
+  const localProfile = activeAddress ? (getUserProfile(activeAddress) || getUserProfile()) : getUserProfile()
 
   // Keep active game persisted with current phase, score, and question index for smooth resume/rejoin on refresh
   useEffect(() => {
@@ -509,6 +517,18 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       const scoreB = roomScores[b.toLowerCase()] ?? getRoomUserScore(roomCode, b) ?? 0
       return scoreB - scoreA
     })
+
+    const snapshotEntries = uniquePlayers.map((addr, idx) => {
+      const prof = getUserProfile(addr)
+      return {
+        address: addr,
+        score: roomScores[addr.toLowerCase()] ?? 0,
+        rank: idx + 1,
+        username: prof?.username,
+        avatarUrl: prof?.avatarUrl,
+      }
+    })
+    void submitFinalLeaderboard(roomCode, snapshotEntries)
 
     const winnersToDeclare = uniquePlayers.slice(0, maxSplits)
     declareWinners(roomCode, winnersToDeclare)
@@ -965,24 +985,133 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
             </p>
           </motion.div>
 
+          {isHost && (
+            <div className="mb-4 rounded-3xl p-4 sm:p-5" style={glass.card}>
+              {(() => {
+                const onchainPlayerAddrs = ((rawPlayersList as `0x${string}`[] | undefined) || []).filter(
+                  (addr) => Boolean(addr) && addr !== '0x0000000000000000000000000000000000000000'
+                )
+                const otherPlayers = onchainPlayerAddrs.filter(p => p.toLowerCase() !== activeAddress?.toLowerCase())
+                const finishedOtherCount = otherPlayers.filter(p => {
+                  const details = livePlayerDetails[p.toLowerCase()]
+                  return Boolean(details?.isFinished || (details?.qIndex !== undefined && details.qIndex >= 10))
+                }).length
+                const totalParticipants = otherPlayers.length + 1
+                const totalFinished = finishedOtherCount + 1
+                const areAllOtherFinished = otherPlayers.length === 0 || finishedOtherCount >= otherPlayers.length
+
+                return (
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2">
+                        <Users size={15} className="text-purple-600" />
+                        <p className="text-xs sm:text-sm font-bold text-slate-800 tracking-tight">
+                          Live Player Standings ({totalFinished}/{totalParticipants} Finished)
+                        </p>
+                      </div>
+                      {!areAllOtherFinished && hostGraceSeconds > 0 && (
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full tabular-nums">
+                          ⏳ {hostGraceSeconds}s grace
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      {/* Host */}
+                      <div className="flex items-center justify-between p-2.5 rounded-2xl bg-white/90 border border-slate-100 shadow-2xs">
+                        <PlayerTag address={activeAddress} />
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-xs text-slate-900 tabular-nums">{score} pts</span>
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                            ✓ Finished
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Other joined players */}
+                      {otherPlayers.map((pAddr) => {
+                        const lower = pAddr.toLowerCase()
+                        const pDetail = livePlayerDetails[lower]
+                        const pScore = pDetail?.score ?? liveRoomScores[lower] ?? 0
+                        const isFinished = Boolean(pDetail?.isFinished || (pDetail?.qIndex !== undefined && pDetail.qIndex >= 10))
+                        const currentQ = (pDetail?.qIndex !== undefined ? Math.min(pDetail.qIndex + 1, 10) : 1)
+
+                        return (
+                          <div key={pAddr} className="flex items-center justify-between p-2.5 rounded-2xl bg-white/90 border border-slate-100 shadow-2xs">
+                            <PlayerTag address={pAddr} />
+                            <div className="flex items-center gap-2">
+                              <span className="font-extrabold text-xs text-slate-900 tabular-nums">{pScore} pts</span>
+                              {isFinished ? (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                  ✓ Finished
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                  Q{currentQ}/10
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+
           {isHost && TRIVIA_GAME_ADDRESS && (
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-              {(declarePending || declareConfirming) && (
-                <p className="mb-2 text-center text-sm" style={{ color: 'var(--muted)' }}>
-                  {declarePending ? 'Confirm in wallet...' : 'Sending USDC payout...'}
-                </p>
-              )}
-              <button
-                onClick={handleDeclareWinner}
-                disabled={declarePending || declareConfirming}
-                className="w-full rounded-2xl py-4 text-sm sm:text-base font-bold text-white shadow-lg transition-all duration-200 hover:scale-[1.02] active:scale-98 disabled:opacity-40 disabled:scale-100 cursor-pointer"
-                style={{
-                  background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
-                  boxShadow: '0 8px 24px rgba(124, 58, 237, 0.28)',
-                }}
-              >
-                {isWrongChain ? 'Switch to Arc Testnet' : declarePending || declareConfirming ? 'Sending payout...' : 'Declare Winner & Pay Out'}
-              </button>
+              {(() => {
+                const onchainPlayerAddrs = ((rawPlayersList as `0x${string}`[] | undefined) || []).filter(
+                  (addr) => Boolean(addr) && addr !== '0x0000000000000000000000000000000000000000'
+                )
+                const otherPlayers = onchainPlayerAddrs.filter(p => p.toLowerCase() !== activeAddress?.toLowerCase())
+                const finishedOtherCount = otherPlayers.filter(p => {
+                  const details = livePlayerDetails[p.toLowerCase()]
+                  return Boolean(details?.isFinished || (details?.qIndex !== undefined && details.qIndex >= 10))
+                }).length
+                const areAllOtherFinished = otherPlayers.length === 0 || finishedOtherCount >= otherPlayers.length
+                const canHostDeclare = areAllOtherFinished || hostGraceSeconds <= 0
+
+                return (
+                  <>
+                    {(declarePending || declareConfirming) && (
+                      <p className="mb-2 text-center text-sm" style={{ color: 'var(--muted)' }}>
+                        {declarePending ? 'Confirm in wallet...' : 'Sending USDC payout...'}
+                      </p>
+                    )}
+                    <button
+                      onClick={handleDeclareWinner}
+                      disabled={declarePending || declareConfirming || !canHostDeclare}
+                      className="w-full rounded-2xl py-4 text-sm sm:text-base font-bold text-white shadow-lg transition-all duration-200 hover:scale-[1.02] active:scale-98 disabled:opacity-40 disabled:scale-100 cursor-pointer"
+                      style={{
+                        background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+                        boxShadow: '0 8px 24px rgba(124, 58, 237, 0.28)',
+                      }}
+                    >
+                      {isWrongChain
+                        ? 'Switch to Arc Testnet'
+                        : declarePending || declareConfirming
+                          ? 'Sending payout...'
+                          : !canHostDeclare
+                            ? `Waiting for players to finish (${hostGraceSeconds}s)...`
+                            : 'Declare Winner & Pay Out'}
+                    </button>
+                    {!canHostDeclare && (
+                      <button
+                        type="button"
+                        onClick={handleDeclareWinner}
+                        className="mt-2 text-center w-full text-[11px] font-semibold text-slate-400 hover:text-slate-600 transition-colors cursor-pointer py-1"
+                      >
+                        Declare now without waiting
+                      </button>
+                    )}
+                  </>
+                )
+              })()}
             </motion.div>
           )}
 

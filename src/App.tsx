@@ -15,6 +15,7 @@ import {
   setPendingJoin,
   getPendingJoin,
   consumePendingJoin,
+  getJoinParamsFromUrl,
   isValidCategory,
 } from '@/lib/roomStorage'
 import LandingPage from '@/components/LandingPage'
@@ -25,6 +26,8 @@ import GameRoom from '@/components/GameRoom'
 import Results from '@/components/Results'
 import OnboardingModal from '@/components/OnboardingModal'
 
+export { getJoinParamsFromUrl } from '@/lib/roomStorage'
+
 type Screen =
   | { name: 'landing' }
   | { name: 'lobby'; initialCategory?: Category | null }
@@ -32,20 +35,6 @@ type Screen =
   | { name: 'join'; category: Category; prefillCode?: string }
   | { name: 'game'; roomCode: string; category: Category }
   | { name: 'results'; winnerAddress: string; prizeAmount: string; txHash?: string; roomCode?: string; myScore?: number }
-
-/** Read ?join=CODE and ?cat=CATEGORY from the URL */
-export function getJoinParamsFromUrl(): { roomCode: string; category?: Category } | null {
-  try {
-    const p = new URLSearchParams(window.location.search)
-    const code = p.get('join')?.trim().toUpperCase()
-    if (!code) return null
-    const rawCat = p.get('cat') || p.get('category')
-    const category = isValidCategory(rawCat) ? rawCat : undefined
-    return { roomCode: code, category }
-  } catch {
-    return null
-  }
-}
 
 /** Build a shareable join URL for a room code with its host-assigned category */
 export function buildJoinUrl(code: string, category?: Category): string {
@@ -188,12 +177,13 @@ export default function App() {
 
   // Helper to resolve and navigate to target game screen upon authenticated session
   const restoreGameScreen = () => {
-    const pendingJoin = consumePendingJoin() || getJoinParamsFromUrl()
-    if (pendingJoin) {
+    const pendingJoin = getPendingJoin() || getJoinParamsFromUrl()
+    if (pendingJoin && pendingJoin.roomCode) {
       const cat = getRoomCategory(pendingJoin.roomCode) || pendingJoin.category || 'General Knowledge'
       saveRoomCategory(pendingJoin.roomCode, cat)
       const url = new URL(window.location.href)
       url.searchParams.delete('join')
+      url.searchParams.delete('code')
       url.searchParams.delete('cat')
       url.searchParams.delete('category')
       window.history.replaceState({}, '', url.pathname + '#/join')
@@ -509,10 +499,12 @@ export default function App() {
         initialCategory={screen.initialCategory}
         onCreateRoom={(category) => setScreen({ name: 'create', category })}
         onJoinRoom={(category, prefillCode) => {
-          const hostCat = prefillCode ? getRoomCategory(prefillCode) : null
-          const finalCategory = hostCat || (prefillCode ? inferCategoryFromCode(prefillCode) : null) || category || 'General Knowledge'
-          if (prefillCode && hostCat) saveRoomCategory(prefillCode, hostCat)
-          setScreen({ name: 'join', category: finalCategory, prefillCode })
+          const pending = getPendingJoin()
+          const codeToUse = prefillCode || pending?.roomCode
+          const hostCat = codeToUse ? getRoomCategory(codeToUse) : null
+          const finalCategory = hostCat || (codeToUse ? inferCategoryFromCode(codeToUse) : null) || category || 'General Knowledge'
+          if (codeToUse && hostCat) saveRoomCategory(codeToUse, hostCat)
+          setScreen({ name: 'join', category: finalCategory, prefillCode: codeToUse })
         }}
         onContinueGame={(roomCode, category) => {
           const hostCat = getRoomCategory(roomCode)

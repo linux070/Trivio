@@ -15,6 +15,7 @@ import {
   saveRoomCategory,
   extractRoomCode,
   clearPendingJoin,
+  getJoinParamsFromUrl,
   isValidCategory,
 } from '@/lib/roomStorage'
 import type { Category } from '@/lib/questions'
@@ -379,22 +380,11 @@ export default function LandingPage({ onConnected }: LandingPageProps) {
 
   // Detect pending invitation from URL parameters or existing pending join
   const [activeInvite, setActiveInvite] = useState<{ roomCode: string; category?: Category } | null>(() => {
-    try {
-      const urlParams = new URLSearchParams(window.location.search)
-      const rawJoin = urlParams.get('join')?.trim().toUpperCase()
-      const rawCat = urlParams.get('cat') || urlParams.get('category')
-      if (rawJoin) {
-        const extracted = extractRoomCode(rawJoin)
-        const code = extracted ? extracted.roomCode : rawJoin.replace(/[^A-Z0-9]/g, '').slice(0, 8)
-        const cat = (isValidCategory(rawCat) ? rawCat : undefined) || extracted?.category || getRoomCategory(code) || undefined
-        if (code && code.length >= 4) {
-          if (cat) saveRoomCategory(code, cat)
-          setPendingJoin(code, cat)
-          return { roomCode: code, category: cat }
-        }
-      }
-    } catch {
-      // ignore
+    const fromUrl = getJoinParamsFromUrl()
+    if (fromUrl?.roomCode) {
+      if (fromUrl.category) saveRoomCategory(fromUrl.roomCode, fromUrl.category)
+      setPendingJoin(fromUrl.roomCode, fromUrl.category)
+      return { roomCode: fromUrl.roomCode, category: fromUrl.category }
     }
     const pending = getPendingJoin()
     if (pending?.roomCode) {

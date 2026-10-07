@@ -27,8 +27,9 @@ import {
   saveRoomPrize,
   getRoomPayout,
   calculatePayoutSplits,
-  consumePendingJoin,
   getPendingJoin,
+  clearPendingJoin,
+  getJoinParamsFromUrl,
   extractRoomCode,
 } from '@/lib/roomStorage'
 import { fetchRoomMetadata } from '@/lib/roomDb'
@@ -73,7 +74,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       }
       return prefillCode.trim().toUpperCase()
     }
-    const pending = consumePendingJoin() || getPendingJoin()
+    const pending = getPendingJoin()
     if (pending?.roomCode) {
       const extracted = extractRoomCode(pending.roomCode)
       const code = extracted ? extracted.roomCode : pending.roomCode.trim().toUpperCase()
@@ -81,21 +82,10 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       if (cat) saveRoomCategory(code, cat)
       return code
     }
-    try {
-      const p = new URLSearchParams(window.location.search)
-      const rawJoin = p.get('join')?.trim()
-      if (rawJoin) {
-        const extracted = extractRoomCode(rawJoin)
-        const code = extracted ? extracted.roomCode : rawJoin.toUpperCase()
-        const rawCat = p.get('cat') || p.get('category')
-        if (rawCat) {
-          const category = getRoomCategory(code) || (rawCat as Category)
-          saveRoomCategory(code, category)
-        }
-        return code
-      }
-    } catch {
-      // ignore
+    const fromUrl = getJoinParamsFromUrl()
+    if (fromUrl?.roomCode) {
+      if (fromUrl.category) saveRoomCategory(fromUrl.roomCode, fromUrl.category)
+      return fromUrl.roomCode
     }
     return ''
   }
@@ -107,7 +97,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
     return initialCode ? (getRoomCategory(initialCode) || inferCategoryFromCode(initialCode)) : null
   })
 
-  // Keep input and checkedCode synchronized whenever prefillCode prop updates
+  // Keep input and checkedCode synchronized whenever prefillCode prop updates or pending join exists
   useEffect(() => {
     if (prefillCode && prefillCode.trim()) {
       const extracted = extractRoomCode(prefillCode.trim())
@@ -116,7 +106,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       setInput(code)
       setCheckedCode(code)
     } else {
-      const pending = consumePendingJoin() || getPendingJoin()
+      const pending = getPendingJoin()
       if (pending?.roomCode) {
         const extracted = extractRoomCode(pending.roomCode)
         const code = extracted ? extracted.roomCode : pending.roomCode.trim().toUpperCase()
@@ -210,6 +200,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       if (prizeForPayouts && Number(prizeForPayouts) > 0) {
         saveRoomPrize(checkedCode, prizeForPayouts)
       }
+      clearPendingJoin()
       onJoined(checkedCode, resolvedCategory)
     }
   }, [joined, checkedCode, resolvedCategory, prizeForPayouts, onJoined])
@@ -236,13 +227,39 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
     }
   }
 
-  const handleLookup = () => {
+  const handleLookupOrJoin = () => {
     const extracted = extractRoomCode(input)
     const code = extracted ? extracted.roomCode : input.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
-    if (code.length >= 4) {
-      if (extracted?.category) {
-        saveRoomCategory(code, extracted.category)
+    if (code.length < 4) return
+
+    if (extracted?.category) {
+      saveRoomCategory(code, extracted.category)
+    }
+
+    if (checkedCode !== code) {
+      setCheckedCode(code)
+      return
+    }
+
+    if (roomInfo) {
+      if (isWrongChain) {
+        switchChain({ chainId: ARC_TESTNET_CHAIN_ID })
+        return
       }
+      if (isAlreadyJoined) {
+        clearPendingJoin()
+        onJoined(checkedCode, resolvedCategory)
+        return
+      }
+      if (requiresApproval && !approved) {
+        handleApprove()
+        return
+      }
+      if (isRoomOpen) {
+        handleJoin()
+        return
+      }
+    } else {
       setCheckedCode(code)
     }
   }
@@ -257,6 +274,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
     if (!checkedCode) return
     saveRoomCategory(checkedCode, resolvedCategory)
     if (isAlreadyJoined) {
+      clearPendingJoin()
       onJoined(checkedCode, resolvedCategory)
       return
     }
@@ -304,7 +322,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                 maxLength={8}
                 value={input}
                 onChange={e => handleInputChange(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleLookup()}
+                onKeyDown={e => e.key === 'Enter' && handleLookupOrJoin()}
                 className="min-w-0 flex-1 rounded-2xl px-3.5 sm:px-4 py-3 text-base font-bold outline-none"
                 style={{
                   background: 'rgba(255,255,255,0.7)',
@@ -315,19 +333,19 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                 }}
               />
               <button
-                onClick={handleLookup}
-                disabled={input.trim().length < 4}
-                className="shrink-0 rounded-2xl px-4 sm:px-5 py-3 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
+                onClick={handleLookupOrJoin}
+                disabled={input.trim().length < 4 || joinPending || joinConfirming}
+                className="shrink-0 rounded-2xl px-4 sm:px-5 py-3 text-sm font-semibold transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-40 cursor-pointer shadow-xs"
                 style={{ background: 'var(--accent)', color: 'white' }}
               >
-                Look up
+                {joinPending || joinConfirming ? 'Joining...' : 'Join'}
               </button>
             </div>
           </div>
 
           {checkedCode && (
             <>
-              {roomLoading && <p className="text-center text-sm" style={{ color: 'var(--muted)' }}>Looking up room...</p>}
+              {roomLoading && <p className="text-center text-sm" style={{ color: 'var(--muted)' }}>Loading room details...</p>}
               {roomError && (
                 <p className="rounded-2xl px-4 py-3 text-sm" style={{ background: 'rgba(186,43,76,0.07)', border: '1px solid rgba(186,43,76,0.2)', color: 'var(--danger)' }}>
                   Room not found. Check the code and try again.

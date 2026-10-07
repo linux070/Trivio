@@ -909,6 +909,36 @@ export function extractRoomCode(input: string): { roomCode: string; category?: C
   return null
 }
 
+/** Read ?join=CODE or ?code=CODE and ?cat=CATEGORY from URL search parameters or hash */
+export function getJoinParamsFromUrl(): { roomCode: string; category?: Category } | null {
+  try {
+    if (typeof window === 'undefined') return null
+    const p = new URLSearchParams(window.location.search)
+    let rawCode = p.get('join') || p.get('code')
+    let rawCat = p.get('cat') || p.get('category')
+
+    if (!rawCode && window.location.hash.includes('?')) {
+      const hashQuery = window.location.hash.slice(window.location.hash.indexOf('?'))
+      const hp = new URLSearchParams(hashQuery)
+      rawCode = hp.get('join') || hp.get('code')
+      if (!rawCat) rawCat = hp.get('cat') || hp.get('category')
+    }
+
+    if (rawCode) {
+      const extracted = extractRoomCode(rawCode)
+      const code = extracted ? extracted.roomCode : rawCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
+      const category = (isValidCategory(rawCat) ? rawCat : undefined) || extracted?.category || getRoomCategory(code) || undefined
+      if (code && code.length >= 4) {
+        if (category) saveRoomCategory(code, category)
+        return { roomCode: code, category }
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 /** Peek at pending join details without consuming */
 export function getPendingJoin(): { roomCode: string; category?: Category } | null {
   try {

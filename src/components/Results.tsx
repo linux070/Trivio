@@ -19,6 +19,7 @@ import {
 } from '@/lib/roomStorage'
 import { useRoomScores } from '@/lib/roomSync'
 import { recordWinnerPayout, getStoredPayouts } from '@/lib/winnersStorage'
+import { fetchFinalLeaderboard } from '@/lib/roomDb'
 import {
   useRoomInfo,
   useRoomWinners,
@@ -273,8 +274,20 @@ export default function Results({
   const { scores: liveRoomScores } = useRoomScores(roomCode, myAddress)
   const roomScoresMap = roomCode ? getRoomAllScores(roomCode) : {}
 
+  const [cloudLeaderboard, setCloudLeaderboard] = useState<LeaderboardEntry[] | null>(null)
+
+  useEffect(() => {
+    if (!roomCode) return
+    void fetchFinalLeaderboard(roomCode).then((data) => {
+      if (data?.leaderboard && data.leaderboard.length > 0) {
+        setCloudLeaderboard(data.leaderboard)
+      }
+    })
+  }, [roomCode])
+
   // Build clean player leaderboard using actual match participants (NO score cloning, NO duplicate entries)
   const board: LeaderboardEntry[] = (() => {
+    if (cloudLeaderboard && cloudLeaderboard.length > 0) return cloudLeaderboard
     if (leaderboard.length > 0) return leaderboard
 
     const candidateAddresses: string[] = []

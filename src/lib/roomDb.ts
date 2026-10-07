@@ -65,10 +65,30 @@ export interface CloudRoomState {
 const memoryCache: Record<string, CloudRoomState> = {}
 
 // Primary cloud storage endpoint
-const CLOUD_BASE_URL = 'https://trivio-arc-default-rtdb.firebaseio.com/rooms'
-const CLOUD_LIVE_ROOMS_URL = 'https://trivio-arc-default-rtdb.firebaseio.com/liveRooms'
+const FIREBASE_HOST = (
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_RTDB_URL) ||
+  'https://trivio-app-ffe6e-default-rtdb.firebaseio.com'
+).replace(/\/$/, '')
+
+const CLOUD_BASE_URL = `${FIREBASE_HOST}/rooms`
+const CLOUD_LIVE_ROOMS_URL = `${FIREBASE_HOST}/liveRooms`
 // Secondary fallback relay
 const FALLBACK_RELAY_URL = 'https://ntfy.sh'
+
+export interface CloudLeaderboardEntry {
+  address: string
+  score: number
+  rank: number
+  username?: string
+  avatarUrl?: string
+}
+
+export interface CloudFinalLeaderboard {
+  roomCode: string
+  leaderboard: CloudLeaderboardEntry[]
+  txHash?: string
+  settledAt: number
+}
 
 function sanitizeAddressKey(address: string): string {
   return address.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -408,20 +428,81 @@ export async function submitPlayerScore(
   memoryCache[code].scores[lowerAddr] = playerData
   memoryCache[code].updatedAt = now
 
-  // 2. Primary Cloud Write (Atomic PUT)
+  // 2. Primary Cloud Write with automatic retry on final score
+  const url = getCloudUrl(code, `/scores/${addrKey}`)
+  const maxAttempts = options?.isFinished ? 3 : 1
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(playerData),
+      })
+      if (res.ok) break
+    } catch {
+      if (attempt === maxAttempts) {
+        void sendFallbackRelay(code, playerData)
+      } else {
+        await new Promise((r) => setTimeout(r, 200 * attempt))
+      }
+    }
+  }
+}
+
+/**
+ * Submit authoritative locked final leaderboard snapshot
+ */
+export async function submitFinalLeaderboard(
+  roomCode: string,
+  leaderboard: CloudLeaderboardEntry[],
+  txHash?: string
+): Promise<void> {
+  if (!roomCode || !leaderboard || leaderboard.length === 0) return
+  const code = roomCode.trim().toUpperCase()
+  const payload: CloudFinalLeaderboard = {
+    roomCode: code,
+    leaderboard,
+    txHash,
+    settledAt: Date.now(),
+  }
+
   try {
-    const url = getCloudUrl(code, `/scores/${addrKey}`)
-    void fetch(url, {
+    const url = getCloudUrl(code, '/finalLeaderboard')
+    await fetch(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(playerData),
-    }).catch(() => {
-      // Fallback to secondary relay on primary failure
-      void sendFallbackRelay(code, playerData)
+      body: JSON.stringify(payload),
     })
   } catch {
-    void sendFallbackRelay(code, playerData)
+    // fallback
   }
+}
+
+/**
+ * Fetch authoritative locked final leaderboard snapshot
+ */
+export async function fetchFinalLeaderboard(
+  roomCode: string
+): Promise<CloudFinalLeaderboard | null> {
+  if (!roomCode) return null
+  const code = roomCode.trim().toUpperCase()
+
+  try {
+    const res = await fetch(getCloudUrl(code, '/finalLeaderboard'), {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (data && Array.isArray(data.leaderboard) && data.leaderboard.length > 0) {
+        return data as CloudFinalLeaderboard
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null
 }
 
 /**

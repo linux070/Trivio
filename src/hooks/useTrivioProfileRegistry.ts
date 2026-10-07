@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { ARC_TESTNET_CHAIN_ID, TRIVIO_PROFILE_REGISTRY_ADDRESS } from '@/config'
 import { getUserProfile, saveUserProfile, getDiceBearAvatarUrl, type UserProfile } from '@/lib/userProfile'
@@ -79,7 +79,33 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
   )
 
   const normalized = isValidAddress && address ? address.toLowerCase() : ''
-  const cachedLocal = normalized ? getUserProfile(normalized) : getUserProfile()
+  const [localProfileState, setLocalProfileState] = useState<UserProfile | null>(() =>
+    normalized ? getUserProfile(normalized) : getUserProfile()
+  )
+
+  // Listen for local profile updates across the entire app
+  useEffect(() => {
+    const handleUpdate = (e: Event) => {
+      const detail = (e as CustomEvent<{ address?: string; profile?: UserProfile }>).detail
+      if (detail?.profile) {
+        if (!normalized || !detail.address || detail.address.toLowerCase() === normalized) {
+          setLocalProfileState(detail.profile)
+        }
+      }
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('trivio_profile_updated', handleUpdate)
+      return () => window.removeEventListener('trivio_profile_updated', handleUpdate)
+    }
+  }, [normalized])
+
+  // Re-sync local state when normalized address changes
+  useEffect(() => {
+    const p = normalized ? getUserProfile(normalized) : getUserProfile()
+    setLocalProfileState(p)
+  }, [normalized])
+
+  const cachedLocal = localProfileState || (normalized ? getUserProfile(normalized) : getUserProfile())
 
   const { data, isLoading, refetch, error } = useReadContract({
     address: TRIVIO_PROFILE_REGISTRY_ADDRESS,
@@ -89,7 +115,7 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
     chainId,
     query: {
       enabled: isValidAddress,
-      staleTime: 30_000,
+      staleTime: 15_000,
     },
   })
 
@@ -97,28 +123,42 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
     (data as [string, string, string, string, bigint] | undefined) ?? ['', '', '', '', 0n]
 
   const hasOnchainData = Boolean(username && username.length > 0)
+  const onchainTimeMs = Number(updatedAt) * 1000
+  const localTimeMs = cachedLocal ? (cachedLocal.updatedAt || cachedLocal.createdAt || 0) : 0
+  const localIsNewer = Boolean(cachedLocal?.username && localTimeMs > onchainTimeMs)
 
-  // Save to persistent storage once contract resolves
+  // Save to persistent storage once contract resolves ONLY if onchain data is strictly newer than local edits
   useEffect(() => {
-    if (hasOnchainData && normalized) {
+    if (hasOnchainData && normalized && !localIsNewer) {
       const p: UserProfile = {
         username,
         avatarUrl: avatarUrl || getDiceBearAvatarUrl(avatarStyle || 'bottts-neutral', avatarSeed || username),
         avatarSeed: avatarSeed || username,
         avatarStyle: avatarStyle || 'bottts-neutral',
-        createdAt: Number(updatedAt) * 1000 || Date.now(),
+        createdAt: onchainTimeMs || Date.now(),
+        updatedAt: onchainTimeMs || Date.now(),
         isOnchainVerified: true,
       }
       saveUserProfile(p, normalized)
+      setLocalProfileState(p)
     }
-  }, [hasOnchainData, normalized, username, avatarUrl, avatarSeed, avatarStyle, updatedAt])
+  }, [hasOnchainData, normalized, localIsNewer, username, avatarUrl, avatarSeed, avatarStyle, onchainTimeMs])
 
-  const effectiveProfile: OnchainProfileData | null = hasOnchainData
+  const effectiveProfile: OnchainProfileData | null = localIsNewer && cachedLocal
+    ? {
+        username: cachedLocal.username,
+        avatarUrl: cachedLocal.avatarUrl || getDiceBearAvatarUrl(cachedLocal.avatarStyle || 'bottts-neutral', cachedLocal.avatarSeed || cachedLocal.username),
+        avatarSeed: cachedLocal.avatarSeed || cachedLocal.username,
+        avatarStyle: cachedLocal.avatarStyle || 'bottts-neutral',
+        updatedAt: BigInt(Math.floor(localTimeMs / 1000)),
+      }
+    : hasOnchainData
     ? {
         username,
-        avatarUrl: avatarUrl || getDiceBearAvatarUrl(avatarStyle || 'bottts-neutral', avatarSeed || username),
-        avatarSeed: avatarSeed || username,
-        avatarStyle: avatarStyle || 'bottts-neutral',
+        // If local profile has a chosen avatar, preserve it even when using onchain username
+        avatarUrl: cachedLocal?.avatarUrl || avatarUrl || getDiceBearAvatarUrl(avatarStyle || 'bottts-neutral', avatarSeed || username),
+        avatarSeed: cachedLocal?.avatarSeed || avatarSeed || username,
+        avatarStyle: cachedLocal?.avatarStyle || avatarStyle || 'bottts-neutral',
         updatedAt,
       }
     : cachedLocal && cachedLocal.username
@@ -127,7 +167,7 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
         avatarUrl: cachedLocal.avatarUrl || getDiceBearAvatarUrl(cachedLocal.avatarStyle || 'bottts-neutral', cachedLocal.avatarSeed || cachedLocal.username),
         avatarSeed: cachedLocal.avatarSeed || cachedLocal.username,
         avatarStyle: cachedLocal.avatarStyle || 'bottts-neutral',
-        updatedAt: BigInt(Math.floor((cachedLocal.createdAt || Date.now()) / 1000)),
+        updatedAt: BigInt(Math.floor((cachedLocal.updatedAt || cachedLocal.createdAt || Date.now()) / 1000)),
       }
     : null
 

@@ -149,12 +149,15 @@ export default function EditProfileModal({
       return
     }
 
+    const now = Date.now()
     const updated: UserProfile = {
       username: cleanUsername,
       avatarUrl: avatarUrl || initialProfile?.avatarUrl || getDiceBearAvatarUrl('bottts-neutral', 'trivio'),
-      avatarSeed: avatarSeed || 'trivio',
+      avatarSeed: avatarSeed || initialProfile?.avatarSeed || 'trivio',
       avatarStyle: isCustom ? 'custom' : avatarStyle,
-      createdAt: initialProfile?.createdAt || Date.now(),
+      createdAt: initialProfile?.createdAt || now,
+      updatedAt: now,
+      isOnchainVerified: false,
     }
 
     try {
