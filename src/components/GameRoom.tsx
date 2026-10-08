@@ -225,7 +225,9 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     return () => clearTimeout(timer)
   }, [phase, isHost, hostGraceSeconds])
 
-  const localProfile = activeAddress ? (getUserProfile(activeAddress) || getUserProfile()) : getUserProfile()
+  const rawProfile = activeAddress ? (getUserProfile(activeAddress) || getUserProfile()) : getUserProfile()
+  // Memoize the profile so it doesn't trigger the useEffect infinite loop since it returns a new object via JSON.parse each time
+  const localProfile = useMemo(() => rawProfile, [JSON.stringify(rawProfile)])
 
   // Keep active game persisted with current phase, score, and question index for smooth resume/rejoin on refresh
   useEffect(() => {
