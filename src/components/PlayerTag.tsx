@@ -4,12 +4,13 @@ import { getUserProfile, getDiceBearAvatarUrl, generateRandomUsername } from '@/
 interface PlayerTagProps {
   address?: string
   className?: string
+  isHost?: boolean
 }
 
 /**
  * Text-only player identity display with avatar & username (no bulky pill buttons or badge borders)
  */
-export function PlayerTag({ address, className = '' }: PlayerTagProps) {
+export function PlayerTag({ address, className = '', isHost = false }: PlayerTagProps) {
   if (!address || address === '0x0000000000000000000000000000000000000000') {
     return null
   }
@@ -43,6 +44,11 @@ export function PlayerTag({ address, className = '' }: PlayerTagProps) {
       <span className="text-xs sm:text-sm font-bold text-slate-800 tracking-tight">
         @{username}
       </span>
+      {isHost && (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-purple-100/90 text-purple-700 border border-purple-200/80 shadow-2xs">
+          Host
+        </span>
+      )}
     </div>
   )
 }

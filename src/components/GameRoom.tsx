@@ -1018,12 +1018,16 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
                     <div className="space-y-2">
                       {/* Host */}
-                      <div className="flex items-center justify-between p-2.5 rounded-2xl bg-white/90 border border-slate-100 shadow-2xs">
-                        <PlayerTag address={activeAddress} />
-                        <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-xs text-slate-900 tabular-nums">{score} pts</span>
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                            ✓ Finished
+                      <div className="flex items-center justify-between p-2.5 sm:p-3 rounded-2xl bg-white/95 border border-slate-200/80 shadow-2xs">
+                        <PlayerTag address={activeAddress} isHost={true} />
+                        <div className="flex items-center gap-2.5">
+                          <span className="font-extrabold text-xs sm:text-sm text-slate-900 tabular-nums">{score} pts</span>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-tight text-emerald-700 bg-emerald-500/10 border border-emerald-500/25 shadow-2xs">
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                            </span>
+                            Finished
                           </span>
                         </div>
                       </div>
@@ -1037,16 +1041,20 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                         const currentQ = (pDetail?.qIndex !== undefined ? Math.min(pDetail.qIndex + 1, 10) : 1)
 
                         return (
-                          <div key={pAddr} className="flex items-center justify-between p-2.5 rounded-2xl bg-white/90 border border-slate-100 shadow-2xs">
+                          <div key={pAddr} className="flex items-center justify-between p-2.5 sm:p-3 rounded-2xl bg-white/95 border border-slate-200/80 shadow-2xs">
                             <PlayerTag address={pAddr} />
-                            <div className="flex items-center gap-2">
-                              <span className="font-extrabold text-xs text-slate-900 tabular-nums">{pScore} pts</span>
+                            <div className="flex items-center gap-2.5">
+                              <span className="font-extrabold text-xs sm:text-sm text-slate-900 tabular-nums">{pScore} pts</span>
                               {isFinished ? (
-                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                                  ✓ Finished
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-tight text-emerald-700 bg-emerald-500/10 border border-emerald-500/25 shadow-2xs">
+                                  <span className="relative flex h-1.5 w-1.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                                  </span>
+                                  Finished
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-tight text-amber-800 bg-amber-500/10 border border-amber-500/25 shadow-2xs">
                                   <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
                                   Q{currentQ}/10
                                 </span>
