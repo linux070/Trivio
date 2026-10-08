@@ -1,6 +1,5 @@
 import type { Category } from './questions'
 import { ALL_CATEGORIES } from './questions'
-import { submitRoomCategory, publishLiveRoomToCloud, removeLiveRoomFromCloud } from './roomDb'
 
 const STORAGE_ROOM_CAT_PREFIX = 'trivio_room_cat_'
 const STORAGE_ROOM_DUR_PREFIX = 'trivio_room_dur_'
@@ -1036,13 +1035,6 @@ export function registerLiveRoom(room: RegisteredLiveRoom): void {
   } catch {
     // ignore
   }
-
-  // Publish to cloud DB so all devices and browsers see the live room
-  try {
-    void publishLiveRoomToCloud({ ...room, roomCode: room.roomCode.trim().toUpperCase() })
-  } catch {
-    // ignore
-  }
 }
 
 /** Retrieve all actively registered live rooms */
@@ -1088,13 +1080,6 @@ export function removeLiveRoom(roomCode: string): void {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(EVENT_LIVE_ROOMS_UPDATED, { detail: { roomCode: code, action: 'removed' } }))
     }
-  } catch {
-    // ignore
-  }
-
-  // Remove from cloud database
-  try {
-    void removeLiveRoomFromCloud(code)
   } catch {
     // ignore
   }

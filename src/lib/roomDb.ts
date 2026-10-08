@@ -16,6 +16,7 @@ import {
   saveRoomTxHash,
   saveRoomCategory,
   saveRoomDuration,
+  EVENT_LIVE_ROOMS_UPDATED,
 } from './roomStorage'
 import type { Category } from './questions'
 
@@ -175,6 +176,23 @@ export async function removeLiveRoomFromCloud(roomCode: string): Promise<void> {
     // ignore
   }
 }
+
+// Automatically sync live room registrations and deletions to cloud database
+if (typeof window !== 'undefined') {
+  window.addEventListener(EVENT_LIVE_ROOMS_UPDATED, ((e: CustomEvent) => {
+    try {
+      const detail = e.detail
+      if (detail?.action === 'registered' && detail.room) {
+        void publishLiveRoomToCloud(detail.room)
+      } else if (detail?.action === 'removed' && detail.roomCode) {
+        void removeLiveRoomFromCloud(detail.roomCode)
+      }
+    } catch {
+      // ignore
+    }
+  }) as EventListener)
+}
+
 
 /**
  * Fetch all actively open live rooms from cloud database
