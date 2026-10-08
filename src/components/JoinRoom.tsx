@@ -428,17 +428,10 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                           <span>Detecting host mode...</span>
                         </span>
                       ) : (
-                        <div className="flex items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 border border-slate-200/90 shadow-2xs">
-                            <span>{CATEGORY_GROUPS.flatMap(g => g.subcategories).find(s => s.id === resolvedCategory)?.emoji ?? '🎮'}</span>
-                            <span>{resolvedCategory}</span>
-                          </span>
-                          {hostDuration && (
-                            <span className="inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-bold text-purple-700 border border-purple-200/70">
-                              {hostDuration}s
-                            </span>
-                          )}
-                        </div>
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 border border-slate-200/90 shadow-2xs">
+                          <span>{CATEGORY_GROUPS.flatMap(g => g.subcategories).find(s => s.id === resolvedCategory)?.emoji ?? '🎮'}</span>
+                          <span>{resolvedCategory}</span>
+                        </span>
                       )}
                     </div>
 
