@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { ARC_TESTNET_CHAIN_ID, TRIVIO_PROFILE_REGISTRY_ADDRESS } from '@/config'
 import { getUserProfile, saveUserProfile, getDiceBearAvatarUrl, type UserProfile } from '@/lib/userProfile'
@@ -144,16 +144,18 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
     }
   }, [hasOnchainData, normalized, localIsNewer, username, avatarUrl, avatarSeed, avatarStyle, onchainTimeMs])
 
-  const effectiveProfile: OnchainProfileData | null = localIsNewer && cachedLocal
-    ? {
+  const effectiveProfile: OnchainProfileData | null = useMemo(() => {
+    if (localIsNewer && cachedLocal) {
+      return {
         username: cachedLocal.username,
         avatarUrl: cachedLocal.avatarUrl || getDiceBearAvatarUrl(cachedLocal.avatarStyle || 'bottts-neutral', cachedLocal.avatarSeed || cachedLocal.username),
         avatarSeed: cachedLocal.avatarSeed || cachedLocal.username,
         avatarStyle: cachedLocal.avatarStyle || 'bottts-neutral',
         updatedAt: BigInt(Math.floor(localTimeMs / 1000)),
       }
-    : hasOnchainData
-    ? {
+    }
+    if (hasOnchainData) {
+      return {
         username,
         // If local profile has a chosen avatar, preserve it even when using onchain username
         avatarUrl: cachedLocal?.avatarUrl || avatarUrl || getDiceBearAvatarUrl(avatarStyle || 'bottts-neutral', avatarSeed || username),
@@ -161,15 +163,18 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
         avatarStyle: cachedLocal?.avatarStyle || avatarStyle || 'bottts-neutral',
         updatedAt,
       }
-    : cachedLocal && cachedLocal.username
-    ? {
+    }
+    if (cachedLocal && cachedLocal.username) {
+      return {
         username: cachedLocal.username,
         avatarUrl: cachedLocal.avatarUrl || getDiceBearAvatarUrl(cachedLocal.avatarStyle || 'bottts-neutral', cachedLocal.avatarSeed || cachedLocal.username),
         avatarSeed: cachedLocal.avatarSeed || cachedLocal.username,
         avatarStyle: cachedLocal.avatarStyle || 'bottts-neutral',
         updatedAt: BigInt(Math.floor((cachedLocal.updatedAt || cachedLocal.createdAt || Date.now()) / 1000)),
       }
-    : null
+    }
+    return null
+  }, [localIsNewer, cachedLocal, hasOnchainData, username, avatarUrl, avatarSeed, avatarStyle, updatedAt, localTimeMs])
 
   const hasProfile = Boolean(effectiveProfile && effectiveProfile.username.length > 0)
 

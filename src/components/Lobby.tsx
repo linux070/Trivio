@@ -400,7 +400,7 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
 
       if (localIsNewer && existingLocal) {
         // Keep the user's fresh local modifications without letting stale onchain data overwrite it
-        setProfile(existingLocal)
+        setProfile((prev) => (prev?.username === existingLocal.username && prev?.avatarUrl === existingLocal.avatarUrl ? prev : existingLocal))
       } else {
         const p: UserProfile = {
           username: onchainProfile.username || existingLocal?.username || 'player',
@@ -413,12 +413,25 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
           isOnchainVerified: true,
         }
         saveUserProfile(p, activeAddress)
-        setProfile(p)
+        setProfile((prev) => (
+          prev?.username === p.username &&
+          prev?.avatarUrl === p.avatarUrl &&
+          prev?.avatarSeed === p.avatarSeed &&
+          prev?.isOnchainVerified === p.isOnchainVerified
+            ? prev
+            : p
+        ))
       }
     } else {
       const local = getUserProfile(activeAddress)
       if (local) {
-        setProfile(local)
+        setProfile((prev) => (
+          prev?.username === local.username &&
+          prev?.avatarUrl === local.avatarUrl &&
+          prev?.avatarSeed === local.avatarSeed
+            ? prev
+            : local
+        ))
       }
     }
   }, [hasOnchainProfile, onchainProfile, activeAddress])

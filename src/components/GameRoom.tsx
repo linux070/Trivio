@@ -105,14 +105,6 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
   const { scores: liveRoomScores, playerDetails: livePlayerDetails, isGameStarted, gameMeta, syncMyScore } = useRoomScores(roomCode, activeAddress)
 
-  const [hostGraceSeconds, setHostGraceSeconds] = useState(30)
-  useEffect(() => {
-    if (phase !== 'finished' || !isHost) return
-    if (hostGraceSeconds <= 0) return
-    const timer = setTimeout(() => setHostGraceSeconds((s) => s - 1), 1000)
-    return () => clearTimeout(timer)
-  }, [phase, isHost, hostGraceSeconds])
-
   const hostRoomCategory = getRoomCategory(roomCode)
   const resolvedCategory = cloudCategory || (gameMeta?.category as Category) || hostRoomCategory || (roomCode ? inferCategoryFromCode(roomCode) : null) || category || 'General Knowledge'
   const roomDuration = getRoomDuration(roomCode, 15)
@@ -224,6 +216,14 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const isHost = Boolean(
     activeAddress && host && host.toLowerCase() === activeAddress.toLowerCase()
   )
+
+  const [hostGraceSeconds, setHostGraceSeconds] = useState(30)
+  useEffect(() => {
+    if (phase !== 'finished' || !isHost) return
+    if (hostGraceSeconds <= 0) return
+    const timer = setTimeout(() => setHostGraceSeconds((s) => s - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [phase, isHost, hostGraceSeconds])
 
   const localProfile = activeAddress ? (getUserProfile(activeAddress) || getUserProfile()) : getUserProfile()
 
