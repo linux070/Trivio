@@ -274,3 +274,23 @@ export function getDefaultProfileSuggestions(address?: string, provider?: string
     style: 'bottts-neutral',
   }
 }
+
+/**
+ * Deterministically retrieve or create user profile for seamless login
+ */
+export function getOrCreateUserProfile(address?: string, provider?: string): UserProfile {
+  const existing = getUserProfile(address)
+  if (existing && existing.username) return existing
+
+  const suggestions = getDefaultProfileSuggestions(address, provider)
+  const fresh: UserProfile = {
+    username: suggestions.username,
+    avatarUrl: getDiceBearAvatarUrl(suggestions.style, suggestions.seed),
+    avatarSeed: suggestions.seed,
+    avatarStyle: suggestions.style,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }
+  saveUserProfile(fresh, address)
+  return fresh
+}

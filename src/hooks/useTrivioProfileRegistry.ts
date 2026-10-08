@@ -278,6 +278,7 @@ export function useCheckUsernameAvailable(username: string, chainId: number = AR
       enabled: isValid,
       staleTime: 60_000,
       gcTime: 300_000,
+      retry: 0,
     },
   })
 

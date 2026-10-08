@@ -3,7 +3,7 @@ import { useAccount } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import type { Category } from '@/lib/questions'
 import { ALL_CATEGORIES } from '@/lib/questions'
-import { hasUserProfile, saveUserProfile, clearActiveUserProfile, getDiceBearAvatarUrl, fetchCloudProfile, type UserProfile } from '@/lib/userProfile'
+import { getUserProfile, hasUserProfile, saveUserProfile, clearActiveUserProfile, getDiceBearAvatarUrl, fetchCloudProfile, getOrCreateUserProfile, type UserProfile } from '@/lib/userProfile'
 import { useOnchainProfile } from '@/hooks/useTrivioProfileRegistry'
 import {
   saveRoomCategory,
@@ -258,54 +258,24 @@ export default function App() {
 
       // When Privy session is authenticated and wallet address is available
       if (activeAddress) {
-        // 1. Returning user with existing local profile for this address -> go straight to game screen
-        if (hasUserProfile(activeAddress)) {
-          setShowOnboarding(false)
-          const pending = getPendingJoin()
-          if (pending || screen.name === 'landing') {
-            restoreGameScreen()
-          }
-          return
+        // Deterministically ensure profile exists in local cache so user never gets stuck
+        const existing = getUserProfile(activeAddress)
+        if (!existing) {
+          getOrCreateUserProfile(activeAddress, provider)
         }
 
-        // 2. Returning user with existing onchain profile -> sync & go straight to game screen
-        if (hasOnchainProfile && onchainProfile) {
-          const p: UserProfile = {
-            username: onchainProfile.username,
-            avatarUrl: onchainProfile.avatarUrl || getDiceBearAvatarUrl(onchainProfile.avatarStyle || 'bottts-neutral', onchainProfile.avatarSeed || onchainProfile.username),
-            avatarSeed: onchainProfile.avatarSeed || onchainProfile.username,
-            avatarStyle: onchainProfile.avatarStyle || 'bottts-neutral',
-            createdAt: Number(onchainProfile.updatedAt) * 1000 || Date.now(),
-            isOnchainVerified: true,
-          }
-          saveUserProfile(p, activeAddress)
-          setShowOnboarding(false)
-          const pending = getPendingJoin()
-          if (pending || screen.name === 'landing') {
-            restoreGameScreen()
-          }
-          return
+        setShowOnboarding(false)
+        const pending = getPendingJoin()
+        if (pending || screen.name === 'landing') {
+          restoreGameScreen()
         }
 
-        // 3. Asynchronously check cloud profile (survives cache clear)
+        // Asynchronously check cloud & onchain profile to sync any custom avatar/name in background
         fetchCloudProfile(activeAddress).then((cloud) => {
           if (cloud && (cloud.avatarUrl || cloud.username)) {
             saveUserProfile(cloud, activeAddress)
-            setShowOnboarding(false)
-            const pending = getPendingJoin()
-            if (pending || screen.name === 'landing') {
-              restoreGameScreen()
-            }
           }
         }).catch(() => {})
-
-        // 4. If still querying onchain registry, wait briefly before assuming new user
-        if (isOnchainProfileLoading) {
-          return
-        }
-
-        // 5. Truly new user for this address -> trigger onboarding modal
-        setShowOnboarding(true)
       }
     } else if (ready && !authenticated) {
       if (wasConnectedRef.current) {
@@ -327,7 +297,7 @@ export default function App() {
         setScreen({ name: 'landing' })
       }
     }
-  }, [ready, authenticated, screen.name, activeAddress, hasOnchainProfile, onchainProfile, isOnchainProfileLoading])
+  }, [ready, authenticated, screen.name, activeAddress, provider])
 
   // Watch for inbound join links while session is already active
   useEffect(() => {
@@ -422,27 +392,13 @@ export default function App() {
     if (directCode) {
       setPendingJoin(directCode, directCategory)
     }
-    if (activeAddress && hasUserProfile(activeAddress)) {
-      setShowOnboarding(false)
-      restoreGameScreen()
-      return
-    }
-    if (activeAddress && hasOnchainProfile && onchainProfile) {
-      const p: UserProfile = {
-        username: onchainProfile.username,
-        avatarUrl: onchainProfile.avatarUrl || getDiceBearAvatarUrl(onchainProfile.avatarStyle || 'bottts-neutral', onchainProfile.avatarSeed || onchainProfile.username),
-        avatarSeed: onchainProfile.avatarSeed || onchainProfile.username,
-        avatarStyle: onchainProfile.avatarStyle || 'bottts-neutral',
-        createdAt: Number(onchainProfile.updatedAt) * 1000 || Date.now(),
-        isOnchainVerified: true,
+    if (activeAddress) {
+      const existing = getUserProfile(activeAddress)
+      if (!existing) {
+        getOrCreateUserProfile(activeAddress, provider)
       }
-      saveUserProfile(p, activeAddress)
       setShowOnboarding(false)
       restoreGameScreen()
-      return
-    }
-    if (activeAddress && !isOnchainProfileLoading) {
-      setShowOnboarding(true)
     }
   }
 

@@ -111,12 +111,26 @@ export default function CreateRoom({ initialCategory = 'General Knowledge', onBa
   const { data: codeAlreadyExists } = useRoomExists(roomCode)
   const codeTaken = codeEdited && codeAlreadyExists === true
 
-  const { approve, isPending: approvePending, isConfirming: approveConfirming, isSuccess: approved } = useApproveUsdc()
-  const { createRoom, isPending: createPending, isConfirming: createConfirming, isSuccess: created } = useCreateRoom()
+  const { approve, isPending: approvePending, isConfirming: approveConfirming, isSuccess: approved, error: approveError } = useApproveUsdc()
+  const { createRoom, isPending: createPending, isConfirming: createConfirming, isSuccess: created, error: createError } = useCreateRoom()
 
   useEffect(() => {
     if (approved) void refetchAllowance()
   }, [approved, refetchAllowance])
+
+  useEffect(() => {
+    if (createError) {
+      const msg = (createError as any)?.shortMessage || createError.message || 'Transaction failed or rejected'
+      toast.error('Room Creation Failed', { description: msg.slice(0, 120) })
+    }
+  }, [createError])
+
+  useEffect(() => {
+    if (approveError) {
+      const msg = (approveError as any)?.shortMessage || approveError.message || 'USDC approval failed or rejected'
+      toast.error('USDC Approval Failed', { description: msg.slice(0, 120) })
+    }
+  }, [approveError])
 
   useEffect(() => {
     if (created) {

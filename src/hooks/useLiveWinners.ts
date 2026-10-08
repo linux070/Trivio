@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPublicClient, http, parseAbiItem } from 'viem'
-import { arcTestnet } from 'viem/chains'
-import { TRIVIA_GAME_ADDRESS } from '@/config'
+import { arcTestnet, TRIVIA_GAME_ADDRESS } from '@/config'
 import {
   getStoredPayouts,
   recordWinnerPayout,
@@ -43,7 +42,7 @@ export function useLiveWinners() {
 
     const client = createPublicClient({
       chain: arcTestnet,
-      transport: http(),
+      transport: http('https://rpc.testnet.arc.io'),
     })
 
     let isSubscribed = true

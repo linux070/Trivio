@@ -1,5 +1,6 @@
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useBalance } from 'wagmi'
 import { erc20Abi, keccak256, toBytes } from 'viem'
+import { useMemo } from 'react'
 import { getUsdc } from '@/onchain-facts'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 
@@ -260,15 +261,62 @@ export function useUsdcBalance(
   address: `0x${string}` | undefined,
   chainId: number = ARC_TESTNET_CHAIN_ID
 ) {
+  const isValidAddress = Boolean(
+    address &&
+    typeof address === 'string' &&
+    address.startsWith('0x') &&
+    address.length === 42 &&
+    address !== '0x0000000000000000000000000000000000000000'
+  )
+
+  const normalizedAddress = isValidAddress && address ? (address.toLowerCase() as `0x${string}`) : undefined
   const usdcAddr = (getUsdc(chainId)?.address ?? '0x3600000000000000000000000000000000000000') as `0x${string}`
-  return useReadContract({
+
+  // 1. Query ERC-20 USDC balance (6 decimals)
+  const erc20 = useReadContract({
     address: usdcAddr,
     abi: erc20Abi,
     functionName: 'balanceOf',
-    args: address ? [address] : undefined,
+    args: normalizedAddress ? [normalizedAddress] : undefined,
     chainId: chainId,
-    query: { enabled: Boolean(usdcAddr) && Boolean(address) },
+    query: {
+      enabled: isValidAddress && Boolean(usdcAddr),
+      refetchInterval: 4_000,
+    },
   })
+
+  // 2. Query native currency balance (18 decimals on Arc) as backup/support
+  const native = useBalance({
+    address: normalizedAddress,
+    chainId: chainId,
+    query: {
+      enabled: isValidAddress,
+      refetchInterval: 4_000,
+    },
+  })
+
+  const rawBalance: bigint | undefined = useMemo(() => {
+    if (!isValidAddress) return 0n
+    if (erc20.data !== undefined && erc20.data > 0n) {
+      return erc20.data
+    }
+    if (native.data?.value !== undefined && native.data.value > 0n) {
+      // Convert 18-decimal native gas USDC -> 6-decimal standard USDC (divide by 10^12)
+      const converted = native.data.value / 10n ** 12n
+      if (converted > 0n) return converted
+    }
+    return erc20.data ?? 0n
+  }, [isValidAddress, erc20.data, native.data?.value])
+
+  return {
+    data: rawBalance,
+    isLoading: isValidAddress && erc20.isLoading && native.isLoading,
+    refetch: () => {
+      erc20.refetch()
+      native.refetch()
+    },
+    error: erc20.error || native.error,
+  }
 }
 
 export function useUsdcAllowance(
@@ -314,13 +362,14 @@ export function useApproveUsdc() {
   const { writeContract, data: hash, isPending, error } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
 
-  const approve = (amount: string) => {
+  const approve = (amount: string, chainId: number = ARC_TESTNET_CHAIN_ID) => {
     if (!USDC_ADDRESS || !TRIVIA_GAME_ADDRESS) return
     writeContract({
       address: USDC_ADDRESS,
       abi: erc20Abi,
       functionName: 'approve',
       args: [TRIVIA_GAME_ADDRESS, parseUSDC(amount)],
+      chainId,
     })
   }
 
@@ -337,7 +386,8 @@ export function useCreateRoom() {
     sponsoredPrize: string,
     maxPlayers: number,
     payoutMode: PayoutMode = PayoutMode.SingleWinner,
-    seedHash?: `0x${string}`
+    seedHash?: `0x${string}`,
+    chainId: number = ARC_TESTNET_CHAIN_ID
   ) => {
     if (!TRIVIA_GAME_ADDRESS) return
     const defaultSeed = seedHash ?? keccak256(toBytes(code + Date.now().toString()))
@@ -353,6 +403,7 @@ export function useCreateRoom() {
         payoutMode,
         defaultSeed,
       ],
+      chainId,
     })
   }
 
@@ -363,13 +414,14 @@ export function useJoinRoom() {
   const { writeContract, data: hash, isPending, error } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
 
-  const joinRoom = (code: string) => {
+  const joinRoom = (code: string, chainId: number = ARC_TESTNET_CHAIN_ID) => {
     if (!TRIVIA_GAME_ADDRESS) return
     writeContract({
       address: TRIVIA_GAME_ADDRESS,
       abi: TRIVIA_ABI,
       functionName: 'joinRoom',
       args: [roomCodeToBytes32(code)],
+      chainId,
     })
   }
 
@@ -380,13 +432,14 @@ export function useStartGame() {
   const { writeContract, data: hash, isPending, error } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
 
-  const startGame = (code: string) => {
+  const startGame = (code: string, chainId: number = ARC_TESTNET_CHAIN_ID) => {
     if (!TRIVIA_GAME_ADDRESS) return
     writeContract({
       address: TRIVIA_GAME_ADDRESS,
       abi: TRIVIA_ABI,
       functionName: 'startGame',
       args: [roomCodeToBytes32(code)],
+      chainId,
     })
   }
 
@@ -400,7 +453,8 @@ export function useDeclareWinners() {
   const declareWinners = (
     code: string,
     winners: `0x${string}`[],
-    proofs: PlayerScoreProof[] = []
+    proofs: PlayerScoreProof[] = [],
+    chainId: number = ARC_TESTNET_CHAIN_ID
   ) => {
     if (!TRIVIA_GAME_ADDRESS) return
     writeContract({
@@ -408,6 +462,7 @@ export function useDeclareWinners() {
       abi: TRIVIA_ABI,
       functionName: 'declareWinners',
       args: [roomCodeToBytes32(code), winners, proofs],
+      chainId,
     })
   }
 
@@ -428,13 +483,14 @@ export function useCancelRoom() {
   const { writeContract, data: hash, isPending, error } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
 
-  const cancelRoom = (code: string) => {
+  const cancelRoom = (code: string, chainId: number = ARC_TESTNET_CHAIN_ID) => {
     if (!TRIVIA_GAME_ADDRESS) return
     writeContract({
       address: TRIVIA_GAME_ADDRESS,
       abi: TRIVIA_ABI,
       functionName: 'cancelRoom',
       args: [roomCodeToBytes32(code)],
+      chainId,
     })
   }
 
