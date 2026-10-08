@@ -22,6 +22,7 @@ import { Toaster } from 'sonner'
 import { arcTestnet } from 'viem/chains'
 import { config, arcMainnet } from './config'
 import App from './App'
+import ErrorBoundary from './components/ErrorBoundary'
 import './index.css'
 
 const queryClient = new QueryClient()
@@ -69,32 +70,34 @@ const StudioWatermark = () => (
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <PrivyProvider
-      appId={import.meta.env.VITE_PRIVY_APP_ID || 'clxxxxxxxxxxxxxxxxx'}
-      config={{
-        loginMethods: ['google', 'passkey', 'email', 'wallet'],
-        appearance: {
-          theme: 'light',
-          accentColor: '#7c3aed',
-          logo: '/logo.png',
-          showWalletLoginFirst: false,
-        },
-        defaultChain: arcTestnet,
-        supportedChains: [arcTestnet, arcMainnet],
-        embeddedWallets: {
-          ethereum: {
-            createOnLogin: 'users-without-wallets',
+    <ErrorBoundary>
+      <PrivyProvider
+        appId={import.meta.env.VITE_PRIVY_APP_ID || 'clxxxxxxxxxxxxxxxxx'}
+        config={{
+          loginMethods: ['google', 'passkey', 'email', 'wallet'],
+          appearance: {
+            theme: 'light',
+            accentColor: '#7c3aed',
+            logo: '/logo.png',
+            showWalletLoginFirst: false,
           },
-        },
-      }}
-    >
-      <QueryClientProvider client={queryClient}>
-        <WagmiProvider config={config}>
-          <App />
-          <StudioWatermark />
-          <Toaster position="top-center" />
-        </WagmiProvider>
-      </QueryClientProvider>
-    </PrivyProvider>
+          defaultChain: arcTestnet,
+          supportedChains: [arcTestnet, arcMainnet],
+          embeddedWallets: {
+            ethereum: {
+              createOnLogin: 'users-without-wallets',
+            },
+          },
+        }}
+      >
+        <QueryClientProvider client={queryClient}>
+          <WagmiProvider config={config}>
+            <App />
+            <StudioWatermark />
+            <Toaster position="top-center" />
+          </WagmiProvider>
+        </QueryClientProvider>
+      </PrivyProvider>
+    </ErrorBoundary>
   </StrictMode>,
 )
