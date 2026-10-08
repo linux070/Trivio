@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { ARC_TESTNET_CHAIN_ID, TRIVIO_PROFILE_REGISTRY_ADDRESS } from '@/config'
-import { getUserProfile, saveUserProfile, getDiceBearAvatarUrl, type UserProfile } from '@/lib/userProfile'
+import { getUserProfile, saveUserProfile, getDiceBearAvatarUrl, fetchCloudProfile, type UserProfile } from '@/lib/userProfile'
 
 export const PROFILE_REGISTRY_ABI = [
   {
@@ -68,7 +68,8 @@ export interface OnchainProfileData {
 }
 
 /**
- * Read onchain profile for a given wallet address with instant local cache fallback
+ * Read profile for a given wallet address (address verified onchain, avatar stored off-chain)
+ * with instant local cache + off-chain cloud persistence across cache clears.
  */
 export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNET_CHAIN_ID) {
   const isValidAddress = Boolean(
@@ -82,6 +83,7 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
   const [localProfileState, setLocalProfileState] = useState<UserProfile | null>(() =>
     normalized ? getUserProfile(normalized) : getUserProfile()
   )
+  const [cloudProfileState, setCloudProfileState] = useState<UserProfile | null>(null)
 
   // Listen for local profile updates across the entire app
   useEffect(() => {
@@ -105,6 +107,34 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
     setLocalProfileState(p)
   }, [normalized])
 
+  // Asynchronously query cloud storage to restore latest avatar if local storage was cleared
+  useEffect(() => {
+    if (!normalized) return
+    let isMounted = true
+    fetchCloudProfile(normalized).then((cloud) => {
+      if (!isMounted || !cloud) return
+      setCloudProfileState(cloud)
+      const current = getUserProfile(normalized)
+      // If no local profile exists (cache cleared) or cloud has newer avatar, restore it
+      if (!current || (cloud.updatedAt && (!current.updatedAt || cloud.updatedAt > current.updatedAt))) {
+        const merged: UserProfile = {
+          username: current?.username || cloud.username || '',
+          avatarUrl: cloud.avatarUrl || current?.avatarUrl || getDiceBearAvatarUrl(cloud.avatarStyle || 'bottts-neutral', cloud.avatarSeed || 'trivio'),
+          avatarSeed: cloud.avatarSeed || current?.avatarSeed || 'trivio',
+          avatarStyle: cloud.avatarStyle || current?.avatarStyle || 'bottts-neutral',
+          createdAt: cloud.createdAt || Date.now(),
+          updatedAt: cloud.updatedAt || Date.now(),
+          isOnchainVerified: current?.isOnchainVerified ?? cloud.isOnchainVerified,
+        }
+        saveUserProfile(merged, normalized)
+        setLocalProfileState(merged)
+      }
+    })
+    return () => {
+      isMounted = false
+    }
+  }, [normalized])
+
   const cachedLocal = localProfileState || (normalized ? getUserProfile(normalized) : getUserProfile())
 
   const { data, isLoading, refetch, error } = useReadContract({
@@ -119,7 +149,7 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
     },
   })
 
-  const [username, avatarUrl, avatarSeed, avatarStyle, updatedAt] =
+  const [username, onchainAvatarUrl, onchainAvatarSeed, onchainAvatarStyle, updatedAt] =
     (data as [string, string, string, string, bigint] | undefined) ?? ['', '', '', '', 0n]
 
   const hasOnchainData = Boolean(username && username.length > 0)
@@ -127,54 +157,71 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
   const localTimeMs = cachedLocal ? (cachedLocal.updatedAt || cachedLocal.createdAt || 0) : 0
   const localIsNewer = Boolean(cachedLocal?.username && localTimeMs > onchainTimeMs)
 
-  // Save to persistent storage once contract resolves ONLY if onchain data is strictly newer than local edits
+  // Sync onchain username identity with off-chain avatar state
   useEffect(() => {
-    if (hasOnchainData && normalized && !localIsNewer) {
+    if (hasOnchainData && normalized) {
+      const activeLocal = getUserProfile(normalized)
+      const latestAvatarUrl = activeLocal?.avatarUrl || cloudProfileState?.avatarUrl || onchainAvatarUrl || getDiceBearAvatarUrl(activeLocal?.avatarStyle || 'bottts-neutral', activeLocal?.avatarSeed || username)
+      const latestAvatarSeed = activeLocal?.avatarSeed || cloudProfileState?.avatarSeed || onchainAvatarSeed || username
+      const latestAvatarStyle = activeLocal?.avatarStyle || cloudProfileState?.avatarStyle || onchainAvatarStyle || 'bottts-neutral'
+
       const p: UserProfile = {
         username,
-        avatarUrl: avatarUrl || getDiceBearAvatarUrl(avatarStyle || 'bottts-neutral', avatarSeed || username),
-        avatarSeed: avatarSeed || username,
-        avatarStyle: avatarStyle || 'bottts-neutral',
-        createdAt: onchainTimeMs || Date.now(),
-        updatedAt: onchainTimeMs || Date.now(),
+        avatarUrl: latestAvatarUrl,
+        avatarSeed: latestAvatarSeed,
+        avatarStyle: latestAvatarStyle,
+        createdAt: onchainTimeMs || activeLocal?.createdAt || Date.now(),
+        updatedAt: Math.max(onchainTimeMs, activeLocal?.updatedAt || 0, cloudProfileState?.updatedAt || 0, Date.now()),
         isOnchainVerified: true,
       }
       saveUserProfile(p, normalized)
       setLocalProfileState(p)
     }
-  }, [hasOnchainData, normalized, localIsNewer, username, avatarUrl, avatarSeed, avatarStyle, onchainTimeMs])
+  }, [hasOnchainData, normalized, username, onchainAvatarUrl, onchainAvatarSeed, onchainAvatarStyle, onchainTimeMs, cloudProfileState])
 
   const effectiveProfile: OnchainProfileData | null = useMemo(() => {
+    const avatarUrl = cachedLocal?.avatarUrl || cloudProfileState?.avatarUrl || onchainAvatarUrl || getDiceBearAvatarUrl(cachedLocal?.avatarStyle || 'bottts-neutral', cachedLocal?.avatarSeed || username || 'trivio')
+    const avatarSeed = cachedLocal?.avatarSeed || cloudProfileState?.avatarSeed || onchainAvatarSeed || username || 'trivio'
+    const avatarStyle = cachedLocal?.avatarStyle || cloudProfileState?.avatarStyle || onchainAvatarStyle || 'bottts-neutral'
+
     if (localIsNewer && cachedLocal) {
       return {
         username: cachedLocal.username,
-        avatarUrl: cachedLocal.avatarUrl || getDiceBearAvatarUrl(cachedLocal.avatarStyle || 'bottts-neutral', cachedLocal.avatarSeed || cachedLocal.username),
-        avatarSeed: cachedLocal.avatarSeed || cachedLocal.username,
-        avatarStyle: cachedLocal.avatarStyle || 'bottts-neutral',
+        avatarUrl,
+        avatarSeed,
+        avatarStyle,
         updatedAt: BigInt(Math.floor(localTimeMs / 1000)),
       }
     }
     if (hasOnchainData) {
       return {
         username,
-        // If local profile has a chosen avatar, preserve it even when using onchain username
-        avatarUrl: cachedLocal?.avatarUrl || avatarUrl || getDiceBearAvatarUrl(avatarStyle || 'bottts-neutral', avatarSeed || username),
-        avatarSeed: cachedLocal?.avatarSeed || avatarSeed || username,
-        avatarStyle: cachedLocal?.avatarStyle || avatarStyle || 'bottts-neutral',
+        avatarUrl,
+        avatarSeed,
+        avatarStyle,
         updatedAt,
       }
     }
     if (cachedLocal && cachedLocal.username) {
       return {
         username: cachedLocal.username,
-        avatarUrl: cachedLocal.avatarUrl || getDiceBearAvatarUrl(cachedLocal.avatarStyle || 'bottts-neutral', cachedLocal.avatarSeed || cachedLocal.username),
-        avatarSeed: cachedLocal.avatarSeed || cachedLocal.username,
-        avatarStyle: cachedLocal.avatarStyle || 'bottts-neutral',
+        avatarUrl,
+        avatarSeed,
+        avatarStyle,
         updatedAt: BigInt(Math.floor((cachedLocal.updatedAt || cachedLocal.createdAt || Date.now()) / 1000)),
       }
     }
+    if (cloudProfileState && cloudProfileState.username) {
+      return {
+        username: cloudProfileState.username,
+        avatarUrl,
+        avatarSeed,
+        avatarStyle,
+        updatedAt: BigInt(Math.floor((cloudProfileState.updatedAt || Date.now()) / 1000)),
+      }
+    }
     return null
-  }, [localIsNewer, cachedLocal, hasOnchainData, username, avatarUrl, avatarSeed, avatarStyle, updatedAt, localTimeMs])
+  }, [localIsNewer, cachedLocal, cloudProfileState, hasOnchainData, username, onchainAvatarUrl, onchainAvatarSeed, onchainAvatarStyle, updatedAt, localTimeMs])
 
   const hasProfile = Boolean(effectiveProfile && effectiveProfile.username.length > 0)
 
@@ -187,24 +234,86 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
   }
 }
 
+const usernameAvailabilityCache = new Map<string, boolean>()
+
 /**
- * Check if a username is available onchain
+ * Fast, debounced, and cached check if a username is available onchain
  */
 export function useCheckUsernameAvailable(username: string, chainId: number = ARC_TESTNET_CHAIN_ID) {
-  const clean = username.trim()
-  const isValid = clean.length >= 2 && clean.length <= 24
+  const clean = username.trim().toLowerCase().replace(/^@/, '')
+  const [debouncedName, setDebouncedName] = useState(clean)
+  const [isDebouncing, setIsDebouncing] = useState(false)
+  const [safetyTimedOut, setSafetyTimedOut] = useState(false)
 
-  return useReadContract({
+  // 120ms ultra-fast debounce
+  useEffect(() => {
+    if (!clean || clean.length < 2) {
+      setDebouncedName(clean)
+      setIsDebouncing(false)
+      return
+    }
+    if (usernameAvailabilityCache.has(clean)) {
+      setDebouncedName(clean)
+      setIsDebouncing(false)
+      return
+    }
+    setIsDebouncing(true)
+    setSafetyTimedOut(false)
+    const timer = setTimeout(() => {
+      setDebouncedName(clean)
+      setIsDebouncing(false)
+    }, 120)
+    return () => clearTimeout(timer)
+  }, [clean])
+
+  const isValid = debouncedName.length >= 2 && debouncedName.length <= 24
+
+  const { data, isLoading, isFetching } = useReadContract({
     address: TRIVIO_PROFILE_REGISTRY_ADDRESS,
     abi: PROFILE_REGISTRY_ABI,
     functionName: 'isUsernameAvailable',
-    args: isValid ? [clean] : undefined,
+    args: isValid ? [debouncedName] : undefined,
     chainId,
     query: {
       enabled: isValid,
-      staleTime: 5_000,
+      staleTime: 60_000,
+      gcTime: 300_000,
     },
   })
+
+  // Safety timer to guarantee spinner never spins indefinitely
+  useEffect(() => {
+    if (isDebouncing || isLoading || isFetching) {
+      const timer = setTimeout(() => {
+        setSafetyTimedOut(true)
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [isDebouncing, isLoading, isFetching, debouncedName])
+
+  useEffect(() => {
+    if (data !== undefined && isValid) {
+      usernameAvailabilityCache.set(debouncedName, Boolean(data))
+    }
+  }, [data, debouncedName, isValid])
+
+  const isCached = usernameAvailabilityCache.has(clean)
+  const cachedVal = isCached ? usernameAvailabilityCache.get(clean) : undefined
+
+  const result = clean.length < 2
+    ? undefined
+    : isCached
+      ? cachedVal
+      : data !== undefined && debouncedName === clean
+        ? Boolean(data)
+        : undefined
+
+  const checking = clean.length >= 2 && !isCached && !safetyTimedOut && (isDebouncing || isLoading || isFetching)
+
+  return {
+    data: result,
+    isLoading: checking,
+  }
 }
 
 /**

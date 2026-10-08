@@ -3,7 +3,7 @@ import { useAccount } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import type { Category } from '@/lib/questions'
 import { ALL_CATEGORIES } from '@/lib/questions'
-import { hasUserProfile, saveUserProfile, clearActiveUserProfile, getDiceBearAvatarUrl, type UserProfile } from '@/lib/userProfile'
+import { hasUserProfile, saveUserProfile, clearActiveUserProfile, getDiceBearAvatarUrl, fetchCloudProfile, type UserProfile } from '@/lib/userProfile'
 import { useOnchainProfile } from '@/hooks/useTrivioProfileRegistry'
 import {
   saveRoomCategory,
@@ -287,12 +287,24 @@ export default function App() {
           return
         }
 
-        // 3. If still querying onchain registry, wait briefly before assuming new user
+        // 3. Asynchronously check cloud profile (survives cache clear)
+        fetchCloudProfile(activeAddress).then((cloud) => {
+          if (cloud && (cloud.avatarUrl || cloud.username)) {
+            saveUserProfile(cloud, activeAddress)
+            setShowOnboarding(false)
+            const pending = getPendingJoin()
+            if (pending || screen.name === 'landing') {
+              restoreGameScreen()
+            }
+          }
+        }).catch(() => {})
+
+        // 4. If still querying onchain registry, wait briefly before assuming new user
         if (isOnchainProfileLoading) {
           return
         }
 
-        // 4. Truly new user for this address -> trigger onboarding modal
+        // 5. Truly new user for this address -> trigger onboarding modal
         setShowOnboarding(true)
       }
     } else if (ready && !authenticated) {

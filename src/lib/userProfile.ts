@@ -15,6 +15,75 @@ export interface UserProfile {
 
 const STORAGE_PROFILE_KEY = 'trivio_user_profile'
 
+// Cloud profile storage endpoint (Firebase Realtime Database)
+const FIREBASE_HOST = (
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_RTDB_URL) ||
+  'https://trivio-app-ffe6e-default-rtdb.firebaseio.com'
+).replace(/\/$/, '')
+
+const CLOUD_PROFILES_URL = `${FIREBASE_HOST}/profiles`
+
+function sanitizeAddressKey(address: string): string {
+  return address.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+/**
+ * Fetch authoritative user profile and latest avatar from cloud storage
+ */
+export async function fetchCloudProfile(address: string): Promise<UserProfile | null> {
+  if (!address || !address.startsWith('0x') || address.length !== 42 || address === '0x0000000000000000000000000000000000000000') {
+    return null
+  }
+  const key = sanitizeAddressKey(address)
+  try {
+    const res = await fetch(`${CLOUD_PROFILES_URL}/${key}.json`)
+    if (!res.ok) return null
+    const data = await res.json()
+    if (data && (data.avatarUrl || data.avatarSeed || data.username)) {
+      return {
+        username: data.username || '',
+        avatarUrl: data.avatarUrl || getDiceBearAvatarUrl(data.avatarStyle || 'bottts-neutral', data.avatarSeed || 'trivio'),
+        avatarSeed: data.avatarSeed || 'trivio',
+        avatarStyle: data.avatarStyle || 'bottts-neutral',
+        createdAt: data.createdAt || data.updatedAt || Date.now(),
+        updatedAt: data.updatedAt || Date.now(),
+        isOnchainVerified: data.isOnchainVerified,
+      }
+    }
+  } catch (err) {
+    console.warn('[userProfile] Failed to fetch cloud profile for', address, err)
+  }
+  return null
+}
+
+/**
+ * Synchronize user profile & latest avatar to cloud storage
+ */
+export async function syncProfileToCloud(profile: UserProfile, address: string): Promise<void> {
+  if (!address || !address.startsWith('0x') || address.length !== 42 || address === '0x0000000000000000000000000000000000000000') {
+    return
+  }
+  const key = sanitizeAddressKey(address)
+  const payload = {
+    username: profile.username || '',
+    avatarUrl: profile.avatarUrl || '',
+    avatarSeed: profile.avatarSeed || '',
+    avatarStyle: profile.avatarStyle || 'bottts-neutral',
+    createdAt: profile.createdAt || Date.now(),
+    updatedAt: profile.updatedAt || Date.now(),
+    isOnchainVerified: profile.isOnchainVerified ?? false,
+  }
+  try {
+    await fetch(`${CLOUD_PROFILES_URL}/${key}.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch (err) {
+    console.warn('[userProfile] Failed to sync profile to cloud for', address, err)
+  }
+}
+
 export const DICEBEAR_STYLES = [
   { id: 'bottts-neutral', label: 'Robots' },
   { id: 'adventurer', label: 'Adventurers' },
@@ -93,6 +162,7 @@ export function hasUserProfile(address?: string): boolean {
 
 /**
  * Save user profile to storage (address-scoped if address provided)
+ * and asynchronously persist to off-chain cloud so it survives cache clearing.
  */
 export function saveUserProfile(profile: UserProfile, address?: string): void {
   try {
@@ -102,8 +172,11 @@ export function saveUserProfile(profile: UserProfile, address?: string): void {
     }
     const serialized = JSON.stringify(stamped)
     localStorage.setItem(STORAGE_PROFILE_KEY, serialized)
-    if (address && address.startsWith('0x') && address.length === 42 && address !== '0x0000000000000000000000000000000000000000') {
+    const validAddr = address && address.startsWith('0x') && address.length === 42 && address !== '0x0000000000000000000000000000000000000000'
+    if (validAddr && address) {
       localStorage.setItem(`trivio_profile_${address.toLowerCase()}`, serialized)
+      // Fire-and-forget off-chain cloud sync
+      void syncProfileToCloud(stamped, address).catch(() => {})
     }
     // Broadcast event across same-window components
     if (typeof window !== 'undefined') {
