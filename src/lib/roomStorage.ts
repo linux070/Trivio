@@ -1269,3 +1269,66 @@ export function getRoomTxHash(roomCode?: string | null): string | undefined {
   }
 }
 
+export interface CachedRoomSnapshot {
+  host: `0x${string}`
+  buyInHex: string
+  prizePoolHex: string
+  maxPlayers: number
+  playerCount: number
+  status: number
+  payoutMode: number
+  players?: `0x${string}`[]
+  updatedAt: number
+}
+
+const STORAGE_ROOM_SNAPSHOT_PREFIX = 'trivio_room_snapshot_'
+
+/** Save instant local room snapshot for zero-latency screen paint on mobile and desktop */
+export function saveCachedRoomSnapshot(roomCode: string, snapshot: Partial<CachedRoomSnapshot>): void {
+  if (!roomCode) return
+  const code = roomCode.trim().toUpperCase()
+  try {
+    const existing = getCachedRoomSnapshot(code) || {
+      host: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+      buyInHex: '0',
+      prizePoolHex: '0',
+      maxPlayers: 4,
+      playerCount: 0,
+      status: 0,
+      payoutMode: 0,
+      players: [],
+      updatedAt: Date.now(),
+    }
+    const updated: CachedRoomSnapshot = {
+      ...existing,
+      ...snapshot,
+      updatedAt: Date.now(),
+    }
+    const json = JSON.stringify(updated)
+    sessionStorage.setItem(`${STORAGE_ROOM_SNAPSHOT_PREFIX}${code}`, json)
+    localStorage.setItem(`${STORAGE_ROOM_SNAPSHOT_PREFIX}${code}`, json)
+  } catch {
+    // ignore
+  }
+}
+
+/** Get instant local room snapshot for zero-latency screen paint */
+export function getCachedRoomSnapshot(roomCode: string | null | undefined): CachedRoomSnapshot | null {
+  if (!roomCode) return null
+  const code = roomCode.trim().toUpperCase()
+  try {
+    const raw =
+      sessionStorage.getItem(`${STORAGE_ROOM_SNAPSHOT_PREFIX}${code}`) ||
+      localStorage.getItem(`${STORAGE_ROOM_SNAPSHOT_PREFIX}${code}`)
+    if (raw) {
+      const parsed = JSON.parse(raw) as CachedRoomSnapshot
+      if (parsed && parsed.host) {
+        return parsed
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+

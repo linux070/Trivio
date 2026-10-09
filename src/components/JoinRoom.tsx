@@ -33,6 +33,8 @@ import {
   extractRoomCode,
   getRoomDuration,
   saveRoomDuration,
+  saveCachedRoomSnapshot,
+  getCachedRoomSnapshot,
 } from '@/lib/roomStorage'
 import { fetchRoomMetadata, fetchCloudLiveRooms } from '@/lib/roomDb'
 
@@ -260,16 +262,60 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
     (checkedCode ? inferCategoryFromCode(checkedCode) : null) ||
     'General Knowledge'
 
-  const { data: roomInfo, isLoading: roomLoading, error: roomError } = useRoomInfo(checkedCode)
-  const { data: rawPlayersList } = useRoomPlayers(checkedCode)
+  const cachedSnapshot = useMemo(() => {
+    return checkedCode ? getCachedRoomSnapshot(checkedCode) : null
+  }, [checkedCode])
+
+  const { data: roomInfo, isLoading: roomLoading, error: roomError } = useRoomInfo(checkedCode, 1000)
+  const { data: rawPlayersList } = useRoomPlayers(checkedCode, 1000)
   const { data: isPlayerOnchain } = useIsPlayer(checkedCode, activeAddress)
 
-  const [host, buyIn, prizePool, maxPlayers, playerCount, status, payoutMode] = (roomInfo as RoomTuple) ?? []
+  // Cache onchain room data into local storage whenever received
+  useEffect(() => {
+    if (roomInfo && checkedCode) {
+      const [h, bi, pp, mp, pc, st, pm] = roomInfo as RoomTuple
+      saveCachedRoomSnapshot(checkedCode, {
+        host: h,
+        buyInHex: (bi ?? 0n).toString(),
+        prizePoolHex: (pp ?? 0n).toString(),
+        maxPlayers: mp,
+        playerCount: pc,
+        status: st,
+        payoutMode: pm,
+      })
+    }
+  }, [roomInfo, checkedCode])
+
+  // Cache player list whenever received
+  useEffect(() => {
+    if (rawPlayersList && rawPlayersList.length > 0 && checkedCode) {
+      saveCachedRoomSnapshot(checkedCode, {
+        players: rawPlayersList as `0x${string}`[],
+      })
+    }
+  }, [rawPlayersList, checkedCode])
+
+  const [onchainHost, onchainBuyIn, onchainPrizePool, onchainMaxPlayers, onchainPlayerCount, onchainStatus, onchainPayoutMode] =
+    (roomInfo as RoomTuple) ?? []
+
+  const host = onchainHost ?? cachedSnapshot?.host
+  const buyIn = onchainBuyIn !== undefined ? onchainBuyIn : (cachedSnapshot?.buyInHex !== undefined ? BigInt(cachedSnapshot.buyInHex) : undefined)
+  const prizePool = onchainPrizePool !== undefined ? onchainPrizePool : (cachedSnapshot?.prizePoolHex !== undefined ? BigInt(cachedSnapshot.prizePoolHex) : undefined)
+  const maxPlayers = onchainMaxPlayers ?? cachedSnapshot?.maxPlayers ?? 4
+  const playerCount = onchainPlayerCount ?? cachedSnapshot?.playerCount ?? (rawPlayersList?.length || cachedSnapshot?.players?.length || 0)
+  const status = onchainStatus !== undefined ? onchainStatus : (cachedSnapshot?.status ?? 0)
+  const payoutMode = onchainPayoutMode !== undefined ? onchainPayoutMode : (cachedSnapshot?.payoutMode ?? 0)
+
+  const effectivePlayersList = (rawPlayersList as `0x${string}`[] | undefined) || cachedSnapshot?.players || []
+  const hasRoomData = Boolean(roomInfo || (cachedSnapshot && cachedSnapshot.host && cachedSnapshot.host !== '0x0000000000000000000000000000000000000000'))
 
   const isHost = Boolean(
     host && activeAddress && host.toLowerCase() === activeAddress.toLowerCase()
   )
-  const isAlreadyJoined = Boolean(isPlayerOnchain || isHost)
+  const isPlayerInList = Boolean(
+    activeAddress && effectivePlayersList.some(p => p.toLowerCase() === activeAddress.toLowerCase())
+  )
+  const isAlreadyJoined = Boolean(isPlayerOnchain || isPlayerInList || isHost)
 
   const buyInHuman = buyIn !== undefined ? formatUSDCRaw(buyIn) : null
   const prizePoolHuman = prizePool !== undefined ? formatUSDCRaw(prizePool) : null
@@ -388,7 +434,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       return
     }
 
-    if (roomInfo) {
+    if (hasRoomData) {
       if (isWrongChain) {
         switchChain({ chainId: ARC_TESTNET_CHAIN_ID })
         return
@@ -536,7 +582,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                   Room not found. Check the code and try again.
                 </p>
               )}
-              {roomInfo && (
+              {hasRoomData && (
                 <div className="rounded-3xl p-5" style={glass.card}>
                   <p className="mb-3 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>Room Details</p>
 
@@ -663,11 +709,11 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                       {/* Joined Players Column */}
                       <div className="flex flex-col gap-1 min-w-0 sm:border-l sm:border-slate-200/60 sm:pl-3.5">
                         <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                          Joined Players ({rawPlayersList?.length ?? 0}/{maxPlayersNum})
+                          Joined Players ({effectivePlayersList.length}/{maxPlayersNum})
                         </span>
-                        {rawPlayersList && rawPlayersList.length > 0 ? (
+                        {effectivePlayersList.length > 0 ? (
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
-                            {(rawPlayersList as `0x${string}`[]).map((pAddr) => (
+                            {effectivePlayersList.map((pAddr) => (
                               <PlayerTag key={pAddr} address={pAddr} />
                             ))}
                           </div>
