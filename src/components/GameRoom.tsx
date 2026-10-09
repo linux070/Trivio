@@ -1449,8 +1449,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                         <PlayerTag address={activeAddress} isHost={true} />
                         <div className="flex items-center gap-2">
                           <span className="font-extrabold text-xs sm:text-sm text-slate-900 tabular-nums">{score} pts</span>
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/90 px-2.5 py-0.5 rounded-full">
-                            <Check size={12} className="text-emerald-600 stroke-[2.5]" />
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/90 px-2.5 py-1 rounded-xl shadow-2xs">
+                            <span className="flex h-3.5 w-3.5 sm:h-4 sm:w-4 items-center justify-center rounded-full bg-emerald-500 text-white text-[9px] sm:text-[10px] font-black leading-none shrink-0 shadow-2xs">
+                              ✓
+                            </span>
                             <span>Finished</span>
                           </span>
                         </div>
@@ -1470,8 +1472,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                             <div className="flex items-center gap-2">
                               <span className="font-extrabold text-xs sm:text-sm text-slate-900 tabular-nums">{pScore} pts</span>
                               {isFinished ? (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/90 px-2.5 py-0.5 rounded-full">
-                                  <Check size={12} className="text-emerald-600 stroke-[2.5]" />
+                                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/90 px-2.5 py-1 rounded-xl shadow-2xs">
+                                  <span className="flex h-3.5 w-3.5 sm:h-4 sm:w-4 items-center justify-center rounded-full bg-emerald-500 text-white text-[9px] sm:text-[10px] font-black leading-none shrink-0 shadow-2xs">
+                                    ✓
+                                  </span>
                                   <span>Finished</span>
                                 </span>
                               ) : (

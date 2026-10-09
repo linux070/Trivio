@@ -1,6 +1,5 @@
 import type { Category } from './questions'
 import { ALL_CATEGORIES } from './questions'
-import { submitRoomCategory } from './roomDb'
 
 const STORAGE_ROOM_CAT_PREFIX = 'trivio_room_cat_'
 const STORAGE_ROOM_DUR_PREFIX = 'trivio_room_dur_'
@@ -199,13 +198,6 @@ export function saveRoomCategory(roomCode: string, category: Category): void {
   try {
     localStorage.setItem(`${STORAGE_ROOM_CAT_PREFIX}${code}`, category)
     sessionStorage.setItem(`${STORAGE_ROOM_CAT_PREFIX}${code}`, category)
-  } catch {
-    // ignore
-  }
-
-  // Synchronize to cloud database
-  try {
-    void submitRoomCategory(code, category)
   } catch {
     // ignore
   }
