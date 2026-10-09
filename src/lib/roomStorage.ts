@@ -745,6 +745,8 @@ export interface ActiveGameSession {
   qIndex?: number
   answered?: boolean
   selectedIndex?: number | null
+  questionStartTime?: number
+  tabWarnings?: number
   savedAt: number
 }
 
@@ -757,7 +759,9 @@ export function saveActiveGame(
   score?: number,
   qIndex?: number,
   answered?: boolean,
-  selectedIndex?: number | null
+  selectedIndex?: number | null,
+  questionStartTime?: number,
+  tabWarnings?: number
 ): void {
   if (!roomCode) return
   const code = roomCode.trim().toUpperCase()
@@ -768,6 +772,8 @@ export function saveActiveGame(
   const resolvedQIndex = qIndex ?? (existing?.roomCode === code ? existing.qIndex : undefined)
   const resolvedAnswered = answered !== undefined ? answered : (existing?.roomCode === code ? existing.answered : undefined)
   const resolvedSelectedIndex = selectedIndex !== undefined ? selectedIndex : (existing?.roomCode === code ? existing.selectedIndex : undefined)
+  const resolvedQuestionStartTime = questionStartTime !== undefined ? questionStartTime : (existing?.roomCode === code ? existing.questionStartTime : undefined)
+  const resolvedTabWarnings = tabWarnings !== undefined ? tabWarnings : (existing?.roomCode === code ? existing.tabWarnings : undefined)
   const session: ActiveGameSession = {
     roomCode: code,
     category,
@@ -777,6 +783,8 @@ export function saveActiveGame(
     qIndex: resolvedQIndex,
     answered: resolvedAnswered,
     selectedIndex: resolvedSelectedIndex,
+    questionStartTime: resolvedQuestionStartTime,
+    tabWarnings: resolvedTabWarnings,
     savedAt: Date.now(),
   }
   try {

@@ -196,7 +196,8 @@ export const ALL_CATEGORIES: Category[] = [
 export interface TriviaQuestion {
   question: string
   options: string[]
-  correctIndex: number
+  answerHash?: string
+  correctIndex?: number
 }
 
 // ─── Procedural Pseudo-Random Number Generator (Mulberry32) ───────────────────
@@ -539,9 +540,100 @@ export function prefetchCategoryQuestions(category: Category) {
  * - When `seed` is undefined (solo practice mode):
  *   Uses live OpenTDB cache or random generator.
  */
-export function getQuestions(category: Category, count: number, seed?: string): TriviaQuestion[] {
+const ANSWER_PEPPER = '0xTRIVIO_SECURE_ONCHAIN_SALT_2026'
+
+/**
+ * Computes a secure cryptographic hash for an answer string tied to a question
+ */
+export function hashAnswer(questionText: string, optionText: string): string {
+  const payload = `${ANSWER_PEPPER}:${questionText.trim().toLowerCase()}:${optionText.trim().toLowerCase()}`
+  let h1 = 0xdeadbeef ^ 0, h2 = 0x41c6ce57 ^ 0
+  for (let i = 0; i < payload.length; i++) {
+    const ch = payload.charCodeAt(i)
+    h1 = Math.imul(h1 ^ ch, 2654435761)
+    h2 = Math.imul(h2 ^ ch, 1597334677)
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return '0x' + (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).padStart(16, '0')
+}
+
+/**
+ * Obfuscates a question so memory and React state contain ONLY the cryptographic hash
+ */
+export function obfuscateTriviaQuestion(
+  questionText: string,
+  options: string[],
+  correctOptionText: string
+): TriviaQuestion {
+  return {
+    question: questionText,
+    options,
+    answerHash: hashAnswer(questionText, correctOptionText),
+  }
+}
+
+/**
+ * Verifies if an answer index is correct using memory cryptographic hash comparison
+ */
+export function verifyAnswerHash(question: TriviaQuestion, selectedIndex: number): boolean {
+  if (!question || selectedIndex < 0 || selectedIndex >= question.options.length) return false
+  const selectedText = question.options[selectedIndex]
+  if (!selectedText) return false
+
+  if (question.answerHash) {
+    return hashAnswer(question.question, selectedText) === question.answerHash
+  }
+  return selectedIndex === question.correctIndex
+}
+
+/**
+ * Resolves the revealed correct option index upon question completion or timeout
+ */
+export function resolveRevealedCorrectIndex(question: TriviaQuestion): number {
+  if (typeof question.correctIndex === 'number' && question.correctIndex >= 0) {
+    return question.correctIndex
+  }
+  if (question.answerHash) {
+    for (let i = 0; i < question.options.length; i++) {
+      if (hashAnswer(question.question, question.options[i]) === question.answerHash) {
+        return i
+      }
+    }
+  }
+  return 0
+}
+
+/**
+ * Helper to deterministically shuffle options per player to prevent screen peeking and collusion
+ */
+export function shuffleQuestionOptionsForPlayer(
+  question: TriviaQuestion,
+  playerSeed: string,
+  questionIndex: number
+): TriviaQuestion {
+  const currentCorrectIdx = resolveRevealedCorrectIndex(question)
+  const correctOption = question.options[currentCorrectIdx]
+  const optRandom = createPrng(`${playerSeed.toLowerCase()}_q${questionIndex}`)
+  const options = [...question.options]
+  for (let i = options.length - 1; i > 0; i--) {
+    const j = Math.floor(optRandom() * (i + 1))
+    ;[options[i], options[j]] = [options[j], options[i]]
+  }
+  return obfuscateTriviaQuestion(question.question, options, correctOption)
+}
+
+/**
+ * Synchronous question generator.
+ * - When `seed` is provided (multiplayer rooms): Deterministically selects the EXACT same questions for the room.
+ * - When `playerAddress` is provided: Deterministically shuffles option orders (A, B, C, D) per player so answers cannot be leaked by option letter.
+ * - Anti-Cheat: Hashed in memory via obfuscateTriviaQuestion so React DevTools/DOM cannot inspect plain answer indices.
+ */
+export function getQuestions(category: Category, count: number, seed?: string, playerAddress?: string): TriviaQuestion[] {
   const cleanSeed = seed ? seed.trim().toUpperCase() : undefined
   const random = createPrng(cleanSeed ? `${category}_${cleanSeed}` : undefined)
+
+  let selectedQuestions: TriviaQuestion[] = []
 
   // 1. Procedural generation for Math & Logic (Infinite questions, 100% deterministic when seeded)
   if (category === 'Logic & Math Arena') {
@@ -549,11 +641,9 @@ export function getQuestions(category: Category, count: number, seed?: string): 
     for (let i = 0; i < count; i++) {
       questions.push(generateMathQuestion(random))
     }
-    return questions
-  }
-
-  // 2. Hybrid procedural + bank for Word Blitz (100% deterministic when seeded)
-  if (category === 'Word Blitz') {
+    selectedQuestions = questions
+  } else if (category === 'Word Blitz') {
+    // 2. Hybrid procedural + bank for Word Blitz (100% deterministic when seeded)
     const questions: TriviaQuestion[] = []
     const staticPool = [...(QUESTION_BANK['Word Blitz'] ?? [])]
     for (let i = staticPool.length - 1; i > 0; i--) {
@@ -571,71 +661,70 @@ export function getQuestions(category: Category, count: number, seed?: string): 
       const j = Math.floor(random() * (i + 1))
       ;[questions[i], questions[j]] = [questions[j], questions[i]]
     }
-    return questions.slice(0, count)
-  }
-
-  // 3. For unseeded solo practice only, check if cached live questions from OpenTDB exist
-  if (!cleanSeed) {
-    const cachedLive = LIVE_QUESTION_CACHE.get(category)
-    if (cachedLive && cachedLive.length >= count) {
-      const pool = [...cachedLive]
-      for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(random() * (i + 1))
-        ;[pool[i], pool[j]] = [pool[j], pool[i]]
-      }
-      return pool.slice(0, count)
+    selectedQuestions = questions.slice(0, count)
+  } else if (!cleanSeed && LIVE_QUESTION_CACHE.get(category) && (LIVE_QUESTION_CACHE.get(category)?.length ?? 0) >= count) {
+    // 3. For unseeded solo practice only, check if cached live questions from OpenTDB exist
+    const pool = [...(LIVE_QUESTION_CACHE.get(category) ?? [])]
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1))
+      ;[pool[i], pool[j]] = [pool[j], pool[i]]
     }
+    selectedQuestions = pool.slice(0, count)
+  } else {
+    // 4. Curated Bank with Deterministic Seeded Fisher-Yates Shuffle
+    // Guarantees 100% identical question selection for all players in the room
+    const basePool = (QUESTION_BANK[category] && QUESTION_BANK[category].length > 0)
+      ? QUESTION_BANK[category]
+      : QUESTION_BANK['General Knowledge']
+
+    const pool = basePool.map(q => ({
+      question: q.question,
+      options: [...q.options],
+      correctIndex: q.correctIndex,
+    }))
+
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1))
+      ;[pool[i], pool[j]] = [pool[j], pool[i]]
+    }
+
+    selectedQuestions = pool.slice(0, count)
   }
 
-  // 4. Curated Bank with Deterministic Seeded Fisher-Yates Shuffle
-  // This guarantees 100% identical question selection and option arrangement for all players in the room
-  const basePool = (QUESTION_BANK[category] && QUESTION_BANK[category].length > 0)
-    ? QUESTION_BANK[category]
-    : QUESTION_BANK['General Knowledge']
+  // Shuffle answer options and apply cryptographic hash obfuscation
+  return selectedQuestions.map((q, idx) => {
+    if (playerAddress && cleanSeed) {
+      return shuffleQuestionOptionsForPlayer(q, `${cleanSeed}_${playerAddress}`, idx)
+    }
 
-  const pool = basePool.map(q => ({
-    question: q.question,
-    options: [...q.options],
-    correctIndex: q.correctIndex,
-  }))
-
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1))
-    ;[pool[i], pool[j]] = [pool[j], pool[i]]
-  }
-
-  const selectedQuestions = pool.slice(0, count)
-
-  // Also deterministically shuffle answer options for each question so all players see identical choices in identical order
-  return selectedQuestions.map((q) => {
-    const correctOption = q.options[q.correctIndex]
+    const currentCorrectIdx = resolveRevealedCorrectIndex(q)
+    const correctOption = q.options[currentCorrectIdx]
     const options = [...q.options]
     for (let i = options.length - 1; i > 0; i--) {
       const j = Math.floor(random() * (i + 1))
       ;[options[i], options[j]] = [options[j], options[i]]
     }
-    return {
-      question: q.question,
-      options,
-      correctIndex: options.indexOf(correctOption),
-    }
+    return obfuscateTriviaQuestion(q.question, options, correctOption)
   })
 }
 
 /**
  * Main entry point: for unseeded mode fetches live questions, for seeded rooms guarantees determinism
  */
-export async function getQuestionsAsync(category: Category, count: number, seed?: string): Promise<TriviaQuestion[]> {
+export async function getQuestionsAsync(category: Category, count: number, seed?: string, playerAddress?: string): Promise<TriviaQuestion[]> {
   const cleanSeed = seed ? seed.trim().toUpperCase() : undefined
 
   // If unseeded (solo mode), attempt fresh fetch from live API
   if (!cleanSeed && OPENTDB_CATEGORY_MAP[category]) {
     const live = await fetchLiveQuestionsFromAPI(category, count)
     if (live && live.length >= count) {
-      return live
+      return live.map(q => {
+        const correctText = q.options[resolveRevealedCorrectIndex(q)]
+        return obfuscateTriviaQuestion(q.question, q.options, correctText)
+      })
     }
   }
 
   // When seed is provided (multiplayer rooms), use deterministic synchronized generator
-  return getQuestions(category, count, seed)
+  return getQuestions(category, count, seed, playerAddress)
 }

@@ -20,7 +20,7 @@ import {
   formatUSDCRaw,
   type RoomTuple,
 } from '@/hooks/useTriviaContract'
-import { getQuestions, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
+import { getQuestions, verifyAnswerHash, resolveRevealedCorrectIndex, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
 import {
   getRoomCategory,
   inferCategoryFromCode,
@@ -132,13 +132,30 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const initialPhase: GamePhase = (isMatchRoom && savedSession?.phase) ? savedSession.phase : (pendingPayoutMatch ? 'finished' : 'lobby')
   const initialScore: number = (isMatchRoom && typeof savedSession?.score === 'number') ? savedSession.score : (pendingPayoutMatch?.score ?? 0)
   const initialQIndex: number = (isMatchRoom && typeof savedSession?.qIndex === 'number' && savedSession.qIndex >= 0) ? savedSession.qIndex : 0
-  const initialAnswered: boolean = isMatchRoom && initialPhase === 'playing' ? Boolean(savedSession?.answered) : false
-  const initialSelectedIndex: number | null = isMatchRoom && initialPhase === 'playing' ? (savedSession?.selectedIndex ?? null) : null
+
+  // Anti-Cheat: Restore exact remaining time from saved questionStartTime on refresh
+  let initialTimeLeft = roomDuration
+  let initialAnswered = isMatchRoom && initialPhase === 'playing' ? Boolean(savedSession?.answered) : false
+  let initialSelectedIndex: number | null = isMatchRoom && initialPhase === 'playing' ? (savedSession?.selectedIndex ?? null) : null
+  const initialQuestionStartTime = isMatchRoom && initialPhase === 'playing' && savedSession?.questionStartTime ? savedSession.questionStartTime : Date.now()
+
+  if (isMatchRoom && initialPhase === 'playing' && savedSession?.questionStartTime) {
+    const elapsedSeconds = Math.floor((Date.now() - savedSession.questionStartTime) / 1000)
+    if (!initialAnswered) {
+      if (elapsedSeconds >= roomDuration) {
+        initialTimeLeft = 0
+        initialAnswered = true
+        initialSelectedIndex = -1
+      } else {
+        initialTimeLeft = Math.max(0, roomDuration - elapsedSeconds)
+      }
+    }
+  }
 
   const [phase, setPhase] = useState<GamePhase>(initialPhase)
   const [questions, setQuestions] = useState<TriviaQuestion[]>(() => {
     if (initialPhase === 'finished' || initialPhase === 'playing') {
-      return getQuestions(resolvedCategory, 10, roomCode)
+      return getQuestions(resolvedCategory, 10, roomCode, activeAddress)
     }
     return []
   })
@@ -148,14 +165,16 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     }
     return initialQIndex
   })
-  const [timeLeft, setTimeLeft] = useState(roomDuration)
+  const [timeLeft, setTimeLeft] = useState<number>(initialTimeLeft)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(initialSelectedIndex)
   const [answered, setAnswered] = useState<boolean>(initialAnswered)
   const [score, setScore] = useState<number>(initialScore)
   const [lastPts, setLastPts] = useState<number | null>(null)
   const [lastCorrect, setLastCorrect] = useState<boolean | null>(null)
   const [copiedLink, setCopiedLink] = useState(false)
-  const answerStartRef = useRef(Date.now())
+  const [tabWarnings, setTabWarnings] = useState<number>(() => isMatchRoom ? (savedSession?.tabWarnings ?? 0) : 0)
+  const [lostFocusThisQuestion, setLostFocusThisQuestion] = useState<boolean>(false)
+  const answerStartRef = useRef<number>(initialQuestionStartTime)
 
   const handleCopyLink = () => {
     const joinUrl = buildJoinUrl(roomCode, resolvedCategory)
@@ -190,10 +209,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   // Ensure questions are populated if resuming into playing phase
   useEffect(() => {
     if (phase === 'playing' && questions.length === 0) {
-      const qs = getQuestions(resolvedCategory, 10, roomCode)
+      const qs = getQuestions(resolvedCategory, 10, roomCode, activeAddress)
       setQuestions(qs)
     }
-  }, [phase, questions.length, resolvedCategory, roomCode])
+  }, [phase, questions.length, resolvedCategory, roomCode, activeAddress])
 
   // Auto-polls onchain every 1.5s
   const { data: roomInfo } = useRoomInfo(roomCode, 1500)
@@ -248,9 +267,9 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   // Memoize the profile so it doesn't trigger the useEffect infinite loop since it returns a new object via JSON.parse each time
   const localProfile = useMemo(() => rawProfile, [JSON.stringify(rawProfile)])
 
-  // Keep active game persisted with current phase, score, question index, and chosen answer for anti-cheat resume
+  // Keep active game persisted with current phase, score, question index, chosen answer, and round timing for anti-cheat resume
   useEffect(() => {
-    saveActiveGame(roomCode, resolvedCategory, isHost, phase, score, qIndex, answered, selectedIndex)
+    saveActiveGame(roomCode, resolvedCategory, isHost, phase, score, qIndex, answered, selectedIndex, answerStartRef.current, tabWarnings)
     if (activeAddress && typeof score === 'number') {
       saveRoomUserScore(roomCode, activeAddress, score, {
         username: localProfile?.username,
@@ -263,7 +282,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     if (prizeForPayouts && Number(prizeForPayouts) > 0) {
       saveRoomPrize(roomCode, prizeForPayouts)
     }
-  }, [roomCode, resolvedCategory, isHost, phase, score, qIndex, activeAddress, prizeForPayouts, localProfile, answered, selectedIndex])
+  }, [roomCode, resolvedCategory, isHost, phase, score, qIndex, activeAddress, prizeForPayouts, localProfile, answered, selectedIndex, tabWarnings])
 
   const { startGame, isPending: startPending, isConfirming: startConfirming, isSuccess: gameStarted } = useStartGame()
   const { declareWinners, isPending: declarePending, isConfirming: declareConfirming, isSuccess: declared, hash: declareHash } = useDeclareWinners()
@@ -418,11 +437,12 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     const isGameActive = gameStarted || status === 1 || isGameStarted
     if (isGameActive && phase === 'lobby') {
       const activeCategory = (gameMeta?.category as Category) || cloudCategory || resolvedCategory
-      const qs = getQuestions(activeCategory, 10, roomCode)
+      const qs = getQuestions(activeCategory, 10, roomCode, activeAddress)
       const existing = getActiveGame()
       const isCurrentSession = existing?.roomCode === roomCode.trim().toUpperCase()
       const resumeScore = isCurrentSession && typeof existing?.score === 'number' ? existing.score : 0
       const resumeQIndex = isCurrentSession && typeof existing?.qIndex === 'number' ? existing.qIndex : 0
+      const now = Date.now()
 
       if (resumeQIndex === 0 && resumeScore === 0) {
         toast.success('🚀 Game Starting Now!', {
@@ -438,12 +458,46 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
         setAnswered(false)
         setSelectedIndex(null)
         setScore(resumeScore)
+        setLostFocusThisQuestion(false)
         setPhase('playing')
       })
-      answerStartRef.current = Date.now()
-      saveActiveGame(roomCode, activeCategory, isHost, 'playing', resumeScore, resumeQIndex)
+      answerStartRef.current = now
+      saveActiveGame(roomCode, activeCategory, isHost, 'playing', resumeScore, resumeQIndex, false, null, now, tabWarnings)
     }
-  }, [gameStarted, status, isGameStarted, phase, resolvedCategory, cloudCategory, gameMeta?.category, roomCode, roomDuration, isHost])
+  }, [gameStarted, status, isGameStarted, phase, resolvedCategory, cloudCategory, gameMeta?.category, roomCode, roomDuration, isHost, tabWarnings])
+
+  // Anti-Cheat: Tab Switch & Window Blur Detection (Anti-Googling)
+  useEffect(() => {
+    if (phase !== 'playing' || answered) return
+
+    const handleDefocus = () => {
+      if (phase !== 'playing' || answered) return
+      setLostFocusThisQuestion(true)
+      setTabWarnings((prev) => {
+        const nextCount = prev + 1
+        saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', score, qIndex, answered, selectedIndex, answerStartRef.current, nextCount)
+        return nextCount
+      })
+      toast.warning('⚠️ Tab switch detected!', {
+        description: 'Speed bonus capped for this question to ensure fair play.',
+        duration: 3500,
+      })
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        handleDefocus()
+      }
+    }
+
+    window.addEventListener('blur', handleDefocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('blur', handleDefocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [phase, answered, roomCode, resolvedCategory, isHost, score, qIndex, selectedIndex])
 
   // Countdown timer for questions (ticks while !answered)
   useEffect(() => {
@@ -454,7 +508,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       setSelectedIndex(-1)
       setLastCorrect(false)
       setLastPts(null)
-      saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', score, qIndex, true, -1)
+      saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', score, qIndex, true, -1, answerStartRef.current, tabWarnings)
       if (activeAddress) {
         syncMyScore(score, {
           username: localProfile?.username,
@@ -471,7 +525,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       setTimeLeft(s => Math.max(0, s - 1))
     }, 1000)
     return () => clearInterval(t)
-  }, [phase, answered, timeLeft, roomCode, resolvedCategory, isHost, score, qIndex, activeAddress, localProfile, syncMyScore])
+  }, [phase, answered, timeLeft, roomCode, resolvedCategory, isHost, score, qIndex, activeAddress, localProfile, syncMyScore, tabWarnings])
 
   // Automatically advance to next question once answered (after showing correct answer feedback)
   useEffect(() => {
@@ -565,7 +619,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     const next = currentIndex + 1
     if (next >= qs.length) {
       setPhase('finished')
-      saveActiveGame(roomCode, resolvedCategory, isHost, 'finished', score, next)
+      saveActiveGame(roomCode, resolvedCategory, isHost, 'finished', score, next, true, selectedIndex, answerStartRef.current, tabWarnings)
       if (activeAddress) {
         syncMyScore(score, {
           username: localProfile?.username,
@@ -597,8 +651,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       setSelectedIndex(null)
       setLastCorrect(null)
       setLastPts(null)
-      answerStartRef.current = Date.now()
-      saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', score, next, false, null)
+      setLostFocusThisQuestion(false)
+      const now = Date.now()
+      answerStartRef.current = now
+      saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', score, next, false, null, now, tabWarnings)
       if (activeAddress) {
         syncMyScore(score, {
           username: localProfile?.username,
@@ -619,9 +675,21 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     setSelectedIndex(idx)
     setAnswered(true)
 
+    // Anti-Cheat: Minimum human visual perception & motor response threshold (~250ms)
+    const isBotSpeed = elapsed < 250
+    if (isBotSpeed) {
+      toast.warning('⚡ Instant reaction flagged', {
+        description: 'Submission under 250ms was capped to baseline points to protect fair play.',
+        duration: 3500,
+      })
+    }
+
     let newScore = score
-    if (idx === q.correctIndex) {
-      const pts = Math.max(10, 100 - Math.floor((elapsed / 1000) * 5))
+    const isCorrect = verifyAnswerHash(q, idx)
+    if (isCorrect) {
+      const basePts = isBotSpeed ? 10 : Math.max(10, 100 - Math.floor((elapsed / 1000) * 5))
+      // Anti-Cheat: If player switched tabs during this question, cap speed bonus at 25 pts
+      const pts = lostFocusThisQuestion ? Math.min(25, basePts) : basePts
       newScore = score + pts
       setScore(newScore)
       setLastPts(pts)
@@ -631,7 +699,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       setLastCorrect(false)
     }
 
-    saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', newScore, qIndex, true, idx)
+    saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', newScore, qIndex, true, idx, answerStartRef.current, tabWarnings)
     if (activeAddress) {
       syncMyScore(newScore, {
         username: localProfile?.username,
@@ -1339,9 +1407,17 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
             </div>
           </div>
 
-          {/* Score */}
+          {/* Score & Anti-Cheat Status */}
           <div className="mb-4 flex items-center justify-between">
-            <span className="text-xs" style={{ color: 'var(--subtle)' }}>Your score</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs" style={{ color: 'var(--subtle)' }}>Your score</span>
+              {lostFocusThisQuestion && !answered && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/90 px-2 py-0.5 rounded-full shadow-2xs animate-pulse">
+                  <AlertTriangle size={10} className="text-amber-600" />
+                  <span>Tab switch: Bonus capped</span>
+                </span>
+              )}
+            </div>
             <span className="display text-lg font-bold tabular-nums" style={{ color: 'var(--ink)' }}>{score} pts</span>
           </div>
 
@@ -1360,8 +1436,9 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             {currentQ.options.map((opt, i) => {
               const isSelected = selectedIndex === i
-              const isCorrect = i === currentQ.correctIndex
-              const isWrong = isSelected && !isCorrect
+              const revealedCorrectIdx = answered ? resolveRevealedCorrectIndex(currentQ) : -1
+              const isCorrect = answered && i === revealedCorrectIdx
+              const isWrong = answered && isSelected && !isCorrect
 
               let btnStyle = 'bg-white/80 hover:bg-white border border-slate-200/80 hover:border-slate-300 hover:shadow-sm cursor-pointer text-slate-800'
               let badgeStyle = 'bg-slate-100 text-slate-500 group-hover:bg-slate-200/80 group-hover:text-slate-800'
@@ -1389,18 +1466,21 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                   type="button"
                   onClick={() => handleAnswer(i)}
                   disabled={answered}
-                  className={`group relative flex items-center gap-3.5 w-full rounded-2xl p-4 text-left text-sm font-medium transition-all duration-150 ${btnStyle}`}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className={`group relative flex items-center gap-3.5 w-full rounded-2xl p-4 text-left text-sm font-medium transition-all duration-150 select-none ${btnStyle}`}
                   style={{
                     backdropFilter: 'blur(20px)',
                     WebkitBackdropFilter: 'blur(20px)',
+                    WebkitUserSelect: 'none',
+                    userSelect: 'none',
                   }}
                 >
                   <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg font-mono text-xs font-semibold transition-colors ${badgeStyle}`}
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg font-mono text-xs font-semibold transition-colors select-none ${badgeStyle}`}
                   >
                     {String.fromCharCode(65 + i)}
                   </span>
-                  <span className={`flex-1 leading-snug break-words text-balance ${textStyle}`}>{opt}</span>
+                  <span className={`flex-1 leading-snug break-words text-balance select-none ${textStyle}`}>{opt}</span>
                 </button>
               )
             })}

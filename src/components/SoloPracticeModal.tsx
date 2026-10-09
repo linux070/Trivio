@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Check, Clock, Zap, Trophy } from 'lucide-react'
-import { getQuestions, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
+import { getQuestions, verifyAnswerHash, resolveRevealedCorrectIndex, type Category, type TriviaQuestion, CATEGORY_GROUPS } from '@/lib/questions'
 import { QuestionCard } from '@/components/QuestionCard'
 
 interface SoloPracticeModalProps {
@@ -103,8 +103,10 @@ export default function SoloPracticeModal({
     setSelectedIndex(idx)
     setAnswered(true)
 
-    if (idx === q.correctIndex) {
-      const pts = Math.max(20, 100 - Math.floor((elapsed / 1000) * 8))
+    const isCorrect = verifyAnswerHash(q, idx)
+    if (isCorrect) {
+      const isBotSpeed = elapsed < 250
+      const pts = isBotSpeed ? 10 : Math.max(20, 100 - Math.floor((elapsed / 1000) * 8))
       setScore(s => s + pts)
       setLastPts(pts)
       setCorrectCount(c => c + 1)
@@ -150,7 +152,7 @@ export default function SoloPracticeModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 12 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="relative w-full max-w-lg rounded-3xl bg-white p-5 sm:p-6 shadow-2xl border border-slate-200/90 overflow-hidden"
+            className="relative w-full max-w-lg rounded-3xl bg-white p-5 sm:p-6 shadow-2xl border border-slate-200/90 overflow-hidden select-none"
             onClick={(e) => e.stopPropagation()}
           >
           {/* Header */}
@@ -218,8 +220,9 @@ export default function SoloPracticeModal({
               <div className="grid grid-cols-1 gap-2 pt-1">
                 {currentQ.options.map((opt, idx) => {
                   const isSelected = selectedIndex === idx
-                  const isCorrect = idx === currentQ.correctIndex
-                  const isWrong = isSelected && !isCorrect
+                  const revealedCorrectIdx = answered ? resolveRevealedCorrectIndex(currentQ) : -1
+                  const isCorrect = answered && idx === revealedCorrectIdx
+                  const isWrong = answered && isSelected && !isCorrect
 
                   let cardStyle =
                     'bg-white hover:bg-slate-50/80 border border-slate-200/90 hover:border-purple-300 hover:shadow-xs shadow-[0_2px_6px_-2px_rgba(0,0,0,0.03)] cursor-pointer text-slate-800 active:scale-[0.99]'
@@ -252,14 +255,16 @@ export default function SoloPracticeModal({
                       type="button"
                       disabled={answered}
                       onClick={() => handleAnswer(idx)}
-                      className={`group relative flex items-center gap-3 w-full p-3 sm:p-3.5 rounded-2xl text-left text-xs sm:text-sm transition-all duration-150 ${cardStyle}`}
+                      onContextMenu={(e) => e.preventDefault()}
+                      className={`group relative flex items-center gap-3 w-full p-3 sm:p-3.5 rounded-2xl text-left text-xs sm:text-sm transition-all duration-150 select-none ${cardStyle}`}
+                      style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
                     >
                       <span
                         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-xs sm:text-[13px] font-bold tracking-tight transition-all select-none leading-none ${badgeStyle}`}
                       >
                         {String.fromCharCode(65 + idx)}
                       </span>
-                      <span className={`flex-1 leading-snug break-words text-balance ${textStyle}`}>{opt}</span>
+                      <span className={`flex-1 leading-snug break-words text-balance select-none ${textStyle}`}>{opt}</span>
                       {answered && isCorrect && (
                         <motion.div
                           initial={{ scale: 0.5, opacity: 0 }}
