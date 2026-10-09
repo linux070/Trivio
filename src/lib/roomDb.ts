@@ -33,8 +33,11 @@ export interface CloudRoomPlayer {
 
 export interface CloudRoomMeta {
   isStarted?: boolean
-  status?: 'lobby' | 'playing' | 'finished'
+  isCancelled?: boolean
+  status?: 'lobby' | 'playing' | 'finished' | 'cancelled'
   startedAt?: number
+  cancelledAt?: number
+  reason?: string
   category?: string
   duration?: number
 }
@@ -408,6 +411,46 @@ export async function submitGameStart(
 }
 
 /**
+ * Submit game cancellation event to cloud database so all joined players are instantly notified
+ */
+export async function submitGameCancel(
+  roomCode: string,
+  reason: string = 'Cancelled by host'
+): Promise<void> {
+  if (!roomCode) return
+  const code = roomCode.trim().toUpperCase()
+  const now = Date.now()
+
+  const meta: CloudRoomMeta = {
+    isCancelled: true,
+    status: 'cancelled',
+    cancelledAt: now,
+    reason,
+  }
+
+  if (!memoryCache[code]) {
+    memoryCache[code] = { roomCode: code, scores: {}, updatedAt: now }
+  }
+  memoryCache[code].meta = meta
+  memoryCache[code].updatedAt = now
+
+  void removeLiveRoomFromCloud(code)
+
+  try {
+    const url = getCloudUrl(code, '/meta')
+    void fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(meta),
+    }).catch(() => {
+      void sendFallbackRelay(code, { type: 'GAME_CANCEL_BROADCAST', ...meta })
+    })
+  } catch {
+    void sendFallbackRelay(code, { type: 'GAME_CANCEL_BROADCAST', ...meta })
+  }
+}
+
+/**
  * Submit / sync a player's score to the authoritative cloud database and local state
  */
 export async function submitPlayerScore(
@@ -674,6 +717,13 @@ export function subscribeToRoom(
         category: data.category,
         duration: data.duration,
       }
+    } else if (data.isCancelled || data.status === 'cancelled') {
+      meta = {
+        isCancelled: true,
+        status: 'cancelled',
+        cancelledAt: data.cancelledAt,
+        reason: data.reason,
+      }
     }
 
     const rawScores = data.scores || (data.address ? { [data.address]: data } : null)
@@ -694,7 +744,7 @@ export function subscribeToRoom(
       }
     }
 
-    if (Object.keys(scores).length > 0 || txHash || meta?.isStarted) {
+    if (Object.keys(scores).length > 0 || txHash || meta?.isStarted || meta?.isCancelled || meta?.status === 'cancelled') {
       onUpdate(scores, txHash, meta)
     }
   }

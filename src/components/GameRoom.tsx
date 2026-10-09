@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, startTransition, useMemo } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2, Share2 } from 'lucide-react'
+import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2, Share2, Ban } from 'lucide-react'
 import { buildJoinUrl } from '@/App'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
@@ -10,6 +10,7 @@ import {
   useStartGame,
   useDeclareWinners,
   useCancelRoom,
+  useClaimRefund,
   useRoomInfo,
   useRoomPlayers,
   useRoomWinners,
@@ -38,8 +39,8 @@ import {
   saveRoomTxHash,
   getRoomTxHash,
 } from '@/lib/roomStorage'
-import { useRoomScores, broadcastRoomTxHash, broadcastGameStart } from '@/lib/roomSync'
-import { fetchAuthoritativeScores, fetchRoomMetadata, submitFinalLeaderboard } from '@/lib/roomDb'
+import { useRoomScores, broadcastRoomTxHash, broadcastGameStart, broadcastGameCancel } from '@/lib/roomSync'
+import { fetchAuthoritativeScores, fetchRoomMetadata, submitFinalLeaderboard, submitGameCancel } from '@/lib/roomDb'
 import { getUserProfile } from '@/lib/userProfile'
 import { recordWinnerPayout } from '@/lib/winnersStorage'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
@@ -103,7 +104,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     }
   }, [roomCode])
 
-  const { scores: liveRoomScores, playerDetails: livePlayerDetails, isGameStarted, gameMeta, syncMyScore } = useRoomScores(roomCode, activeAddress)
+  const { scores: liveRoomScores, playerDetails: livePlayerDetails, isGameStarted, isGameCancelled, cancelReason, gameMeta, syncMyScore } = useRoomScores(roomCode, activeAddress)
 
   const hostRoomCategory = getRoomCategory(roomCode)
   const resolvedCategory = cloudCategory || (gameMeta?.category as Category) || hostRoomCategory || (roomCode ? inferCategoryFromCode(roomCode) : null) || category || 'General Knowledge'
@@ -249,16 +250,40 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const { startGame, isPending: startPending, isConfirming: startConfirming, isSuccess: gameStarted } = useStartGame()
   const { declareWinners, isPending: declarePending, isConfirming: declareConfirming, isSuccess: declared, hash: declareHash } = useDeclareWinners()
   const { cancelRoom, isPending: cancelPending, isConfirming: cancelConfirming, isSuccess: cancelSuccess } = useCancelRoom()
+  const { claimRefund, isPending: refundPending, isConfirming: refundConfirming, isSuccess: refundSuccess } = useClaimRefund()
 
   const isWrongChain = chainId !== ARC_TESTNET_CHAIN_ID
+  const isRoomCancelled = (status === 3 || isGameCancelled) && !isHost
+  const hasNotifiedCancelRef = useRef(false)
 
   useEffect(() => {
     if (cancelSuccess) {
       toast.success('Room cancelled and funds refunded!')
+      void submitGameCancel(roomCode, 'Cancelled by host')
+      broadcastGameCancel(roomCode, 'Cancelled by host')
       clearActiveGame()
+      removePendingPayoutRoom(roomCode)
       onBack()
     }
-  }, [cancelSuccess, onBack])
+  }, [cancelSuccess, onBack, roomCode])
+
+  useEffect(() => {
+    if (refundSuccess) {
+      toast.success('USDC refund claimed successfully!')
+    }
+  }, [refundSuccess])
+
+  useEffect(() => {
+    if (isRoomCancelled && !hasNotifiedCancelRef.current) {
+      hasNotifiedCancelRef.current = true
+      toast.error('The host has cancelled this room', {
+        description: buyInNum > 0 ? 'Your entry fee is available for 100% refund.' : 'You can return to the lobby to join another room.',
+        duration: 8000,
+      })
+      clearActiveGame()
+      removePendingPayoutRoom(roomCode)
+    }
+  }, [isRoomCancelled, buyInNum, roomCode])
 
   const handleCancelRoom = () => {
     if (!confirm('Are you sure you want to cancel this room? All joined players and sponsored prize funds will be refunded 100% onchain.')) {
@@ -543,6 +568,95 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   }
 
   const currentQ = questions[qIndex]
+
+  // ─── Room Cancelled View for Non-Hosts ─────────────────────────────────────────
+  if (isRoomCancelled) {
+    return (
+      <div className="relative min-h-screen min-h-[100dvh] w-full flex items-center justify-center p-4 overflow-x-hidden" style={{ background: 'linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%)' }}>
+        <div className="pointer-events-none fixed inset-0 overflow-hidden">
+          <div style={{ position: 'absolute', top: '10%', left: '10%', width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, rgba(244,63,94,0.14) 0%, transparent 70%)', filter: 'blur(65px)' }} />
+          <div style={{ position: 'absolute', bottom: '15%', right: '10%', width: 280, height: 280, borderRadius: '50%', background: 'radial-gradient(circle, rgba(251,146,60,0.12) 0%, transparent 70%)', filter: 'blur(60px)' }} />
+        </div>
+
+        <motion.div
+          initial={{ scale: 0.94, opacity: 0, y: 12 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+          className="relative z-10 w-full max-w-md rounded-3xl p-6 sm:p-8 shadow-2xl border border-rose-200/90 bg-white/95 text-center overflow-hidden"
+        >
+          <div className="flex flex-col items-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-100 text-rose-600 shadow-inner mb-4 ring-8 ring-rose-50/80">
+              <Ban size={30} className="stroke-[2.5]" />
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 text-xs font-black uppercase tracking-wider mb-2 border border-rose-200/80">
+              <span>Room #{roomCode} Cancelled</span>
+            </div>
+
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              Game Cancelled by Host
+            </h2>
+
+            <p className="mt-2.5 text-xs sm:text-sm text-slate-600 font-medium max-w-sm leading-relaxed">
+              {buyInNum > 0
+                ? `The host has cancelled this trivia room. Your ${buyInHuman} USDC entry fee is safe and eligible for 100% onchain refund.`
+                : 'The host has cancelled this trivia room. No USDC entry fee was charged.'}
+            </p>
+
+            {buyInNum > 0 && (
+              <div className="mt-5 w-full p-4 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-3 text-left">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    Refund Available
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <TokenUSDC variant="branded" size={20} className="shrink-0" />
+                    <span className="text-sm sm:text-base font-black text-slate-900">{buyInHuman} USDC</span>
+                  </div>
+                </div>
+
+                {refundSuccess ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-xl">
+                    <Check size={15} className="stroke-[2.5]" /> Refunded
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => claimRefund(roomCode)}
+                    disabled={refundPending || refundConfirming}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-xs transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)' }}
+                  >
+                    {refundPending || refundConfirming ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>Claiming...</span>
+                      </>
+                    ) : (
+                      <span>Claim Refund</span>
+                    )}
+                  </button>
+                )}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                clearActiveGame()
+                removePendingPayoutRoom(roomCode)
+                onBack()
+              }}
+              className="mt-6 w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 px-5 text-sm font-bold text-white shadow-md transition-all hover:brightness-105 active:scale-95 cursor-pointer"
+              style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)' }}
+            >
+              <span>Return to Lobby</span>
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    )
+  }
 
   // ─── Lobby phase ─────────────────────────────────────────────────────────────
   if (phase === 'lobby') {

@@ -590,8 +590,8 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                   )}
 
                   {!isRoomOpen && !isAlreadyJoined && (
-                    <p className="mt-3 rounded-xl px-3.5 py-2.5 text-xs" style={{ background: 'rgba(186,43,76,0.07)', color: 'var(--danger)', border: '1px solid rgba(186,43,76,0.15)' }}>
-                      This room is no longer accepting new players.
+                    <p className="mt-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold" style={{ background: 'rgba(186,43,76,0.07)', color: 'var(--danger)', border: '1px solid rgba(186,43,76,0.15)' }}>
+                      {status === 3 ? 'This room has been cancelled by the host.' : 'This room is no longer accepting new players.'}
                     </p>
                   )}
 

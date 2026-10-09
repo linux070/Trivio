@@ -13,12 +13,19 @@ import {
   subscribeToRoom,
   submitAuthoritativeTxHash,
   submitGameStart,
+  submitGameCancel,
   type CloudRoomPlayer,
   type CloudRoomMeta,
 } from './roomDb'
 
 export interface RoomScoreSyncMessage {
-  type: 'SCORE_BROADCAST' | 'REQUEST_ROOM_SCORES' | 'SYNC_HEARTBEAT' | 'TX_HASH_BROADCAST' | 'GAME_START_BROADCAST'
+  type:
+    | 'SCORE_BROADCAST'
+    | 'REQUEST_ROOM_SCORES'
+    | 'SYNC_HEARTBEAT'
+    | 'TX_HASH_BROADCAST'
+    | 'GAME_START_BROADCAST'
+    | 'GAME_CANCEL_BROADCAST'
   roomCode: string
   address?: string
   score?: number
@@ -31,6 +38,7 @@ export interface RoomScoreSyncMessage {
     isFinished?: boolean
     category?: string
     duration?: number
+    reason?: string
   }
   timestamp: number
 }
@@ -57,6 +65,8 @@ export function useRoomScores(roomCode: string | null | undefined, myAddress?: s
   const [scores, setScores] = useState<Record<string, number>>(() => (code ? getRoomAllScores(code) : {}))
   const [playerDetails, setPlayerDetails] = useState<Record<string, PlayerRoomScore>>(() => (code ? getRoomAllPlayerScores(code) : {}))
   const [isGameStarted, setIsGameStarted] = useState(false)
+  const [isGameCancelled, setIsGameCancelled] = useState(false)
+  const [cancelReason, setCancelReason] = useState<string | undefined>(undefined)
   const [gameMeta, setGameMeta] = useState<{ startedAt?: number; category?: string; duration?: number } | null>(null)
 
   const myAddressRef = useRef(myAddress)
@@ -143,6 +153,9 @@ export function useRoomScores(roomCode: string | null | undefined, myAddress?: s
           category: data.options?.category,
           duration: data.options?.duration,
         })
+      } else if (data.type === 'GAME_CANCEL_BROADCAST' && data.roomCode === code) {
+        setIsGameCancelled(true)
+        setCancelReason(data.options?.reason || 'Cancelled by host')
       }
     }
 
@@ -159,7 +172,10 @@ export function useRoomScores(roomCode: string | null | undefined, myAddress?: s
         if (txHash) {
           saveRoomTxHash(code, txHash)
         }
-        if (meta?.isStarted || meta?.status === 'playing') {
+        if (meta?.isCancelled || meta?.status === 'cancelled') {
+          setIsGameCancelled(true)
+          setCancelReason(meta.reason || 'Cancelled by host')
+        } else if (meta?.isStarted || meta?.status === 'playing') {
           setIsGameStarted(true)
           setGameMeta({
             startedAt: meta.startedAt,
@@ -223,10 +239,35 @@ export function useRoomScores(roomCode: string | null | undefined, myAddress?: s
     scores,
     playerDetails,
     isGameStarted,
+    isGameCancelled,
+    cancelReason,
     gameMeta,
     refreshScores,
     syncMyScore,
   }
+}
+
+/**
+ * Broadcast game cancellation event across all devices, tabs, and browsers
+ */
+export function broadcastGameCancel(roomCode: string, reason: string = 'Cancelled by host'): void {
+  if (!roomCode) return
+  const code = roomCode.trim().toUpperCase()
+
+  if (globalChannel) {
+    try {
+      globalChannel.postMessage({
+        type: 'GAME_CANCEL_BROADCAST',
+        roomCode: code,
+        options: { reason },
+        timestamp: Date.now(),
+      })
+    } catch {
+      // ignore
+    }
+  }
+
+  void submitGameCancel(code, reason)
 }
 
 /**
