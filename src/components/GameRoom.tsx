@@ -660,42 +660,26 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
           transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
           className="relative w-full max-w-md rounded-2xl sm:rounded-3xl bg-white shadow-2xl border border-slate-200/90 p-6 sm:p-7 text-center"
         >
-          {/* Centered Static Caution Icon */}
-          <div className="flex items-center justify-center mx-auto mb-3 mt-1">
+          {/* Centered Static Cancelled Icon */}
+          <div className="flex items-center justify-center mx-auto mb-3.5 mt-1">
             <svg
               width="56"
               height="56"
               viewBox="0 0 48 48"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
-              className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 drop-shadow-sm"
+              className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 drop-shadow-xs"
             >
-              {/* Outer Yellow Glow / Rounded Triangle Base */}
+              {/* Solid Red Circle */}
+              <circle cx="24" cy="24" r="23" fill="#E11D48" />
+              {/* Bold White Rounded Cross */}
               <path
-                d="M20.536 6.536C22.074 3.872 25.926 3.872 27.464 6.536L44.785 36.536C46.324 39.2 44.398 42.533 41.321 42.533H6.679C3.602 42.533 1.676 39.2 3.215 36.536L20.536 6.536Z"
-                fill="#FFC700"
-              />
-              {/* Inner Black Border Triangle */}
-              <path
-                d="M20.536 6.536C22.074 3.872 25.926 3.872 27.464 6.536L44.785 36.536C46.324 39.2 44.398 42.533 41.321 42.533H6.679C3.602 42.533 1.676 39.2 3.215 36.536L20.536 6.536Z"
-                stroke="#18181B"
-                strokeWidth="2.5"
+                d="M16.5 16.5L31.5 31.5M31.5 16.5L16.5 31.5"
+                stroke="white"
+                strokeWidth="5"
+                strokeLinecap="round"
                 strokeLinejoin="round"
               />
-              {/* Inner Yellow Fill Triangle */}
-              <path
-                d="M21.402 8.036C22.556 6.038 25.444 6.038 26.598 8.036L43.919 38.036C45.073 40.034 43.629 42.533 41.321 42.533H6.679C4.371 42.533 2.927 40.034 4.081 38.036L21.402 8.036Z"
-                fill="#FFC700"
-              />
-              {/* Black Exclamation Mark Bar */}
-              <path
-                d="M24 16V27"
-                stroke="#18181B"
-                strokeWidth="4"
-                strokeLinecap="round"
-              />
-              {/* Black Exclamation Mark Dot */}
-              <circle cx="24" cy="34" r="2.25" fill="#18181B" />
             </svg>
           </div>
 
