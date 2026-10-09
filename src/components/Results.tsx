@@ -118,11 +118,15 @@ function PlayerIdentity({
   const { profile: onchainProfile } = useOnchainProfile(address)
   const localProfile = getUserProfile(normalized)
 
-  const username = localProfile?.username || onchainProfile?.username || generateRandomUsername(address)
+  const rawUsername = onchainProfile?.username || localProfile?.username || generateRandomUsername(address)
+  const username = rawUsername.replace(/^@/, '')
   const avatarUrl =
-    localProfile?.avatarUrl ||
     onchainProfile?.avatarUrl ||
-    getDiceBearAvatarUrl('bottts-neutral', address || username)
+    localProfile?.avatarUrl ||
+    getDiceBearAvatarUrl(
+      onchainProfile?.avatarStyle || localProfile?.avatarStyle || 'bottts-neutral',
+      onchainProfile?.avatarSeed || localProfile?.avatarSeed || address || username
+    )
 
   return (
     <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 text-left">

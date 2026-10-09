@@ -124,8 +124,8 @@ function PodiumWinnerCard({
     onchainProfile?.avatarUrl ||
     localProfile?.avatarUrl ||
     (winner.avatarSeed
-      ? getDiceBearAvatarUrl(localProfile?.avatarStyle || 'bottts-neutral', winner.avatarSeed)
-      : getDiceBearAvatarUrl('bottts-neutral', winner.address || rawUsername))
+      ? getDiceBearAvatarUrl(onchainProfile?.avatarStyle || localProfile?.avatarStyle || 'bottts-neutral', winner.avatarSeed)
+      : getDiceBearAvatarUrl(onchainProfile?.avatarStyle || localProfile?.avatarStyle || 'bottts-neutral', winner.address || rawUsername))
 
   return (
     <div
@@ -196,8 +196,8 @@ function RunnerUpRow({ entry }: { entry: LiveLeaderboardEntry }) {
     onchainProfile?.avatarUrl ||
     localProfile?.avatarUrl ||
     (entry.avatarSeed
-      ? getDiceBearAvatarUrl(localProfile?.avatarStyle || 'bottts-neutral', entry.avatarSeed)
-      : getDiceBearAvatarUrl('bottts-neutral', entry.address || rawUsername))
+      ? getDiceBearAvatarUrl(onchainProfile?.avatarStyle || localProfile?.avatarStyle || 'bottts-neutral', entry.avatarSeed)
+      : getDiceBearAvatarUrl(onchainProfile?.avatarStyle || localProfile?.avatarStyle || 'bottts-neutral', entry.address || rawUsername))
 
   return (
     <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 border border-slate-200/70 hover:bg-white transition-colors">
@@ -681,9 +681,29 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
     ? `${activeAddress.slice(0, 6)}...${activeAddress.slice(-4)}`
     : ''
   const localStoredProfile = getUserProfile(activeAddress)
-  const effectiveProfile = profile || localStoredProfile || getUserProfile() || (onchainProfile ? { username: onchainProfile.username, avatarUrl: onchainProfile.avatarUrl } : null)
+  const effectiveProfile: { username?: string; avatarUrl?: string; avatarStyle?: string; avatarSeed?: string } | null =
+    profile ||
+    localStoredProfile ||
+    (activeAddress ? getUserProfile(activeAddress) : getUserProfile()) ||
+    (onchainProfile
+      ? {
+          username: onchainProfile.username,
+          avatarUrl: onchainProfile.avatarUrl,
+          avatarSeed: onchainProfile.avatarSeed,
+          avatarStyle: onchainProfile.avatarStyle,
+        }
+      : null)
   const displayName = effectiveProfile?.username ? `@${effectiveProfile.username.replace(/^@/, '')}` : (shortAddr || 'player')
-  const effectiveAvatar = effectiveProfile?.avatarUrl || profile?.avatarUrl || localStoredProfile?.avatarUrl || (effectiveProfile?.username ? getDiceBearAvatarUrl(effectiveProfile?.avatarStyle || 'bottts-neutral', effectiveProfile?.avatarSeed || effectiveProfile.username) : '')
+  const effectiveAvatar =
+    effectiveProfile?.avatarUrl ||
+    profile?.avatarUrl ||
+    localStoredProfile?.avatarUrl ||
+    (effectiveProfile?.username
+      ? getDiceBearAvatarUrl(
+          effectiveProfile.avatarStyle || 'bottts-neutral',
+          effectiveProfile.avatarSeed || effectiveProfile.username
+        )
+      : '')
 
   return (
     <div className="relative" ref={dropdownRef}>

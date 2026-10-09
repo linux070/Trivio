@@ -90,7 +90,11 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
     const handleUpdate = (e: Event) => {
       const detail = (e as CustomEvent<{ address?: string; profile?: UserProfile }>).detail
       if (detail?.profile) {
-        if (!normalized || !detail.address || detail.address.toLowerCase() === normalized) {
+        if (!normalized) {
+          if (!detail.address) {
+            setLocalProfileState(detail.profile)
+          }
+        } else if (detail.address && detail.address.toLowerCase() === normalized) {
           setLocalProfileState(detail.profile)
         }
       }
@@ -180,9 +184,9 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
   }, [hasOnchainData, normalized, username, onchainAvatarUrl, onchainAvatarSeed, onchainAvatarStyle, onchainTimeMs, cloudProfileState])
 
   const effectiveProfile: OnchainProfileData | null = useMemo(() => {
-    const avatarUrl = cachedLocal?.avatarUrl || cloudProfileState?.avatarUrl || onchainAvatarUrl || getDiceBearAvatarUrl(cachedLocal?.avatarStyle || 'bottts-neutral', cachedLocal?.avatarSeed || username || 'trivio')
-    const avatarSeed = cachedLocal?.avatarSeed || cloudProfileState?.avatarSeed || onchainAvatarSeed || username || 'trivio'
+    const avatarSeed = cachedLocal?.avatarSeed || cloudProfileState?.avatarSeed || onchainAvatarSeed || username || normalized || 'player'
     const avatarStyle = cachedLocal?.avatarStyle || cloudProfileState?.avatarStyle || onchainAvatarStyle || 'bottts-neutral'
+    const avatarUrl = cachedLocal?.avatarUrl || cloudProfileState?.avatarUrl || onchainAvatarUrl || getDiceBearAvatarUrl(avatarStyle, avatarSeed)
 
     if (localIsNewer && cachedLocal) {
       return {

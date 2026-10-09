@@ -20,16 +20,19 @@ export function PlayerTag({ address, className = '', isHost = false }: PlayerTag
   const localProfile = getUserProfile(normalized)
 
   const rawUsername =
-    localProfile?.username ||
     onchainProfile?.username ||
+    localProfile?.username ||
     generateRandomUsername(address)
 
   const username = rawUsername.replace(/^@/, '')
 
   const avatarUrl =
-    localProfile?.avatarUrl ||
     onchainProfile?.avatarUrl ||
-    getDiceBearAvatarUrl('bottts-neutral', address || username)
+    localProfile?.avatarUrl ||
+    getDiceBearAvatarUrl(
+      onchainProfile?.avatarStyle || localProfile?.avatarStyle || 'bottts-neutral',
+      onchainProfile?.avatarSeed || localProfile?.avatarSeed || address || username
+    )
 
   return (
     <div className={`inline-flex items-center gap-2 py-0.5 select-none ${className}`}>

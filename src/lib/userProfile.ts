@@ -130,19 +130,6 @@ export function getUserProfile(address?: string): UserProfile | null {
           // parse failed
         }
       }
-      // If scoped profile is not yet stored but global active profile exists, migrate it
-      const globalRaw = localStorage.getItem(STORAGE_PROFILE_KEY)
-      if (globalRaw) {
-        try {
-          const parsed = JSON.parse(globalRaw) as UserProfile
-          if (parsed && parsed.username) {
-            localStorage.setItem(`trivio_profile_${lower}`, globalRaw)
-            return parsed
-          }
-        } catch {
-          // ignore
-        }
-      }
       return null
     }
     const raw = localStorage.getItem(STORAGE_PROFILE_KEY)
