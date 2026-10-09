@@ -76,7 +76,7 @@ export default function SoloPracticeModal({
     setAnswered(true)
     setSelectedIndex(-1)
     setLastPts(null)
-    setTimeout(() => advanceQuestion(qIndex), 2500)
+    setTimeout(() => advanceQuestion(qIndex), 1600)
   }
 
   const advanceQuestion = (currentIdx: number) => {
@@ -98,6 +98,7 @@ export default function SoloPracticeModal({
     if (timerRef.current) clearInterval(timerRef.current)
 
     const q = questions[qIndex]
+    if (!q) return
     const elapsed = Date.now() - answerStartRef.current
     setSelectedIndex(idx)
     setAnswered(true)
@@ -111,7 +112,7 @@ export default function SoloPracticeModal({
       setLastPts(null)
     }
 
-    setTimeout(() => advanceQuestion(qIndex), 2500)
+    setTimeout(() => advanceQuestion(qIndex), 1600)
   }
 
   const restartPractice = () => {

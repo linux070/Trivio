@@ -589,16 +589,9 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5" style={glass.inner}>
-                      <div className="flex flex-col gap-0.5 min-w-0 pr-2">
-                        <span className="text-xs" style={{ color: 'var(--muted)' }}>Game Mode</span>
-                        {subInfo?.tagline && (
-                          <span className="text-[11px] text-slate-500 font-medium truncate max-w-[150px] sm:max-w-[220px]">
-                            {subInfo.tagline}
-                          </span>
-                        )}
-                      </div>
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 border border-slate-200/90 shadow-2xs shrink-0">
-                        <span>{subInfo?.emoji ?? '🎮'}</span>
+                      <span className="text-xs" style={{ color: 'var(--muted)' }}>Game Mode</span>
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 border border-slate-200/90 shadow-2xs">
+                        <span>{CATEGORY_GROUPS.flatMap(g => g.subcategories).find(s => s.id === resolvedCategory)?.emoji ?? '🎮'}</span>
                         <span>{resolvedCategory}</span>
                       </span>
                     </div>
@@ -620,14 +613,14 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                       <span className="text-xs" style={{ color: 'var(--muted)' }}>Players</span>
                       <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--ink)' }}>
                         <Users size={13} style={{ color: 'var(--subtle)' }} />
-                        <span>Up to {maxPlayers ?? 4} Players</span>
+                        <span>Max {maxPlayers ?? 4} Players</span>
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5" style={glass.inner}>
-                      <span className="text-xs" style={{ color: 'var(--muted)' }}>Format</span>
+                      <span className="text-xs" style={{ color: 'var(--muted)' }}>Time</span>
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
-                        <span>5 Questions</span>
+                        <span>10 Questions</span>
                         <span className="text-slate-300">·</span>
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-white/95 px-2 py-0.5 rounded-md border border-slate-200/90 shadow-2xs">
                           <Clock size={11} className="text-purple-600 stroke-[2.5]" />

@@ -132,6 +132,8 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const initialPhase: GamePhase = (isMatchRoom && savedSession?.phase) ? savedSession.phase : (pendingPayoutMatch ? 'finished' : 'lobby')
   const initialScore: number = (isMatchRoom && typeof savedSession?.score === 'number') ? savedSession.score : (pendingPayoutMatch?.score ?? 0)
   const initialQIndex: number = (isMatchRoom && typeof savedSession?.qIndex === 'number' && savedSession.qIndex >= 0) ? savedSession.qIndex : 0
+  const initialAnswered: boolean = isMatchRoom && initialPhase === 'playing' ? Boolean(savedSession?.answered) : false
+  const initialSelectedIndex: number | null = isMatchRoom && initialPhase === 'playing' ? (savedSession?.selectedIndex ?? null) : null
 
   const [phase, setPhase] = useState<GamePhase>(initialPhase)
   const [questions, setQuestions] = useState<TriviaQuestion[]>(() => {
@@ -147,8 +149,8 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     return initialQIndex
   })
   const [timeLeft, setTimeLeft] = useState(roomDuration)
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
-  const [answered, setAnswered] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(initialSelectedIndex)
+  const [answered, setAnswered] = useState<boolean>(initialAnswered)
   const [score, setScore] = useState<number>(initialScore)
   const [lastPts, setLastPts] = useState<number | null>(null)
   const [lastCorrect, setLastCorrect] = useState<boolean | null>(null)
@@ -246,9 +248,9 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   // Memoize the profile so it doesn't trigger the useEffect infinite loop since it returns a new object via JSON.parse each time
   const localProfile = useMemo(() => rawProfile, [JSON.stringify(rawProfile)])
 
-  // Keep active game persisted with current phase, score, and question index for smooth resume/rejoin on refresh
+  // Keep active game persisted with current phase, score, question index, and chosen answer for anti-cheat resume
   useEffect(() => {
-    saveActiveGame(roomCode, resolvedCategory, isHost, phase, score, qIndex)
+    saveActiveGame(roomCode, resolvedCategory, isHost, phase, score, qIndex, answered, selectedIndex)
     if (activeAddress && typeof score === 'number') {
       saveRoomUserScore(roomCode, activeAddress, score, {
         username: localProfile?.username,
@@ -261,7 +263,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     if (prizeForPayouts && Number(prizeForPayouts) > 0) {
       saveRoomPrize(roomCode, prizeForPayouts)
     }
-  }, [roomCode, resolvedCategory, isHost, phase, score, qIndex, activeAddress, prizeForPayouts, localProfile])
+  }, [roomCode, resolvedCategory, isHost, phase, score, qIndex, activeAddress, prizeForPayouts, localProfile, answered, selectedIndex])
 
   const { startGame, isPending: startPending, isConfirming: startConfirming, isSuccess: gameStarted } = useStartGame()
   const { declareWinners, isPending: declarePending, isConfirming: declareConfirming, isSuccess: declared, hash: declareHash } = useDeclareWinners()
@@ -415,41 +417,70 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   useEffect(() => {
     const isGameActive = gameStarted || status === 1 || isGameStarted
     if (isGameActive && phase === 'lobby') {
-      toast.success('🚀 Game Starting Now!', {
-        description: `${resolvedCategory} · 10 Questions · Good luck!`,
-        duration: 4000,
-      })
       const activeCategory = (gameMeta?.category as Category) || cloudCategory || resolvedCategory
       const qs = getQuestions(activeCategory, 10, roomCode)
+      const existing = getActiveGame()
+      const isCurrentSession = existing?.roomCode === roomCode.trim().toUpperCase()
+      const resumeScore = isCurrentSession && typeof existing?.score === 'number' ? existing.score : 0
+      const resumeQIndex = isCurrentSession && typeof existing?.qIndex === 'number' ? existing.qIndex : 0
+
+      if (resumeQIndex === 0 && resumeScore === 0) {
+        toast.success('🚀 Game Starting Now!', {
+          description: `${activeCategory} · 10 Questions · Good luck!`,
+          duration: 4000,
+        })
+      }
+
       startTransition(() => {
         setQuestions(qs)
-        setQIndex(0)
+        setQIndex(resumeQIndex)
         setTimeLeft(roomDuration)
         setAnswered(false)
         setSelectedIndex(null)
-        setScore(0)
+        setScore(resumeScore)
         setPhase('playing')
       })
       answerStartRef.current = Date.now()
-      saveActiveGame(roomCode, activeCategory, isHost, 'playing', 0, 0)
+      saveActiveGame(roomCode, activeCategory, isHost, 'playing', resumeScore, resumeQIndex)
     }
   }, [gameStarted, status, isGameStarted, phase, resolvedCategory, cloudCategory, gameMeta?.category, roomCode, roomDuration, isHost])
 
-  // Timer for questions
+  // Countdown timer for questions (ticks while !answered)
   useEffect(() => {
     if (phase !== 'playing' || answered) return
+
     if (timeLeft <= 0) {
-      startTransition(() => {
-        setAnswered(true)
-        setLastCorrect(false)
-        setLastPts(null)
-      })
-      const t = setTimeout(() => advanceQuestion(qIndex, questions), 2500)
-      return () => clearTimeout(t)
+      setAnswered(true)
+      setSelectedIndex(-1)
+      setLastCorrect(false)
+      setLastPts(null)
+      saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', score, qIndex, true, -1)
+      if (activeAddress) {
+        syncMyScore(score, {
+          username: localProfile?.username,
+          avatarSeed: localProfile?.avatarSeed,
+          avatarUrl: localProfile?.avatarUrl,
+          qIndex,
+          isFinished: false,
+        })
+      }
+      return
     }
-    const t = setTimeout(() => setTimeLeft(s => s - 1), 1000)
-    return () => clearTimeout(t)
-  }, [timeLeft, phase, answered, qIndex, questions])
+
+    const t = setInterval(() => {
+      setTimeLeft(s => Math.max(0, s - 1))
+    }, 1000)
+    return () => clearInterval(t)
+  }, [phase, answered, timeLeft, roomCode, resolvedCategory, isHost, score, qIndex, activeAddress, localProfile, syncMyScore])
+
+  // Automatically advance to next question once answered (after showing correct answer feedback)
+  useEffect(() => {
+    if (phase !== 'playing' || !answered) return
+    const timer = setTimeout(() => {
+      advanceQuestion(qIndex, questions)
+    }, 1600)
+    return () => clearTimeout(timer)
+  }, [phase, answered, qIndex, questions])
 
   // Winner payout synchronization (for host who triggered payout or guest receiving finished status)
   useEffect(() => {
@@ -567,12 +598,21 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       setLastCorrect(null)
       setLastPts(null)
       answerStartRef.current = Date.now()
-      saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', score, next)
+      saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', score, next, false, null)
+      if (activeAddress) {
+        syncMyScore(score, {
+          username: localProfile?.username,
+          avatarSeed: localProfile?.avatarSeed,
+          avatarUrl: localProfile?.avatarUrl,
+          qIndex: next,
+          isFinished: false,
+        })
+      }
     }
   }
 
   const handleAnswer = (idx: number) => {
-    if (answered) return
+    if (answered || phase !== 'playing') return
     const q = questions[qIndex]
     if (!q) return
     const elapsed = Date.now() - answerStartRef.current
@@ -591,7 +631,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       setLastCorrect(false)
     }
 
-    saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', newScore, qIndex)
+    saveActiveGame(roomCode, resolvedCategory, isHost, 'playing', newScore, qIndex, true, idx)
     if (activeAddress) {
       syncMyScore(newScore, {
         username: localProfile?.username,
@@ -601,7 +641,6 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
         isFinished: false,
       })
     }
-    setTimeout(() => advanceQuestion(qIndex, questions), 2500)
   }
 
   const handleStartGame = () => {
