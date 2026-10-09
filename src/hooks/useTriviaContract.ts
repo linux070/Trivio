@@ -162,6 +162,16 @@ export const TRIVIA_ABI = [
     ],
     outputs: [{ name: '', type: 'bool' }],
   },
+  {
+    name: 'pendingRefunds',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'roomId', type: 'bytes32' },
+      { name: 'player', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
 ] as const
 
 // ── Helper: room code → bytes32 ───────────────────────────────────────────────
@@ -240,6 +250,41 @@ export function useRoomWinners(code: string | null) {
     chainId: ARC_TESTNET_CHAIN_ID,
     query: { enabled: Boolean(TRIVIA_GAME_ADDRESS) && Boolean(roomId) },
   })
+}
+
+export function usePendingRefund(code: string | null, playerAddress?: `0x${string}`) {
+  const roomId = code ? roomCodeToBytes32(code) : undefined
+  const { data: refundAmount, refetch } = useReadContract({
+    address: TRIVIA_GAME_ADDRESS ?? undefined,
+    abi: TRIVIA_ABI,
+    functionName: 'pendingRefunds',
+    args: roomId && playerAddress ? [roomId, playerAddress] : undefined,
+    chainId: ARC_TESTNET_CHAIN_ID,
+    query: {
+      enabled: Boolean(TRIVIA_GAME_ADDRESS) && Boolean(roomId) && Boolean(playerAddress),
+      refetchInterval: 2000,
+    },
+  })
+
+  return { refundAmount: refundAmount !== undefined ? (refundAmount as bigint) : undefined, refetch }
+}
+
+export function markRoomRefunded(roomCode: string, address: string, hash?: string) {
+  if (!roomCode || !address) return
+  try {
+    localStorage.setItem(`trivio_refunded_${roomCode.trim().toLowerCase()}_${address.trim().toLowerCase()}`, hash || 'true')
+  } catch {}
+}
+
+export function getRoomRefundedStatus(roomCode: string, address?: string): { isRefunded: boolean; txHash?: string } {
+  if (!roomCode || !address) return { isRefunded: false }
+  try {
+    const val = localStorage.getItem(`trivio_refunded_${roomCode.trim().toLowerCase()}_${address.trim().toLowerCase()}`)
+    if (!val) return { isRefunded: false }
+    return { isRefunded: true, txHash: val !== 'true' && val.startsWith('0x') ? val : undefined }
+  } catch {
+    return { isRefunded: false }
+  }
 }
 
 export function useRoomPlayers(code: string | null, pollInterval: number = 1500) {

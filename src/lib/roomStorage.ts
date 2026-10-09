@@ -845,6 +845,105 @@ export function getPendingPayoutRooms(hostAddress?: string): PendingPayoutRoom[]
   }
 }
 
+const STORAGE_PENDING_REFUND_ROOMS_KEY = 'trivio_pending_refund_rooms'
+
+export interface PendingRefundRoom {
+  roomCode: string
+  category: Category
+  buyIn: string
+  cancelledAt: number
+  playerAddress: string
+}
+
+/** Save a cancelled buy-in room awaiting player refund */
+export function savePendingRefundRoom(room: PendingRefundRoom): void {
+  if (!room?.roomCode) return
+  const code = room.roomCode.trim().toUpperCase()
+  try {
+    const list = getPendingRefundRooms()
+    const filtered = list.filter(r => r.roomCode !== code || (room.playerAddress && r.playerAddress?.toLowerCase() !== room.playerAddress.toLowerCase()))
+    filtered.unshift({ ...room, roomCode: code })
+    const sliced = filtered.slice(0, 10)
+    localStorage.setItem(STORAGE_PENDING_REFUND_ROOMS_KEY, JSON.stringify(sliced))
+    sessionStorage.setItem(STORAGE_PENDING_REFUND_ROOMS_KEY, JSON.stringify(sliced))
+  } catch {
+    // ignore
+  }
+}
+
+/** Remove a room from pending refunds once claimed */
+export function removePendingRefundRoom(roomCode: string, playerAddress?: string): void {
+  if (!roomCode) return
+  const code = roomCode.trim().toUpperCase()
+  try {
+    const list = getPendingRefundRooms()
+    const filtered = list.filter(r => {
+      if (r.roomCode !== code) return true
+      if (playerAddress && r.playerAddress && r.playerAddress.toLowerCase() !== playerAddress.toLowerCase()) return true
+      return false
+    })
+    localStorage.setItem(STORAGE_PENDING_REFUND_ROOMS_KEY, JSON.stringify(filtered))
+    sessionStorage.setItem(STORAGE_PENDING_REFUND_ROOMS_KEY, JSON.stringify(filtered))
+  } catch {
+    // ignore
+  }
+}
+
+/** Get list of pending refund rooms for a player */
+export function getPendingRefundRooms(playerAddress?: string): PendingRefundRoom[] {
+  try {
+    const raw =
+      sessionStorage.getItem(STORAGE_PENDING_REFUND_ROOMS_KEY) ||
+      localStorage.getItem(STORAGE_PENDING_REFUND_ROOMS_KEY)
+    if (!raw) return []
+    const list = JSON.parse(raw) as PendingRefundRoom[]
+    if (!Array.isArray(list)) return []
+    const valid = list.filter(r => {
+      if (!r.roomCode) return false
+      // Expire after 7 days
+      if (Date.now() - (r.cancelledAt || 0) > 7 * 24 * 60 * 60 * 1000) return false
+      if (playerAddress && r.playerAddress && playerAddress !== '0x0000000000000000000000000000000000000000') {
+        if (r.playerAddress.toLowerCase() !== playerAddress.toLowerCase()) {
+          return false
+        }
+      }
+      return true
+    })
+    return valid
+  } catch {
+    return []
+  }
+}
+
+export function saveRoomCancelledState(roomCode: string, isCancelled: boolean = true): void {
+  if (!roomCode) return
+  const code = roomCode.trim().toUpperCase()
+  try {
+    if (isCancelled) {
+      sessionStorage.setItem(`trivio_room_cancelled_${code}`, 'true')
+      localStorage.setItem(`trivio_room_cancelled_${code}`, 'true')
+    } else {
+      sessionStorage.removeItem(`trivio_room_cancelled_${code}`)
+      localStorage.removeItem(`trivio_room_cancelled_${code}`)
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function isSavedRoomCancelled(roomCode: string): boolean {
+  if (!roomCode) return false
+  const code = roomCode.trim().toUpperCase()
+  try {
+    return (
+      sessionStorage.getItem(`trivio_room_cancelled_${code}`) === 'true' ||
+      localStorage.getItem(`trivio_room_cancelled_${code}`) === 'true'
+    )
+  } catch {
+    return false
+  }
+}
+
 /** Store pending join details across auth/onboarding transitions */
 export function setPendingJoin(roomCode: string, category?: Category): void {
   try {

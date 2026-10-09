@@ -60,8 +60,12 @@ import {
   saveRoomCategory,
   saveActiveGame,
   getPendingPayoutRooms,
+  getPendingRefundRooms,
+  removePendingRefundRoom,
+  saveRoomCancelledState,
   type ActiveGameSession,
   type PendingPayoutRoom,
+  type PendingRefundRoom,
 } from '@/lib/roomStorage'
 import { useLiveRooms } from '@/hooks/useLiveRooms'
 import { useLiveWinners } from '@/hooks/useLiveWinners'
@@ -1095,9 +1099,11 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
   const activeAddress = wagmiAddress || user?.wallet?.address || ''
 
   const [pendingPayouts, setPendingPayouts] = useState<PendingPayoutRoom[]>(() => getPendingPayoutRooms(activeAddress))
+  const [pendingRefunds, setPendingRefunds] = useState<PendingRefundRoom[]>(() => getPendingRefundRooms(activeAddress))
 
   useEffect(() => {
     setPendingPayouts(getPendingPayoutRooms(activeAddress))
+    setPendingRefunds(getPendingRefundRooms(activeAddress))
   }, [activeAddress, activeSession])
 
   // Find the group that contains the initial/selected category
@@ -1197,6 +1203,65 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="w-full space-y-4"
         >
+          {/* ── Player Pending Refund Reminder Banner ── */}
+          {pendingRefunds.length > 0 && onContinueGame && (
+            <div className="space-y-2">
+              {pendingRefunds.map((pending) => (
+                <motion.div
+                  key={`pending-refund-${pending.roomCode}`}
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  className="relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-rose-500/15 via-rose-500/8 to-amber-500/10 p-3.5 sm:p-4 border border-rose-200/90 shadow-xs transition-all"
+                >
+                  <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+                    <div className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500 text-white shadow-xs">
+                      <AlertCircle size={20} className="stroke-[2.2]" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs sm:text-sm font-black text-slate-900 tracking-tight">
+                          {pending.roomCode}
+                        </span>
+                        <span className="inline-flex items-center text-[10px] sm:text-[11px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200/80">
+                          REFUND AVAILABLE
+                        </span>
+                      </div>
+                      <p className="text-[11px] sm:text-xs text-slate-600 truncate mt-0.5 font-medium">
+                        {pending.buyIn ? `$${pending.buyIn} USDC entry fee · ` : ''}Room was cancelled. Claim your 100% refund!
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto w-full sm:w-auto justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        saveRoomCancelledState(pending.roomCode, true)
+                        onContinueGame(pending.roomCode, pending.category)
+                      }}
+                      className="inline-flex items-center justify-center rounded-xl px-3.5 sm:px-4 py-2 text-xs font-bold text-white shadow-xs transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600"
+                    >
+                      <span>Claim Refund</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        removePendingRefundRoom(pending.roomCode, activeAddress)
+                        setPendingRefunds(getPendingRefundRooms(activeAddress))
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                      title="Dismiss reminder"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+
           {/* ── Host Pending Payouts Fallback Reminder ── */}
           {pendingPayouts.length > 0 && onContinueGame && (
             <div className="space-y-2">
