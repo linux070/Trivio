@@ -300,7 +300,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   useEffect(() => {
     const isGameActive = gameStarted || status === 1 || isGameStarted
     if (isGameActive && phase === 'lobby') {
-      toast.success('Game started!')
+      toast.success('🚀 Game Starting Now!', {
+        description: `${resolvedCategory} · 10 Questions · Good luck!`,
+        duration: 4000,
+      })
       const activeCategory = (gameMeta?.category as Category) || cloudCategory || resolvedCategory
       const qs = getQuestions(activeCategory, 10, roomCode)
       startTransition(() => {
@@ -488,10 +491,11 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
   const handleStartGame = () => {
     if (isWrongChain) { switchChain({ chainId: ARC_TESTNET_CHAIN_ID }); return }
+    broadcastGameStart(roomCode, resolvedCategory, roomDuration)
     startGame(roomCode)
   }
 
-  // Once the host's start transaction is confirmed onchain, broadcast to all players
+  // Once the host's start transaction is confirmed onchain, guarantee redundant broadcast to all players
   useEffect(() => {
     if (gameStarted && isHost) {
       broadcastGameStart(roomCode, resolvedCategory, roomDuration)

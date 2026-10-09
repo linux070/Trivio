@@ -23,6 +23,18 @@ const FIREBASE_HOST = (
 
 const CLOUD_PROFILES_URL = `${FIREBASE_HOST}/profiles`
 
+// BroadcastChannel for instant cross-tab profile and avatar synchronization
+export const profileSyncChannel: BroadcastChannel | null = (() => {
+  try {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      return new BroadcastChannel('trivio_profile_sync_channel')
+    }
+  } catch {
+    // ignore
+  }
+  return null
+})()
+
 function sanitizeAddressKey(address: string): string {
   return address.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
 }
@@ -36,7 +48,10 @@ export async function fetchCloudProfile(address: string): Promise<UserProfile | 
   }
   const key = sanitizeAddressKey(address)
   try {
-    const res = await fetch(`${CLOUD_PROFILES_URL}/${key}.json`)
+    const res = await fetch(`${CLOUD_PROFILES_URL}/${key}.json?_t=${Date.now()}`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    })
     if (!res.ok) return null
     const data = await res.json()
     if (data && (data.avatarUrl || data.avatarSeed || data.username)) {
@@ -165,13 +180,23 @@ export function saveUserProfile(profile: UserProfile, address?: string): void {
       // Fire-and-forget off-chain cloud sync
       void syncProfileToCloud(stamped, address).catch(() => {})
     }
-    // Broadcast event across same-window components
+    // Broadcast event across same-window components & cross-tab channels
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('trivio_profile_updated', {
           detail: { address: address?.toLowerCase(), profile: stamped },
         })
       )
+    }
+    if (profileSyncChannel) {
+      try {
+        profileSyncChannel.postMessage({
+          address: address?.toLowerCase(),
+          profile: stamped,
+        })
+      } catch {
+        // ignore
+      }
     }
   } catch (err) {
     console.error('Failed to save user profile:', err)

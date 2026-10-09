@@ -1,7 +1,14 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { ARC_TESTNET_CHAIN_ID, TRIVIO_PROFILE_REGISTRY_ADDRESS } from '@/config'
-import { getUserProfile, saveUserProfile, getDiceBearAvatarUrl, fetchCloudProfile, type UserProfile } from '@/lib/userProfile'
+import {
+  getUserProfile,
+  saveUserProfile,
+  getDiceBearAvatarUrl,
+  fetchCloudProfile,
+  profileSyncChannel,
+  type UserProfile,
+} from '@/lib/userProfile'
 
 export const PROFILE_REGISTRY_ABI = [
   {
@@ -85,7 +92,7 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
   )
   const [cloudProfileState, setCloudProfileState] = useState<UserProfile | null>(null)
 
-  // Listen for local profile updates across the entire app
+  // Listen for local and cross-tab profile updates across the entire app
   useEffect(() => {
     const handleUpdate = (e: Event) => {
       const detail = (e as CustomEvent<{ address?: string; profile?: UserProfile }>).detail
@@ -99,9 +106,34 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
         }
       }
     }
+
+    const handleChannelMessage = (e: MessageEvent) => {
+      const data = e.data as { address?: string; profile?: UserProfile } | undefined
+      if (data?.profile) {
+        if (!normalized) {
+          if (!data.address) {
+            setLocalProfileState(data.profile)
+          }
+        } else if (data.address && data.address.toLowerCase() === normalized) {
+          setLocalProfileState(data.profile)
+        }
+      }
+    }
+
     if (typeof window !== 'undefined') {
       window.addEventListener('trivio_profile_updated', handleUpdate)
-      return () => window.removeEventListener('trivio_profile_updated', handleUpdate)
+    }
+    if (profileSyncChannel) {
+      profileSyncChannel.addEventListener('message', handleChannelMessage)
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('trivio_profile_updated', handleUpdate)
+      }
+      if (profileSyncChannel) {
+        profileSyncChannel.removeEventListener('message', handleChannelMessage)
+      }
     }
   }, [normalized])
 
@@ -111,31 +143,43 @@ export function useOnchainProfile(address?: string, chainId: number = ARC_TESTNE
     setLocalProfileState(p)
   }, [normalized])
 
-  // Asynchronously query cloud storage to restore latest avatar if local storage was cleared
+  // Continuously query cloud storage to keep avatar in sync with other players in real-time
   useEffect(() => {
     if (!normalized) return
     let isMounted = true
-    fetchCloudProfile(normalized).then((cloud) => {
-      if (!isMounted || !cloud) return
-      setCloudProfileState(cloud)
-      const current = getUserProfile(normalized)
-      // If no local profile exists (cache cleared) or cloud has newer avatar, restore it
-      if (!current || (cloud.updatedAt && (!current.updatedAt || cloud.updatedAt > current.updatedAt))) {
-        const merged: UserProfile = {
-          username: current?.username || cloud.username || '',
-          avatarUrl: cloud.avatarUrl || current?.avatarUrl || getDiceBearAvatarUrl(cloud.avatarStyle || 'bottts-neutral', cloud.avatarSeed || 'trivio'),
-          avatarSeed: cloud.avatarSeed || current?.avatarSeed || 'trivio',
-          avatarStyle: cloud.avatarStyle || current?.avatarStyle || 'bottts-neutral',
-          createdAt: cloud.createdAt || Date.now(),
-          updatedAt: cloud.updatedAt || Date.now(),
-          isOnchainVerified: current?.isOnchainVerified ?? cloud.isOnchainVerified,
+
+    const syncCloud = () => {
+      fetchCloudProfile(normalized).then((cloud) => {
+        if (!isMounted || !cloud) return
+        setCloudProfileState((prev) => {
+          if (!prev || (cloud.updatedAt && cloud.updatedAt > (prev.updatedAt || 0)) || cloud.avatarUrl !== prev.avatarUrl) {
+            return cloud
+          }
+          return prev
+        })
+        const current = getUserProfile(normalized)
+        if (!current || (cloud.updatedAt && (!current.updatedAt || cloud.updatedAt > current.updatedAt))) {
+          const merged: UserProfile = {
+            username: current?.username || cloud.username || '',
+            avatarUrl: cloud.avatarUrl || current?.avatarUrl || getDiceBearAvatarUrl(cloud.avatarStyle || 'bottts-neutral', cloud.avatarSeed || normalized || 'player'),
+            avatarSeed: cloud.avatarSeed || current?.avatarSeed || normalized || 'player',
+            avatarStyle: cloud.avatarStyle || current?.avatarStyle || 'bottts-neutral',
+            createdAt: cloud.createdAt || Date.now(),
+            updatedAt: cloud.updatedAt || Date.now(),
+            isOnchainVerified: current?.isOnchainVerified ?? cloud.isOnchainVerified,
+          }
+          saveUserProfile(merged, normalized)
+          setLocalProfileState(merged)
         }
-        saveUserProfile(merged, normalized)
-        setLocalProfileState(merged)
-      }
-    })
+      })
+    }
+
+    syncCloud()
+    const interval = setInterval(syncCloud, 2500)
+
     return () => {
       isMounted = false
+      clearInterval(interval)
     }
   }, [normalized])
 
