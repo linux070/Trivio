@@ -16,7 +16,6 @@ import {
   parseUSDC,
   type RoomTuple,
 } from '@/hooks/useTriviaContract'
-import { PlayerTag } from '@/components/PlayerTag'
 import { ARC_TESTNET_CHAIN_ID, TRIVIA_GAME_ADDRESS } from '@/config'
 import { type Category, CATEGORY_GROUPS } from '@/lib/questions'
 import {
@@ -33,6 +32,7 @@ import {
   extractRoomCode,
   getRoomDuration,
   saveRoomDuration,
+  saveActiveGame,
   saveCachedRoomSnapshot,
   getCachedRoomSnapshot,
 } from '@/lib/roomStorage'
@@ -450,20 +450,20 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   }
 
   const handleJoin = async () => {
-    if (isWrongChain) { switchChain({ chainId: ARC_TESTNET_CHAIN_ID }); return }
-    if (!checkedCode) return
+    const targetCode = (checkedCode || input || '').trim().toUpperCase()
+    if (!targetCode) return
 
-    let catToUse = hostCategory || getRoomCategory(checkedCode)
+    let catToUse = hostCategory || getRoomCategory(targetCode)
     if (!catToUse) {
-      const meta = await fetchRoomMetadata(checkedCode)
+      const meta = await fetchRoomMetadata(targetCode)
       if (meta?.category) {
         catToUse = meta.category
         setHostCategory(meta.category)
-        saveRoomCategory(checkedCode, meta.category)
+        saveRoomCategory(targetCode, meta.category)
       }
     }
-    const finalCat = catToUse || (checkedCode ? inferCategoryFromCode(checkedCode) : null) || 'General Knowledge'
-    saveRoomCategory(checkedCode, finalCat)
+    const finalCat = catToUse || (targetCode ? inferCategoryFromCode(targetCode) : null) || 'General Knowledge'
+    saveRoomCategory(targetCode, finalCat)
 
     if (isAlreadyJoined) {
       try {
@@ -471,10 +471,20 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
         localStorage.removeItem(STORAGE_JOIN_CODE_KEY)
       } catch {}
       clearPendingJoin()
-      onJoined(checkedCode, finalCat)
+      saveActiveGame(targetCode, finalCat, isHost)
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', `#/game/${targetCode}`)
+      }
+      onJoined(targetCode, finalCat)
       return
     }
-    joinRoom(checkedCode)
+
+    if (isWrongChain && switchChain) {
+      switchChain({ chainId: ARC_TESTNET_CHAIN_ID })
+      return
+    }
+
+    joinRoom(targetCode)
   }
 
   const handleBack = () => {
@@ -681,41 +691,6 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                         )
                       })()}
                     </div>
-
-                    {/* Host & Joined Players Section */}
-                    <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 rounded-2xl p-3 sm:p-3.5" style={glass.inner}>
-                      {/* Host Column */}
-                      <div className="flex flex-col gap-1 min-w-0 pr-1 sm:pr-0">
-                        <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                          Host
-                        </span>
-                        <div className="min-w-0 truncate pt-0.5">
-                          {host && host !== '0x0000000000000000000000000000000000000000' ? (
-                            <PlayerTag address={host} />
-                          ) : (
-                            <span className="text-xs text-slate-400 font-medium">Pending...</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Joined Players Column */}
-                      <div className="flex flex-col gap-1 min-w-0 border-l border-slate-200/70 pl-2.5 sm:pl-3.5">
-                        <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 truncate">
-                          Joined Players ({effectivePlayersList.length}/{maxPlayersNum})
-                        </span>
-                        {effectivePlayersList.length > 0 ? (
-                          <div className="flex flex-wrap items-center gap-x-2.5 sm:gap-x-3 gap-y-1 pt-0.5 min-w-0">
-                            {effectivePlayersList.map((pAddr) => (
-                              <PlayerTag key={pAddr} address={pAddr} />
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-400 font-medium pt-0.5">
-                            No players joined yet
-                          </span>
-                        )}
-                      </div>
-                    </div>
                   </div>
 
                   {balanceHuman !== null && !isAlreadyJoined && (
@@ -756,8 +731,9 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                   {/* Rejoin / Continue Button for players already joined */}
                   {isAlreadyJoined && (
                     <button
+                      type="button"
                       onClick={handleJoin}
-                      className="mt-3.5 flex w-full items-center justify-center rounded-2xl py-4 text-sm font-semibold shadow-md transition-all hover:brightness-105 active:scale-[0.99] cursor-pointer"
+                      className="mt-3.5 flex w-full items-center justify-center rounded-2xl py-4 text-sm font-semibold shadow-md transition-all hover:brightness-105 active:scale-[0.99] cursor-pointer touch-manipulation"
                       style={{ background: 'var(--accent)', color: 'white' }}
                     >
                       Continue to Game
