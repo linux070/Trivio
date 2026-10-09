@@ -261,7 +261,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const { refundAmount } = usePendingRefund(roomCode, activeAddress as `0x${string}` | undefined)
 
   const cachedRefund = useMemo(() => getRoomRefundedStatus(roomCode, activeAddress), [roomCode, activeAddress])
-  const isAlreadyRefunded = refundSuccess || cachedRefund.isRefunded || (Boolean(status === 3 && isPlayer && refundAmount !== undefined && refundAmount === 0n && cachedRefund.isRefunded))
+  const isAlreadyRefunded = refundSuccess || cachedRefund.isRefunded || (Boolean(status === 3 && !isHost && refundAmount !== undefined && refundAmount === 0n && cachedRefund.isRefunded))
   const effectiveRefundTxHash = refundHash || cachedRefund.txHash
 
   const isWrongChain = chainId !== ARC_TESTNET_CHAIN_ID

@@ -1,5 +1,6 @@
 import type { Category } from './questions'
 import { ALL_CATEGORIES } from './questions'
+import { submitRoomCategory } from './roomDb'
 
 const STORAGE_ROOM_CAT_PREFIX = 'trivio_room_cat_'
 const STORAGE_ROOM_DUR_PREFIX = 'trivio_room_dur_'
