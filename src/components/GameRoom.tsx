@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, startTransition, useMemo } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
-import { motion } from 'framer-motion'
-import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2, Share2, Ban } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2, Share2, Ban, AlertTriangle } from 'lucide-react'
 import { buildJoinUrl } from '@/App'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
@@ -285,10 +285,9 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     }
   }, [isRoomCancelled, buyInNum, roomCode])
 
-  const handleCancelRoom = () => {
-    if (!confirm('Are you sure you want to cancel this room? All joined players and sponsored prize funds will be refunded 100% onchain.')) {
-      return
-    }
+  const [showCancelModal, setShowCancelModal] = useState(false)
+
+  const handleConfirmCancel = () => {
     if (isWrongChain) {
       switchChain({ chainId: ARC_TESTNET_CHAIN_ID })
       return
@@ -905,7 +904,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
                 <button
                   type="button"
-                  onClick={handleCancelRoom}
+                  onClick={() => setShowCancelModal(true)}
                   disabled={startPending || startConfirming || cancelPending || cancelConfirming}
                   className="w-full rounded-2xl py-2.5 px-4 text-xs sm:text-sm font-semibold text-slate-500 hover:text-rose-600 bg-white/80 hover:bg-rose-50/90 border border-slate-200/80 hover:border-rose-200 transition-all duration-150 disabled:opacity-40 cursor-pointer active:scale-[0.99] flex items-center justify-center gap-1.5 shadow-2xs group"
                   title="Cancel room and refund escrowed funds"
@@ -951,6 +950,94 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
             )}
           </div>
         </div>
+
+        {/* ── Beautiful Realtime Host Cancellation Modal ── */}
+        <AnimatePresence>
+          {showCancelModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md"
+              onClick={() => {
+                if (!cancelPending && !cancelConfirming) setShowCancelModal(false)
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.92, opacity: 0, y: 12 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.94, opacity: 0, y: 10 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                onClick={(e) => e.stopPropagation()}
+                className="relative z-10 w-full max-w-md rounded-3xl p-6 sm:p-7 shadow-2xl border border-rose-200/90 bg-white text-center overflow-hidden"
+              >
+                {/* Decorative aura */}
+                <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-48 h-48 rounded-full bg-rose-400/20 blur-3xl pointer-events-none" />
+
+                <div className="flex flex-col items-center relative z-10">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-100 text-rose-600 shadow-inner mb-3.5 ring-8 ring-rose-50/80">
+                    <AlertTriangle size={28} className="stroke-[2.5]" />
+                  </div>
+
+                  <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-rose-50 text-rose-700 text-xs font-black uppercase tracking-wider mb-2 border border-rose-200/80">
+                    <span>Cancel Room #{roomCode}</span>
+                  </div>
+
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    Cancel This Game Room?
+                  </h3>
+
+                  <p className="mt-2 text-xs sm:text-sm text-slate-600 font-medium max-w-sm leading-relaxed">
+                    Are you sure you want to cancel? All joined players and sponsored funds will be refunded <strong className="text-slate-900 font-bold">100% onchain</strong> immediately.
+                  </p>
+
+                  <div className="mt-4 w-full p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-left">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total Pool to Refund</span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <TokenUSDC variant="branded" size={18} className="shrink-0" />
+                        <span className="text-sm font-black text-slate-900">{prizeHuman} USDC</span>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Joined Players</span>
+                      <span className="text-sm font-black text-slate-900 mt-0.5 block">{effectivePlayerCount} player{effectivePlayerCount === 1 ? '' : 's'}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex flex-col sm:flex-row items-center gap-2.5 w-full">
+                    <button
+                      type="button"
+                      onClick={() => setShowCancelModal(false)}
+                      disabled={cancelPending || cancelConfirming}
+                      className="w-full sm:w-1/2 rounded-2xl py-3 px-4 text-xs sm:text-sm font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 transition-all active:scale-98 cursor-pointer disabled:opacity-50"
+                    >
+                      Keep Room Open
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleConfirmCancel}
+                      disabled={cancelPending || cancelConfirming}
+                      className="w-full sm:w-1/2 inline-flex items-center justify-center gap-1.5 rounded-2xl py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-md transition-all hover:brightness-105 active:scale-98 cursor-pointer disabled:opacity-60"
+                      style={{ background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)' }}
+                    >
+                      {cancelPending || cancelConfirming ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin shrink-0" />
+                          <span>Confirming...</span>
+                        </>
+                      ) : (
+                        <span>Yes, Cancel & Refund</span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     )
   }
