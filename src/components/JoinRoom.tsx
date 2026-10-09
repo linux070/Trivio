@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
-import { motion } from 'framer-motion'
 import { ArrowLeft, Users, Check, Trophy } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
@@ -532,30 +531,22 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
 
           {checkedCode && (
             <>
-              {roomLoading && <p className="text-center text-sm" style={{ color: 'var(--muted)' }}>Loading room details...</p>}
               {roomError && (
                 <p className="rounded-2xl px-4 py-3 text-sm" style={{ background: 'rgba(186,43,76,0.07)', border: '1px solid rgba(186,43,76,0.2)', color: 'var(--danger)' }}>
                   Room not found. Check the code and try again.
                 </p>
               )}
               {roomInfo && (
-                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-3xl p-5" style={glass.card}>
+                <div className="rounded-3xl p-5" style={glass.card}>
                   <p className="mb-3 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>Room Details</p>
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5" style={glass.inner}>
                       <span className="text-xs" style={{ color: 'var(--muted)' }}>Game Mode</span>
-                      {isResolvingCategory && !hostCategory ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-xs font-medium text-slate-500 border border-slate-200/90 shadow-2xs animate-pulse">
-                          <span>🔄</span>
-                          <span>Detecting host mode...</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 border border-slate-200/90 shadow-2xs">
-                          <span>{CATEGORY_GROUPS.flatMap(g => g.subcategories).find(s => s.id === resolvedCategory)?.emoji ?? '🎮'}</span>
-                          <span>{resolvedCategory}</span>
-                        </span>
-                      )}
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-800 border border-slate-200/90 shadow-2xs">
+                        <span>{CATEGORY_GROUPS.flatMap(g => g.subcategories).find(s => s.id === resolvedCategory)?.emoji ?? '🎮'}</span>
+                        <span>{resolvedCategory}</span>
+                      </span>
                     </div>
 
                     <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5" style={glass.inner}>
@@ -770,7 +761,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                       </p>
                     </>
                   )}
-                </motion.div>
+                </div>
               )}
             </>
           )}
