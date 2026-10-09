@@ -60,7 +60,6 @@ import {
   saveRoomCategory,
   saveActiveGame,
   getPendingPayoutRooms,
-  removePendingPayoutRoom,
   type ActiveGameSession,
   type PendingPayoutRoom,
 } from '@/lib/roomStorage'
@@ -1222,18 +1221,6 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                       }}
                     >
                       <span>Pay Out Winners</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        removePendingPayoutRoom(pending.roomCode)
-                        setPendingPayouts(getPendingPayoutRooms(activeAddress))
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/60 transition-colors cursor-pointer"
-                      title="Dismiss reminder"
-                      aria-label="Dismiss reminder"
-                    >
-                      <X size={15} />
                     </button>
                   </div>
                 </motion.div>

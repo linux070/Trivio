@@ -463,9 +463,15 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
   const handleStartGame = () => {
     if (isWrongChain) { switchChain({ chainId: ARC_TESTNET_CHAIN_ID }); return }
-    broadcastGameStart(roomCode, resolvedCategory, roomDuration)
     startGame(roomCode)
   }
+
+  // Once the host's start transaction is confirmed onchain, broadcast to all players
+  useEffect(() => {
+    if (gameStarted && isHost) {
+      broadcastGameStart(roomCode, resolvedCategory, roomDuration)
+    }
+  }, [gameStarted, isHost, roomCode, resolvedCategory, roomDuration])
 
   const handleDeclareWinner = async () => {
     if (!activeAddress || isWrongChain) { switchChain({ chainId: ARC_TESTNET_CHAIN_ID }); return }
