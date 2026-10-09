@@ -121,8 +121,32 @@ function getInitialScreen(): Screen {
     if (hash === '#/create') {
       return { name: 'create', category: getSavedCategory() }
     }
-    if (hash === '#/join') {
-      return { name: 'join', category: getSavedCategory() }
+    if (hash.startsWith('#/join')) {
+      let joinCode: string | undefined = undefined
+      if (hash.startsWith('#/join/')) {
+        const afterJoin = hash.slice(7).split('?')[0].trim().toUpperCase()
+        if (afterJoin) joinCode = afterJoin
+      } else if (hash.includes('?')) {
+        const hp = new URLSearchParams(hash.slice(hash.indexOf('?')))
+        joinCode = hp.get('code') || hp.get('join') || undefined
+      }
+      if (!joinCode) {
+        try {
+          const raw = sessionStorage.getItem(STORAGE_SCREEN_KEY) || localStorage.getItem(STORAGE_SCREEN_KEY)
+          if (raw) {
+            const parsed = JSON.parse(raw) as Screen
+            if (parsed?.name === 'join' && parsed.prefillCode) {
+              joinCode = parsed.prefillCode
+            }
+          }
+        } catch {}
+      }
+      if (!joinCode) {
+        const storedJoinCode = sessionStorage.getItem('trivio_join_room_code') || localStorage.getItem('trivio_join_room_code')
+        if (storedJoinCode) joinCode = storedJoinCode
+      }
+      const cat = (joinCode ? getRoomCategory(joinCode) : null) || getSavedCategory()
+      return { name: 'join', category: cat, prefillCode: joinCode }
     }
     if (hash === '#/results') {
       try {
@@ -141,6 +165,12 @@ function getInitialScreen(): Screen {
       if (raw) {
         const parsed = JSON.parse(raw) as Screen
         if (parsed?.name && parsed.name !== 'landing') {
+          if (parsed.name === 'join' && !parsed.prefillCode) {
+            const storedJoinCode = sessionStorage.getItem('trivio_join_room_code') || localStorage.getItem('trivio_join_room_code')
+            if (storedJoinCode) {
+              return { ...parsed, prefillCode: storedJoinCode }
+            }
+          }
           return parsed
         }
       }
@@ -186,7 +216,8 @@ export default function App() {
       url.searchParams.delete('code')
       url.searchParams.delete('cat')
       url.searchParams.delete('category')
-      window.history.replaceState({}, '', url.pathname + '#/join')
+      const targetHash = pendingJoin.roomCode ? `#/join/${pendingJoin.roomCode}` : '#/join'
+      window.history.replaceState({}, '', url.pathname + targetHash)
       setScreen({ name: 'join', category: cat || 'General Knowledge', prefillCode: pendingJoin.roomCode })
       return
     }
@@ -204,8 +235,32 @@ export default function App() {
       setScreen({ name: 'create', category: getSavedCategory() })
       return
     }
-    if (hash === '#/join') {
-      setScreen({ name: 'join', category: getSavedCategory() })
+    if (hash.startsWith('#/join')) {
+      let joinCode: string | undefined = undefined
+      if (hash.startsWith('#/join/')) {
+        const afterJoin = hash.slice(7).split('?')[0].trim().toUpperCase()
+        if (afterJoin) joinCode = afterJoin
+      } else if (hash.includes('?')) {
+        const hp = new URLSearchParams(hash.slice(hash.indexOf('?')))
+        joinCode = hp.get('code') || hp.get('join') || undefined
+      }
+      if (!joinCode) {
+        try {
+          const raw = sessionStorage.getItem(STORAGE_SCREEN_KEY) || localStorage.getItem(STORAGE_SCREEN_KEY)
+          if (raw) {
+            const parsed = JSON.parse(raw) as Screen
+            if (parsed?.name === 'join' && parsed.prefillCode) {
+              joinCode = parsed.prefillCode
+            }
+          }
+        } catch {}
+      }
+      if (!joinCode) {
+        const storedJoinCode = sessionStorage.getItem('trivio_join_room_code') || localStorage.getItem('trivio_join_room_code')
+        if (storedJoinCode) joinCode = storedJoinCode
+      }
+      const cat = (joinCode ? getRoomCategory(joinCode) : null) || getSavedCategory()
+      setScreen({ name: 'join', category: cat, prefillCode: joinCode })
       return
     }
     if (hash === '#/results') {
@@ -310,7 +365,8 @@ export default function App() {
         url.searchParams.delete('join')
         url.searchParams.delete('cat')
         url.searchParams.delete('category')
-        window.history.replaceState({}, '', url.pathname + '#/join')
+        const targetHash = joinParams.roomCode ? `#/join/${joinParams.roomCode}` : '#/join'
+        window.history.replaceState({}, '', url.pathname + targetHash)
         setScreen({ name: 'join', category: cat || 'General Knowledge', prefillCode: joinParams.roomCode })
       }
     }
@@ -332,7 +388,9 @@ export default function App() {
 
         let targetHash = '#/lobby'
         if (screen.name === 'create') targetHash = '#/create'
-        else if (screen.name === 'join') targetHash = '#/join'
+        else if (screen.name === 'join') {
+          targetHash = screen.prefillCode ? `#/join/${screen.prefillCode}` : '#/join'
+        }
         else if (screen.name === 'game') targetHash = `#/game/${screen.roomCode}`
         else if (screen.name === 'results') targetHash = '#/results'
 
@@ -353,7 +411,8 @@ export default function App() {
         url.searchParams.delete('join')
         url.searchParams.delete('cat')
         url.searchParams.delete('category')
-        window.history.replaceState({}, '', url.pathname + window.location.hash)
+        const targetHash = window.location.hash || `#/join/${screen.prefillCode}`
+        window.history.replaceState({}, '', url.pathname + targetHash)
       }
     }
   }, [screen])

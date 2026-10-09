@@ -27,6 +27,7 @@ import {
   saveRoomPrize,
   getRoomPayout,
   calculatePayoutSplits,
+  setPendingJoin,
   getPendingJoin,
   clearPendingJoin,
   getJoinParamsFromUrl,
@@ -52,6 +53,9 @@ const glass = {
   } as React.CSSProperties,
 }
 
+const STORAGE_JOIN_CODE_KEY = 'trivio_join_room_code'
+const STORAGE_SCREEN_KEY = 'trivio_current_screen'
+
 interface JoinRoomProps {
   initialCategory?: Category
   prefillCode?: string
@@ -68,6 +72,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   const activeAddress = address || privyWalletAddress || undefined
 
   const resolveInitialCode = (): string => {
+    // 1. Explicit prop from caller
     if (prefillCode && prefillCode.trim()) {
       const extracted = extractRoomCode(prefillCode.trim())
       if (extracted?.roomCode) {
@@ -76,6 +81,25 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       }
       return prefillCode.trim().toUpperCase()
     }
+
+    // 2. URL search parameters or URL hash (e.g. ?join=XYZ, ?code=XYZ, #/join/XYZ)
+    const fromUrl = getJoinParamsFromUrl()
+    if (fromUrl?.roomCode) {
+      if (fromUrl.category) saveRoomCategory(fromUrl.roomCode, fromUrl.category)
+      return fromUrl.roomCode
+    }
+
+    // 3. Direct window.location.hash check for #/join/ROOMCODE
+    if (typeof window !== 'undefined' && window.location.hash.startsWith('#/join/')) {
+      const afterHash = window.location.hash.slice(7).split('?')[0]
+      const extracted = extractRoomCode(afterHash)
+      if (extracted?.roomCode) {
+        if (extracted.category) saveRoomCategory(extracted.roomCode, extracted.category)
+        return extracted.roomCode
+      }
+    }
+
+    // 4. Stored pending join
     const pending = getPendingJoin()
     if (pending?.roomCode) {
       const extracted = extractRoomCode(pending.roomCode)
@@ -84,11 +108,35 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       if (cat) saveRoomCategory(code, cat)
       return code
     }
-    const fromUrl = getJoinParamsFromUrl()
-    if (fromUrl?.roomCode) {
-      if (fromUrl.category) saveRoomCategory(fromUrl.roomCode, fromUrl.category)
-      return fromUrl.roomCode
+
+    // 5. Active join code stored in sessionStorage / localStorage
+    try {
+      const stored =
+        sessionStorage.getItem(STORAGE_JOIN_CODE_KEY) ||
+        localStorage.getItem(STORAGE_JOIN_CODE_KEY)
+      if (stored) {
+        const extracted = extractRoomCode(stored)
+        if (extracted?.roomCode) {
+          return extracted.roomCode
+        }
+      }
+    } catch {
+      // ignore
     }
+
+    // 6. Stored screen prefillCode
+    try {
+      const rawScreen = sessionStorage.getItem(STORAGE_SCREEN_KEY) || localStorage.getItem(STORAGE_SCREEN_KEY)
+      if (rawScreen) {
+        const parsed = JSON.parse(rawScreen)
+        if (parsed?.name === 'join' && parsed?.prefillCode) {
+          return parsed.prefillCode
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     return ''
   }
 
@@ -114,6 +162,11 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       }
       setInput(code)
       setCheckedCode(code)
+      try {
+        sessionStorage.setItem(STORAGE_JOIN_CODE_KEY, code)
+        localStorage.setItem(STORAGE_JOIN_CODE_KEY, code)
+      } catch {}
+      setPendingJoin(code, extracted?.category || hostCategory || undefined)
     } else {
       const pending = getPendingJoin()
       if (pending?.roomCode) {
@@ -126,6 +179,10 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
         }
         setInput(code)
         setCheckedCode(code)
+        try {
+          sessionStorage.setItem(STORAGE_JOIN_CODE_KEY, code)
+          localStorage.setItem(STORAGE_JOIN_CODE_KEY, code)
+        } catch {}
       }
     }
   }, [prefillCode])
@@ -144,6 +201,16 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
     if (cachedCat) setHostCategory(cachedCat)
     if (cachedDur) setHostDuration(cachedDur)
 
+    // Sync to storage & URL hash
+    try {
+      sessionStorage.setItem(STORAGE_JOIN_CODE_KEY, cleanCode)
+      localStorage.setItem(STORAGE_JOIN_CODE_KEY, cleanCode)
+    } catch {}
+    setPendingJoin(cleanCode, cachedCat || hostCategory || undefined)
+    if (typeof window !== 'undefined' && window.location.hash !== `#/join/${cleanCode}`) {
+      window.history.replaceState(null, '', `#/join/${cleanCode}`)
+    }
+
     setIsResolvingCategory(true)
     let isCancelled = false
 
@@ -152,6 +219,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       if (meta?.category) {
         setHostCategory(meta.category)
         saveRoomCategory(cleanCode, meta.category)
+        setPendingJoin(cleanCode, meta.category)
         if (meta.roundDuration) {
           setHostDuration(meta.roundDuration)
           saveRoomDuration(cleanCode, meta.roundDuration)
@@ -168,6 +236,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
         if (match?.category) {
           setHostCategory(match.category)
           saveRoomCategory(cleanCode, match.category)
+          setPendingJoin(cleanCode, match.category)
           const matchedDuration = (match as any)?.roundDuration
           if (matchedDuration) {
             setHostDuration(Number(matchedDuration))
@@ -240,6 +309,10 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       if (prizeForPayouts && Number(prizeForPayouts) > 0) {
         saveRoomPrize(checkedCode, prizeForPayouts)
       }
+      try {
+        sessionStorage.removeItem(STORAGE_JOIN_CODE_KEY)
+        localStorage.removeItem(STORAGE_JOIN_CODE_KEY)
+      } catch {}
       clearPendingJoin()
       onJoined(checkedCode, finalCat)
     }
@@ -251,12 +324,20 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
 
   const handleInputChange = (raw: string) => {
     const extracted = extractRoomCode(raw)
-    if (extracted) {
+    if (extracted && extracted.roomCode) {
       setInput(extracted.roomCode)
       setCheckedCode(extracted.roomCode)
+      try {
+        sessionStorage.setItem(STORAGE_JOIN_CODE_KEY, extracted.roomCode)
+        localStorage.setItem(STORAGE_JOIN_CODE_KEY, extracted.roomCode)
+      } catch {}
+      setPendingJoin(extracted.roomCode, extracted.category)
       if (extracted.category) {
         setHostCategory(extracted.category)
         saveRoomCategory(extracted.roomCode, extracted.category)
+      }
+      if (typeof window !== 'undefined' && window.location.hash !== `#/join/${extracted.roomCode}`) {
+        window.history.replaceState(null, '', `#/join/${extracted.roomCode}`)
       }
     } else {
       const clean = raw.toUpperCase()
@@ -264,6 +345,25 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       const cleanCode = clean.replace(/[^A-Z0-9]/g, '').slice(0, 8)
       if (cleanCode.length >= 4) {
         setCheckedCode(cleanCode)
+        try {
+          sessionStorage.setItem(STORAGE_JOIN_CODE_KEY, cleanCode)
+          localStorage.setItem(STORAGE_JOIN_CODE_KEY, cleanCode)
+        } catch {}
+        const cat = getRoomCategory(cleanCode) || inferCategoryFromCode(cleanCode) || undefined
+        setPendingJoin(cleanCode, cat)
+        if (typeof window !== 'undefined' && window.location.hash !== `#/join/${cleanCode}`) {
+          window.history.replaceState(null, '', `#/join/${cleanCode}`)
+        }
+      } else if (cleanCode.length === 0) {
+        setCheckedCode(null)
+        try {
+          sessionStorage.removeItem(STORAGE_JOIN_CODE_KEY)
+          localStorage.removeItem(STORAGE_JOIN_CODE_KEY)
+        } catch {}
+        clearPendingJoin()
+        if (typeof window !== 'undefined' && window.location.hash !== '#/join') {
+          window.history.replaceState(null, '', '#/join')
+        }
       }
     }
   }
@@ -278,6 +378,12 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       saveRoomCategory(code, extracted.category)
     }
 
+    try {
+      sessionStorage.setItem(STORAGE_JOIN_CODE_KEY, code)
+      localStorage.setItem(STORAGE_JOIN_CODE_KEY, code)
+    } catch {}
+    setPendingJoin(code, extracted?.category || hostCategory || undefined)
+
     if (checkedCode !== code) {
       setCheckedCode(code)
       return
@@ -289,6 +395,10 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
         return
       }
       if (isAlreadyJoined) {
+        try {
+          sessionStorage.removeItem(STORAGE_JOIN_CODE_KEY)
+          localStorage.removeItem(STORAGE_JOIN_CODE_KEY)
+        } catch {}
         clearPendingJoin()
         let catToUse = hostCategory || getRoomCategory(checkedCode)
         if (!catToUse) {
@@ -338,11 +448,24 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
     saveRoomCategory(checkedCode, finalCat)
 
     if (isAlreadyJoined) {
+      try {
+        sessionStorage.removeItem(STORAGE_JOIN_CODE_KEY)
+        localStorage.removeItem(STORAGE_JOIN_CODE_KEY)
+      } catch {}
       clearPendingJoin()
       onJoined(checkedCode, finalCat)
       return
     }
     joinRoom(checkedCode)
+  }
+
+  const handleBack = () => {
+    try {
+      sessionStorage.removeItem(STORAGE_JOIN_CODE_KEY)
+      localStorage.removeItem(STORAGE_JOIN_CODE_KEY)
+    } catch {}
+    clearPendingJoin()
+    onBack()
   }
 
   return (
@@ -361,7 +484,7 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       >
         <div className="mb-5 sm:mb-6 flex items-center gap-3">
           <button
-            onClick={onBack}
+            onClick={handleBack}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 hover:bg-white backdrop-blur-md shadow-xs border border-[var(--border)] transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer"
             title="Go back"
           >

@@ -1033,7 +1033,19 @@ export function extractRoomCode(input: string): { roomCode: string; category?: C
     }
   }
 
-  // 2. Direct code extraction (stripping #, spaces, punctuation)
+  // 2. Path-based room codes like #/join/BLTZ01 or /join/BLTZ01
+  if (text.includes('/join/')) {
+    const afterJoin = text.split('/join/')[1]?.split('?')[0]?.split('/')[0]
+    if (afterJoin) {
+      const clean = afterJoin.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8)
+      if (clean.length >= 4) {
+        const category = getRoomCategory(clean) || undefined
+        return { roomCode: clean, category }
+      }
+    }
+  }
+
+  // 3. Direct code extraction (stripping #, spaces, punctuation)
   const clean = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8)
   if (clean.length >= 4 && clean.length <= 8) {
     const category = getRoomCategory(clean) || undefined
@@ -1051,11 +1063,19 @@ export function getJoinParamsFromUrl(): { roomCode: string; category?: Category 
     let rawCode = p.get('join') || p.get('code')
     let rawCat = p.get('cat') || p.get('category')
 
-    if (!rawCode && window.location.hash.includes('?')) {
-      const hashQuery = window.location.hash.slice(window.location.hash.indexOf('?'))
-      const hp = new URLSearchParams(hashQuery)
-      rawCode = hp.get('join') || hp.get('code')
-      if (!rawCat) rawCat = hp.get('cat') || hp.get('category')
+    if (!rawCode && window.location.hash) {
+      if (window.location.hash.startsWith('#/join/')) {
+        const afterJoin = window.location.hash.slice(7).split('?')[0]
+        if (afterJoin) {
+          rawCode = afterJoin
+        }
+      }
+      if (window.location.hash.includes('?')) {
+        const hashQuery = window.location.hash.slice(window.location.hash.indexOf('?'))
+        const hp = new URLSearchParams(hashQuery)
+        if (!rawCode) rawCode = hp.get('join') || hp.get('code')
+        if (!rawCat) rawCat = hp.get('cat') || hp.get('category')
+      }
     }
 
     if (rawCode) {
