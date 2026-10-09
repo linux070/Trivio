@@ -508,14 +508,19 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
     try {
       sessionStorage.removeItem(STORAGE_JOIN_CODE_KEY)
       localStorage.removeItem(STORAGE_JOIN_CODE_KEY)
+      sessionStorage.removeItem(STORAGE_SCREEN_KEY)
+      localStorage.removeItem(STORAGE_SCREEN_KEY)
     } catch {}
     clearPendingJoin()
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', '#/lobby')
+    }
     onBack()
   }
 
   return (
     <div
-      className="relative min-h-screen min-h-[100dvh] w-full overflow-x-hidden"
+      className="relative min-h-screen min-h-[100dvh] w-full overflow-x-hidden overscroll-none"
       style={{ background: 'linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%)' }}
     >
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -524,18 +529,20 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-md px-3.5 pt-4 sm:max-w-xl md:max-w-2xl sm:px-6 sm:py-6"
+        className="relative z-10 mx-auto w-full max-w-md px-3.5 pt-3 sm:max-w-xl md:max-w-2xl sm:px-6 sm:py-6"
         style={{ paddingBottom: 'max(6.5rem, calc(env(safe-area-inset-bottom, 20px) + 5rem))' }}
       >
-        <div className="mb-5 sm:mb-6 flex items-center gap-3">
+        <div className="mb-4 sm:mb-6 flex items-center gap-3">
           <button
+            type="button"
             onClick={handleBack}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 hover:bg-white backdrop-blur-md shadow-xs border border-[var(--border)] transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer"
+            className="flex h-10 w-10 sm:h-9 sm:w-9 items-center justify-center rounded-full bg-white/90 hover:bg-white active:bg-slate-100 backdrop-blur-md shadow-xs border border-[var(--border)] transition-all duration-150 hover:scale-105 active:scale-90 cursor-pointer touch-manipulation"
             title="Go back"
+            aria-label="Go back"
           >
-            <ArrowLeft size={16} className="stroke-[2.25]" style={{ color: 'var(--ink)' }} />
+            <ArrowLeft size={18} className="stroke-[2.5]" style={{ color: 'var(--ink)' }} />
           </button>
-          <h1 className="display text-xl sm:text-2xl font-semibold" style={{ color: 'var(--ink)', letterSpacing: '-0.03em' }}>join room</h1>
+          <h1 className="display text-xl sm:text-2xl font-bold" style={{ color: 'var(--ink)', letterSpacing: '-0.03em' }}>join room</h1>
         </div>
 
         {!contractReady && (
@@ -545,46 +552,55 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
         )}
 
         <div className="space-y-3.5 sm:space-y-4">
-          <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5" style={glass.card}>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>Room Code</p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="e.g. TRV001"
-                maxLength={8}
-                value={input}
-                onChange={e => handleInputChange(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleLookupOrJoin()}
-                className="min-w-0 flex-1 rounded-2xl px-3.5 sm:px-4 py-3 text-base font-bold outline-none"
-                style={{
-                  background: 'rgba(255,255,255,0.7)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--ink)',
-                  fontFamily: "'Space Grotesk', sans-serif",
-                  letterSpacing: '0.1em',
-                }}
-              />
-              <button
-                onClick={handleLookupOrJoin}
-                disabled={input.trim().length < 4 || joinPending || joinConfirming}
-                className="shrink-0 rounded-2xl px-4 sm:px-5 py-3 text-sm font-semibold transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-40 cursor-pointer shadow-xs"
-                style={{ background: 'var(--accent)', color: 'white' }}
-              >
-                {joinPending || joinConfirming ? 'Joining...' : 'Join'}
-              </button>
+          {/* Room Code input card: shown when no room data is loaded or room was not found */}
+          {(!hasRoomData || Boolean(roomError)) && (
+            <div className="rounded-2xl sm:rounded-3xl p-4 sm:p-5 transition-all duration-300 ease-out modal-smooth-in" style={glass.card}>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-600" style={{ letterSpacing: '0.08em' }}>
+                Room Code
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. TRV001"
+                  maxLength={8}
+                  value={input}
+                  onChange={e => handleInputChange(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleLookupOrJoin()}
+                  className="min-w-0 flex-1 rounded-2xl px-3.5 sm:px-4 py-3 text-base font-bold outline-none"
+                  style={{
+                    background: 'rgba(255,255,255,0.7)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--ink)',
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    letterSpacing: '0.1em',
+                  }}
+                />
+                <button
+                  onClick={handleLookupOrJoin}
+                  disabled={input.trim().length < 4 || joinPending || joinConfirming}
+                  className="shrink-0 rounded-2xl px-4 sm:px-5 py-3 text-sm font-semibold transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-40 cursor-pointer shadow-xs"
+                  style={{ background: 'var(--accent)', color: 'white' }}
+                >
+                  {joinPending || joinConfirming ? 'Joining...' : 'Join'}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {checkedCode && (
             <>
               {roomError && (
-                <p className="rounded-2xl px-4 py-3 text-sm" style={{ background: 'rgba(186,43,76,0.07)', border: '1px solid rgba(186,43,76,0.2)', color: 'var(--danger)' }}>
+                <p className="rounded-2xl px-4 py-3 text-sm modal-smooth-in" style={{ background: 'rgba(186,43,76,0.07)', border: '1px solid rgba(186,43,76,0.2)', color: 'var(--danger)' }}>
                   Room not found. Check the code and try again.
                 </p>
               )}
               {hasRoomData && (
-                <div className="rounded-3xl p-5" style={glass.card}>
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--subtle)', letterSpacing: '0.08em' }}>Room Details</p>
+                <div className="rounded-3xl p-5 sm:p-6 transition-all duration-300 ease-out modal-smooth-in" style={glass.card}>
+                  <div className="mb-4 text-center">
+                    <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-slate-700" style={{ letterSpacing: '0.14em', opacity: 0.88 }}>
+                      room details
+                    </h2>
+                  </div>
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5" style={glass.inner}>

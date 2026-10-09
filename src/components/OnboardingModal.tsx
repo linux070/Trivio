@@ -253,7 +253,7 @@ export default function OnboardingModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 10 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="relative w-full max-w-[360px] sm:max-w-[420px] rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-purple-100/80 my-auto text-left"
+            className="relative w-full max-w-[360px] sm:max-w-[420px] max-h-[92dvh] overflow-y-auto rounded-3xl bg-white p-5 sm:p-8 shadow-2xl border border-purple-100/80 my-auto text-left"
             style={{
               boxShadow: '0 25px 60px -15px rgba(88, 28, 135, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.04)',
             }}

@@ -320,8 +320,7 @@ export default function App() {
         }
 
         setShowOnboarding(false)
-        const pending = getPendingJoin()
-        if (pending || screen.name === 'landing') {
+        if (screen.name === 'landing') {
           restoreGameScreen()
         }
 
@@ -352,7 +351,36 @@ export default function App() {
         setScreen({ name: 'landing' })
       }
     }
-  }, [ready, authenticated, screen.name, activeAddress, provider])
+  }, [ready, authenticated, activeAddress, provider])
+
+  // Handle hardware / browser Back & Forward button navigation smoothly
+  useEffect(() => {
+    const handlePopState = () => {
+      if (!ready || !authenticated || !hasUserProfile(activeAddress)) return
+      const hash = window.location.hash
+      if (!hash || hash === '#/lobby') {
+        setScreen({ name: 'lobby', initialCategory: getSavedCategory() })
+      } else if (hash === '#/create') {
+        setScreen({ name: 'create', category: getSavedCategory() })
+      } else if (hash.startsWith('#/join')) {
+        let joinCode: string | undefined = undefined
+        if (hash.startsWith('#/join/')) {
+          joinCode = hash.slice(7).split('?')[0].trim().toUpperCase()
+        }
+        const cat = (joinCode ? getRoomCategory(joinCode) : null) || getSavedCategory()
+        setScreen({ name: 'join', category: cat, prefillCode: joinCode })
+      } else if (hash.startsWith('#/game/')) {
+        const code = hash.replace('#/game/', '').trim().toUpperCase()
+        if (code) {
+          const cat = getRoomCategory(code) || getSavedCategory()
+          setScreen({ name: 'game', roomCode: code, category: cat })
+        }
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [ready, authenticated, activeAddress])
 
   // Watch for inbound join links while session is already active
   useEffect(() => {

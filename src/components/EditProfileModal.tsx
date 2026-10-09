@@ -186,16 +186,16 @@ export default function EditProfileModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 6 }}
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-            className="relative w-full max-w-[340px] rounded-3xl bg-white p-5 shadow-2xl border border-gray-100"
+            className="relative w-full max-w-[340px] sm:max-w-[380px] max-h-[90dvh] overflow-y-auto rounded-3xl bg-white p-5 sm:p-6 shadow-2xl border border-gray-100 my-auto"
           >
             {/* Close Button */}
             <button
               type="button"
               onClick={onClose}
-              className="absolute right-3.5 top-3.5 flex h-7 w-7 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+              className="absolute right-3.5 top-3.5 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors cursor-pointer touch-manipulation"
               aria-label="Close"
             >
-              <X size={15} />
+              <X size={16} />
             </button>
 
             <div className="mb-4 text-center">
