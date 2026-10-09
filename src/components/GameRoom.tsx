@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, startTransition, useMemo } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2, Share2, Ban, AlertTriangle, X } from 'lucide-react'
+import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2, Share2, Ban, AlertTriangle, X, ArrowUpRight } from 'lucide-react'
 import { buildJoinUrl } from '@/App'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
@@ -250,7 +250,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   const { startGame, isPending: startPending, isConfirming: startConfirming, isSuccess: gameStarted } = useStartGame()
   const { declareWinners, isPending: declarePending, isConfirming: declareConfirming, isSuccess: declared, hash: declareHash } = useDeclareWinners()
   const { cancelRoom, cancelRoomAsync, isPending: cancelPending, isConfirming: cancelConfirming, isSuccess: cancelSuccess, error: cancelError } = useCancelRoom()
-  const { claimRefund, isPending: refundPending, isConfirming: refundConfirming, isSuccess: refundSuccess } = useClaimRefund()
+  const { claimRefund, claimRefundAsync, isPending: refundPending, isConfirming: refundConfirming, isSuccess: refundSuccess, error: refundError, hash: refundHash } = useClaimRefund()
 
   const isWrongChain = chainId !== ARC_TESTNET_CHAIN_ID
   const isRoomCancelled = (status === 3 || isGameCancelled) && !isHost
@@ -280,10 +280,43 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   }, [cancelError])
 
   useEffect(() => {
+    if (refundError) {
+      const errStr = refundError.message || ''
+      if (errStr.includes('User rejected') || errStr.includes('User denied') || errStr.includes('rejected transaction')) {
+        toast.error('Transaction rejected in wallet')
+      } else {
+        toast.error(errStr.slice(0, 90) || 'Failed to claim refund onchain')
+      }
+    }
+  }, [refundError])
+
+  useEffect(() => {
     if (refundSuccess) {
       toast.success('USDC refund claimed successfully!')
     }
   }, [refundSuccess])
+
+  const handleClaimRefund = async () => {
+    if (isWrongChain) {
+      switchChain({ chainId: ARC_TESTNET_CHAIN_ID })
+      return
+    }
+
+    try {
+      if (claimRefundAsync) {
+        await claimRefundAsync(roomCode)
+      } else {
+        claimRefund(roomCode)
+      }
+    } catch (err: any) {
+      const errStr = String(err?.message || err)
+      if (errStr.includes('User rejected') || errStr.includes('User denied') || errStr.includes('rejected transaction')) {
+        toast.error('Transaction rejected in wallet')
+      } else {
+        toast.error(errStr.slice(0, 90) || 'Failed to claim refund')
+      }
+    }
+  }
 
   useEffect(() => {
     if (isRoomCancelled && !hasNotifiedCancelRef.current) {
@@ -695,20 +728,37 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                 </div>
 
                 {refundSuccess ? (
-                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
-                    <Check size={14} className="stroke-[2.5]" /> Refunded
-                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/90 px-3 py-1.5 rounded-xl shadow-2xs">
+                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white text-[10px] font-black leading-none shrink-0 shadow-2xs">
+                        ✓
+                      </span>
+                      <span>Refunded</span>
+                    </span>
+
+                    {refundHash && (
+                      <a
+                        href={`https://explorer.testnet.arc.io/tx/${refundHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center h-8 w-8 rounded-xl bg-slate-100 hover:bg-purple-50 text-slate-500 hover:text-purple-600 border border-slate-200/90 hover:border-purple-300 transition-all duration-150 shadow-2xs group cursor-pointer"
+                        title={`View Transaction on Arc Explorer: ${refundHash}`}
+                      >
+                        <ArrowUpRight size={15} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform text-slate-500 group-hover:text-purple-600" />
+                      </a>
+                    )}
+                  </div>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => claimRefund(roomCode)}
+                    onClick={handleClaimRefund}
                     disabled={refundPending || refundConfirming}
                     className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white shadow-xs transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50"
                     style={{ background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)' }}
                   >
                     {refundPending || refundConfirming ? (
                       <>
-                        <Loader2 size={13} className="animate-spin" />
+                        <Loader2 size={13} className="animate-spin shrink-0" />
                         <span>Claiming...</span>
                       </>
                     ) : (

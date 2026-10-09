@@ -526,12 +526,12 @@ export function useEmergencyCancel() {
 }
 
 export function useClaimRefund() {
-  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const { writeContract, writeContractAsync, data: hash, isPending, error } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
 
   const claimRefund = (code: string) => {
     if (!TRIVIA_GAME_ADDRESS) return
-    writeContract({
+    return writeContract({
       address: TRIVIA_GAME_ADDRESS,
       abi: TRIVIA_ABI,
       functionName: 'claimRefund',
@@ -539,5 +539,15 @@ export function useClaimRefund() {
     })
   }
 
-  return { claimRefund, isPending, isConfirming, isSuccess, error, hash }
+  const claimRefundAsync = async (code: string) => {
+    if (!TRIVIA_GAME_ADDRESS) return
+    return writeContractAsync({
+      address: TRIVIA_GAME_ADDRESS,
+      abi: TRIVIA_ABI,
+      functionName: 'claimRefund',
+      args: [roomCodeToBytes32(code)],
+    })
+  }
+
+  return { claimRefund, claimRefundAsync, isPending, isConfirming, isSuccess, error, hash }
 }
