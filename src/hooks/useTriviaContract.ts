@@ -480,12 +480,12 @@ export function useDeclareWinner() {
 }
 
 export function useCancelRoom() {
-  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const { writeContract, writeContractAsync, data: hash, isPending, error } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
 
   const cancelRoom = (code: string, chainId: number = ARC_TESTNET_CHAIN_ID) => {
     if (!TRIVIA_GAME_ADDRESS) return
-    writeContract({
+    return writeContract({
       address: TRIVIA_GAME_ADDRESS,
       abi: TRIVIA_ABI,
       functionName: 'cancelRoom',
@@ -494,7 +494,18 @@ export function useCancelRoom() {
     })
   }
 
-  return { cancelRoom, isPending, isConfirming, isSuccess, error, hash }
+  const cancelRoomAsync = async (code: string, chainId: number = ARC_TESTNET_CHAIN_ID) => {
+    if (!TRIVIA_GAME_ADDRESS) return
+    return writeContractAsync({
+      address: TRIVIA_GAME_ADDRESS,
+      abi: TRIVIA_ABI,
+      functionName: 'cancelRoom',
+      args: [roomCodeToBytes32(code)],
+      chainId,
+    })
+  }
+
+  return { cancelRoom, cancelRoomAsync, isPending, isConfirming, isSuccess, error, hash }
 }
 
 export function useEmergencyCancel() {

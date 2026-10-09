@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, startTransition, useMemo } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2, Share2, Ban, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Clock, Trophy, Copy, Check, Link2, Users, Loader2, Share2, Ban, AlertTriangle, X } from 'lucide-react'
 import { buildJoinUrl } from '@/App'
 import { TokenUSDC } from '@web3icons/react'
 import { toast } from 'sonner'
@@ -249,7 +249,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
   const { startGame, isPending: startPending, isConfirming: startConfirming, isSuccess: gameStarted } = useStartGame()
   const { declareWinners, isPending: declarePending, isConfirming: declareConfirming, isSuccess: declared, hash: declareHash } = useDeclareWinners()
-  const { cancelRoom, isPending: cancelPending, isConfirming: cancelConfirming, isSuccess: cancelSuccess } = useCancelRoom()
+  const { cancelRoom, cancelRoomAsync, isPending: cancelPending, isConfirming: cancelConfirming, isSuccess: cancelSuccess, error: cancelError } = useCancelRoom()
   const { claimRefund, isPending: refundPending, isConfirming: refundConfirming, isSuccess: refundSuccess } = useClaimRefund()
 
   const isWrongChain = chainId !== ARC_TESTNET_CHAIN_ID
@@ -263,9 +263,21 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
       broadcastGameCancel(roomCode, 'Cancelled by host')
       clearActiveGame()
       removePendingPayoutRoom(roomCode)
+      setShowCancelModal(false)
       onBack()
     }
   }, [cancelSuccess, onBack, roomCode])
+
+  useEffect(() => {
+    if (cancelError) {
+      const errStr = cancelError.message || ''
+      if (errStr.includes('User rejected') || errStr.includes('User denied') || errStr.includes('rejected transaction')) {
+        toast.error('Transaction rejected in wallet')
+      } else {
+        toast.error(errStr.slice(0, 90) || 'Failed to cancel room onchain')
+      }
+    }
+  }, [cancelError])
 
   useEffect(() => {
     if (refundSuccess) {
@@ -287,12 +299,45 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
 
   const [showCancelModal, setShowCancelModal] = useState(false)
 
-  const handleConfirmCancel = () => {
+  const handleConfirmCancel = async () => {
     if (isWrongChain) {
       switchChain({ chainId: ARC_TESTNET_CHAIN_ID })
       return
     }
-    cancelRoom(roomCode)
+
+    if (!TRIVIA_GAME_ADDRESS || !activeAddress) {
+      toast.success('Room cancelled!')
+      void submitGameCancel(roomCode, 'Cancelled by host')
+      broadcastGameCancel(roomCode, 'Cancelled by host')
+      clearActiveGame()
+      removePendingPayoutRoom(roomCode)
+      setShowCancelModal(false)
+      onBack()
+      return
+    }
+
+    try {
+      if (cancelRoomAsync) {
+        await cancelRoomAsync(roomCode)
+      } else {
+        cancelRoom(roomCode)
+      }
+    } catch (err: any) {
+      const errStr = String(err?.message || err)
+      if (errStr.includes('User rejected') || errStr.includes('User denied') || errStr.includes('rejected transaction')) {
+        toast.error('Transaction rejected in wallet')
+      } else if (errStr.includes('RoomCannotBeCancelled') || errStr.includes('RoomDoesNotExist')) {
+        toast.warning('Room already closed or finished onchain.')
+        void submitGameCancel(roomCode, 'Cancelled by host')
+        broadcastGameCancel(roomCode, 'Cancelled by host')
+        clearActiveGame()
+        removePendingPayoutRoom(roomCode)
+        setShowCancelModal(false)
+        onBack()
+      } else {
+        toast.error(errStr.slice(0, 90) || 'Failed to cancel room')
+      }
+    }
   }
 
   // When game starts onchain or via cloud broadcast, immediately move all players to playing phase without page refresh
@@ -575,64 +620,95 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
   // ─── Room Cancelled View for Non-Hosts ─────────────────────────────────────────
   if (isRoomCancelled) {
     return (
-      <div className="relative min-h-screen min-h-[100dvh] w-full flex items-center justify-center p-4 overflow-x-hidden" style={{ background: 'linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%)' }}>
-        <div className="pointer-events-none fixed inset-0 overflow-hidden">
-          <div style={{ position: 'absolute', top: '10%', left: '10%', width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, rgba(244,63,94,0.14) 0%, transparent 70%)', filter: 'blur(65px)' }} />
-          <div style={{ position: 'absolute', bottom: '15%', right: '10%', width: 280, height: 280, borderRadius: '50%', background: 'radial-gradient(circle, rgba(251,146,60,0.12) 0%, transparent 70%)', filter: 'blur(60px)' }} />
-        </div>
-
+      <div className="relative min-h-screen min-h-[100dvh] w-full flex items-center justify-center p-3.5 sm:p-4 md:p-6 overflow-x-hidden" style={{ background: 'linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%)' }}>
         <motion.div
-          initial={{ scale: 0.94, opacity: 0, y: 12 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="relative z-10 w-full max-w-md rounded-3xl p-6 sm:p-8 shadow-2xl border border-rose-200/90 bg-white/95 text-center overflow-hidden"
+          initial={{ opacity: 0, scale: 0.96, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          className="relative w-full max-w-md rounded-2xl sm:rounded-3xl bg-white shadow-2xl border border-slate-200/90 p-6 sm:p-7 text-center"
         >
-          <div className="flex flex-col items-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-100 text-rose-600 shadow-inner mb-4 ring-8 ring-rose-50/80">
-              <Ban size={30} className="stroke-[2.5]" />
-            </div>
+          {/* Centered Static Caution Icon */}
+          <div className="flex items-center justify-center mx-auto mb-3 mt-1">
+            <svg
+              width="56"
+              height="56"
+              viewBox="0 0 48 48"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 drop-shadow-sm"
+            >
+              {/* Outer Yellow Glow / Rounded Triangle Base */}
+              <path
+                d="M20.536 6.536C22.074 3.872 25.926 3.872 27.464 6.536L44.785 36.536C46.324 39.2 44.398 42.533 41.321 42.533H6.679C3.602 42.533 1.676 39.2 3.215 36.536L20.536 6.536Z"
+                fill="#FFC700"
+              />
+              {/* Inner Black Border Triangle */}
+              <path
+                d="M20.536 6.536C22.074 3.872 25.926 3.872 27.464 6.536L44.785 36.536C46.324 39.2 44.398 42.533 41.321 42.533H6.679C3.602 42.533 1.676 39.2 3.215 36.536L20.536 6.536Z"
+                stroke="#18181B"
+                strokeWidth="2.5"
+                strokeLinejoin="round"
+              />
+              {/* Inner Yellow Fill Triangle */}
+              <path
+                d="M21.402 8.036C22.556 6.038 25.444 6.038 26.598 8.036L43.919 38.036C45.073 40.034 43.629 42.533 41.321 42.533H6.679C4.371 42.533 2.927 40.034 4.081 38.036L21.402 8.036Z"
+                fill="#FFC700"
+              />
+              {/* Black Exclamation Mark Bar */}
+              <path
+                d="M24 16V27"
+                stroke="#18181B"
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+              {/* Black Exclamation Mark Dot */}
+              <circle cx="24" cy="34" r="2.25" fill="#18181B" />
+            </svg>
+          </div>
 
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 text-xs font-black uppercase tracking-wider mb-2 border border-rose-200/80">
-              <span>Room #{roomCode} Cancelled</span>
-            </div>
+          {/* Title & Subtitle */}
+          <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+            Room Cancelled
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+            Host has closed this trivia game
+          </p>
 
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Game Cancelled by Host
-            </h2>
-
-            <p className="mt-2.5 text-xs sm:text-sm text-slate-600 font-medium max-w-sm leading-relaxed">
+          {/* Body */}
+          <div className="pt-4 space-y-3.5 text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
+            <p className="text-center text-slate-500 max-w-xs sm:max-w-sm mx-auto">
               {buyInNum > 0
-                ? `The host has cancelled this trivia room. Your ${buyInHuman} USDC entry fee is safe and eligible for 100% onchain refund.`
-                : 'The host has cancelled this trivia room. No USDC entry fee was charged.'}
+                ? `The host cancelled this room. Your entry fee of ${buyInHuman} USDC is safe and eligible for a 100% onchain refund.`
+                : 'The host has cancelled this trivia room. No entry fee was charged.'}
             </p>
 
             {buyInNum > 0 && (
-              <div className="mt-5 w-full p-4 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-3 text-left">
+              <div className="rounded-xl sm:rounded-2xl p-3.5 sm:p-4 bg-slate-50/90 border border-slate-200/80 flex items-center justify-between gap-3 text-left">
                 <div className="min-w-0">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                  <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
                     Refund Available
                   </span>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <TokenUSDC variant="branded" size={20} className="shrink-0" />
-                    <span className="text-sm sm:text-base font-black text-slate-900">{buyInHuman} USDC</span>
+                  <div className="flex items-center gap-1.5">
+                    <TokenUSDC variant="branded" size={18} className="shrink-0" />
+                    <span className="text-sm sm:text-base font-black text-slate-900 tabular-nums">{buyInHuman} USDC</span>
                   </div>
                 </div>
 
                 {refundSuccess ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-xl">
-                    <Check size={15} className="stroke-[2.5]" /> Refunded
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
+                    <Check size={14} className="stroke-[2.5]" /> Refunded
                   </span>
                 ) : (
                   <button
                     type="button"
                     onClick={() => claimRefund(roomCode)}
                     disabled={refundPending || refundConfirming}
-                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-xs transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white shadow-xs transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50"
                     style={{ background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)' }}
                   >
                     {refundPending || refundConfirming ? (
                       <>
-                        <Loader2 size={14} className="animate-spin" />
+                        <Loader2 size={13} className="animate-spin" />
                         <span>Claiming...</span>
                       </>
                     ) : (
@@ -642,7 +718,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                 )}
               </div>
             )}
+          </div>
 
+          {/* Action */}
+          <div className="mt-5 pt-3.5 border-t border-slate-100">
             <button
               type="button"
               onClick={() => {
@@ -650,7 +729,7 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                 removePendingPayoutRoom(roomCode)
                 onBack()
               }}
-              className="mt-6 w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 px-5 text-sm font-bold text-white shadow-md transition-all hover:brightness-105 active:scale-95 cursor-pointer"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl sm:rounded-2xl py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs transition-all hover:brightness-105 active:scale-[0.99] cursor-pointer"
               style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)' }}
             >
               <span>Return to Lobby</span>
@@ -912,10 +991,10 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                   {cancelPending || cancelConfirming ? (
                     <>
                       <Loader2 size={13} className="animate-spin text-rose-600 shrink-0" />
-                      <span className="font-bold text-rose-600">Cancelling & Refunding...</span>
+                      <span className="font-bold text-rose-600">Cancelling...</span>
                     </>
                   ) : (
-                    <span>Cancel Room & Refund</span>
+                    <span>Cancel</span>
                   )}
                 </button>
               </div>
@@ -951,91 +1030,153 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
           </div>
         </div>
 
-        {/* ── Beautiful Realtime Host Cancellation Modal ── */}
+        {/* ── Authentic Trivio Host Cancellation Confirmation Modal ── */}
         <AnimatePresence>
           {showCancelModal && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md"
-              onClick={() => {
-                if (!cancelPending && !cancelConfirming) setShowCancelModal(false)
-              }}
-            >
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-4 md:p-6 overflow-hidden">
+              {/* Backdrop */}
               <motion.div
-                initial={{ scale: 0.92, opacity: 0, y: 12 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.94, opacity: 0, y: 10 }}
-                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.16 }}
+                className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs cursor-pointer transform-gpu"
+                onClick={() => {
+                  if (!cancelPending && !cancelConfirming) setShowCancelModal(false)
+                }}
+              />
+
+              {/* Dialog Card */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                 onClick={(e) => e.stopPropagation()}
-                className="relative z-10 w-full max-w-md rounded-3xl p-6 sm:p-7 shadow-2xl border border-rose-200/90 bg-white text-center overflow-hidden"
+                className="relative w-full max-w-md flex flex-col rounded-2xl sm:rounded-3xl bg-white shadow-2xl border border-slate-200/90 z-10 p-6 sm:p-7 my-auto text-center transform-gpu"
               >
-                {/* Decorative aura */}
-                <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-48 h-48 rounded-full bg-rose-400/20 blur-3xl pointer-events-none" />
+                {/* Close Button Top Right */}
+                <button
+                  type="button"
+                  onClick={() => setShowCancelModal(false)}
+                  disabled={cancelPending || cancelConfirming}
+                  className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-40 z-20"
+                  title="Close dialog"
+                >
+                  <X size={18} />
+                </button>
 
-                <div className="flex flex-col items-center relative z-10">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-100 text-rose-600 shadow-inner mb-3.5 ring-8 ring-rose-50/80">
-                    <AlertTriangle size={28} className="stroke-[2.5]" />
-                  </div>
+                {/* Centered Static Caution Icon */}
+                <div className="flex items-center justify-center mx-auto mb-3 mt-1">
+                  <svg
+                    width="56"
+                    height="56"
+                    viewBox="0 0 48 48"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 drop-shadow-sm"
+                  >
+                    {/* Outer Yellow Glow / Rounded Triangle Base */}
+                    <path
+                      d="M20.536 6.536C22.074 3.872 25.926 3.872 27.464 6.536L44.785 36.536C46.324 39.2 44.398 42.533 41.321 42.533H6.679C3.602 42.533 1.676 39.2 3.215 36.536L20.536 6.536Z"
+                      fill="#FFC700"
+                    />
+                    {/* Inner Black Border Triangle */}
+                    <path
+                      d="M20.536 6.536C22.074 3.872 25.926 3.872 27.464 6.536L44.785 36.536C46.324 39.2 44.398 42.533 41.321 42.533H6.679C3.602 42.533 1.676 39.2 3.215 36.536L20.536 6.536Z"
+                      stroke="#18181B"
+                      strokeWidth="2.5"
+                      strokeLinejoin="round"
+                    />
+                    {/* Inner Yellow Fill Triangle */}
+                    <path
+                      d="M21.402 8.036C22.556 6.038 25.444 6.038 26.598 8.036L43.919 38.036C45.073 40.034 43.629 42.533 41.321 42.533H6.679C4.371 42.533 2.927 40.034 4.081 38.036L21.402 8.036Z"
+                      fill="#FFC700"
+                    />
+                    {/* Black Exclamation Mark Bar */}
+                    <path
+                      d="M24 16V27"
+                      stroke="#18181B"
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                    />
+                    {/* Black Exclamation Mark Dot */}
+                    <circle cx="24" cy="34" r="2.25" fill="#18181B" />
+                  </svg>
+                </div>
 
-                  <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-rose-50 text-rose-700 text-xs font-black uppercase tracking-wider mb-2 border border-rose-200/80">
-                    <span>Cancel Room #{roomCode}</span>
-                  </div>
+                {/* Title & Subtitle */}
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                  Cancel Room
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+                  Refund escrowed funds & close lobby
+                </p>
 
-                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                    Cancel This Game Room?
-                  </h3>
-
-                  <p className="mt-2 text-xs sm:text-sm text-slate-600 font-medium max-w-sm leading-relaxed">
-                    Are you sure you want to cancel? All joined players and sponsored funds will be refunded <strong className="text-slate-900 font-bold">100% onchain</strong> immediately.
+                {/* Body Content */}
+                <div className="pt-4 space-y-3.5 text-xs sm:text-sm text-slate-600 leading-relaxed font-medium">
+                  <p className="text-slate-500 max-w-xs sm:max-w-sm mx-auto">
+                    Are you sure you want to cancel this room? All joined players and sponsored funds will be refunded <strong className="text-slate-900 font-bold">100% onchain</strong> immediately.
                   </p>
 
-                  <div className="mt-4 w-full p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-left">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total Pool to Refund</span>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <TokenUSDC variant="branded" size={18} className="shrink-0" />
-                        <span className="text-sm font-black text-slate-900">{prizeHuman} USDC</span>
+                  {/* Escrow & Players Stats Card */}
+                  <div className="rounded-xl sm:rounded-2xl p-3.5 sm:p-4 bg-slate-50/90 border border-slate-200/80 grid grid-cols-2 divide-x divide-slate-200/80">
+                    <div className="flex flex-col items-center justify-center text-center px-2 min-w-0">
+                      <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                        Pool to Refund
+                      </span>
+                      <div className="flex items-center justify-center gap-1.5 min-w-0">
+                        <TokenUSDC variant="branded" size={17} className="shrink-0" />
+                        <span className="text-sm sm:text-base font-black text-slate-900 tabular-nums truncate">
+                          {currentPrizeNum > 0 ? prizeHuman : (savedPrize && parseFloat(savedPrize) > 0 ? savedPrize : (parseFloat(estimatedTotalPrize) > 0 ? estimatedTotalPrize : (buyInNum > 0 ? (buyInNum * Math.max(effectivePlayerCount, 1)).toFixed(2) : '0.00')))} USDC
+                        </span>
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Joined Players</span>
-                      <span className="text-sm font-black text-slate-900 mt-0.5 block">{effectivePlayerCount} player{effectivePlayerCount === 1 ? '' : 's'}</span>
+                    <div className="flex flex-col items-center justify-center text-center px-2 min-w-0">
+                      <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                        Joined Players
+                      </span>
+                      <div className="flex items-center justify-center gap-1.5 min-w-0">
+                        <Users size={16} className="text-slate-500 shrink-0" />
+                        <span className="text-sm sm:text-base font-black text-slate-900 tabular-nums">
+                          {rawPlayersList && rawPlayersList.length > 0 ? rawPlayersList.length : effectivePlayerCount} <span className="text-xs font-semibold text-slate-500">/ {maxP ?? '—'}</span>
+                        </span>
+                      </div>
                     </div>
                   </div>
+                </div>
 
-                  <div className="mt-6 flex flex-col sm:flex-row items-center gap-2.5 w-full">
-                    <button
-                      type="button"
-                      onClick={() => setShowCancelModal(false)}
-                      disabled={cancelPending || cancelConfirming}
-                      className="w-full sm:w-1/2 rounded-2xl py-3 px-4 text-xs sm:text-sm font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 transition-all active:scale-98 cursor-pointer disabled:opacity-50"
-                    >
-                      Keep Room Open
-                    </button>
+                {/* Actions */}
+                <div className="mt-5 pt-3.5 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowCancelModal(false)}
+                    disabled={cancelPending || cancelConfirming}
+                    className="w-full sm:w-1/2 rounded-xl sm:rounded-2xl py-2.5 sm:py-3 px-4 text-xs sm:text-sm font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 border border-slate-200/80 transition-all active:scale-[0.99] cursor-pointer disabled:opacity-50 text-center"
+                  >
+                    Keep Room Open
+                  </button>
 
-                    <button
-                      type="button"
-                      onClick={handleConfirmCancel}
-                      disabled={cancelPending || cancelConfirming}
-                      className="w-full sm:w-1/2 inline-flex items-center justify-center gap-1.5 rounded-2xl py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-md transition-all hover:brightness-105 active:scale-98 cursor-pointer disabled:opacity-60"
-                      style={{ background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)' }}
-                    >
-                      {cancelPending || cancelConfirming ? (
-                        <>
-                          <Loader2 size={14} className="animate-spin shrink-0" />
-                          <span>Confirming...</span>
-                        </>
-                      ) : (
-                        <span>Yes, Cancel & Refund</span>
-                      )}
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleConfirmCancel}
+                    disabled={cancelPending || cancelConfirming}
+                    className="w-full sm:w-1/2 inline-flex items-center justify-center gap-1.5 rounded-xl sm:rounded-2xl py-2.5 sm:py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs transition-all hover:brightness-105 active:scale-[0.99] cursor-pointer disabled:opacity-60 text-center"
+                    style={{ background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)' }}
+                  >
+                    {cancelPending || cancelConfirming ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin shrink-0" />
+                        <span>Confirming...</span>
+                      </>
+                    ) : (
+                      <span>Yes, Cancel & Refund</span>
+                    )}
+                  </button>
                 </div>
               </motion.div>
-            </motion.div>
+            </div>
           )}
         </AnimatePresence>
       </div>
