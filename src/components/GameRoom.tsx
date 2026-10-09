@@ -45,6 +45,8 @@ import {
   removePendingRefundRoom,
   saveRoomCancelledState,
   isSavedRoomCancelled,
+  saveRoomBuyIn,
+  getRoomBuyIn,
 } from '@/lib/roomStorage'
 import { useRoomScores, broadcastRoomTxHash, broadcastGameStart, broadcastGameCancel } from '@/lib/roomSync'
 import { fetchAuthoritativeScores, fetchRoomMetadata, submitFinalLeaderboard, submitGameCancel } from '@/lib/roomDb'
@@ -206,8 +208,15 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     payoutMode,
   ] = (roomInfo as RoomTuple) ?? []
   const prizeHuman = prizePool !== undefined ? formatUSDCRaw(prizePool) : '0'
-  const buyInHuman = _buyIn !== undefined ? formatUSDCRaw(_buyIn) : '0'
+  const savedBuyIn = getRoomBuyIn(roomCode)
+  const buyInHuman = _buyIn !== undefined ? formatUSDCRaw(_buyIn) : (savedBuyIn || '0')
   const buyInNum = parseFloat(buyInHuman) || 0
+
+  useEffect(() => {
+    if (roomCode && _buyIn !== undefined) {
+      saveRoomBuyIn(roomCode, formatUSDCRaw(_buyIn))
+    }
+  }, [roomCode, _buyIn])
   const maxPlayersNum = maxP || 4
   const currentPrizeNum = parseFloat(prizeHuman) || 0
   const effectivePlayerCount = Math.max(playerCount ?? 0, (rawPlayersList as `0x${string}`[] | undefined)?.length ?? 0)
@@ -684,9 +693,9 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
     return (
       <div className="relative min-h-screen min-h-[100dvh] w-full flex items-center justify-center p-3.5 sm:p-4 md:p-6 overflow-x-hidden" style={{ background: 'linear-gradient(180deg, #f9f9fc 0%, #fffcf7 52%, #fbf7f2 100%)' }}>
         <motion.div
-          initial={{ opacity: 0, scale: 0.96, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.15 }}
           className="relative w-full max-w-md rounded-2xl sm:rounded-3xl bg-white shadow-2xl border border-slate-200/90 p-6 sm:p-7 text-center"
         >
           {/* Centered Static Cancelled Icon */}
@@ -766,11 +775,12 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
                     type="button"
                     onClick={handleClaimRefund}
                     disabled={refundPending || refundConfirming}
-                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100/90 border border-rose-200/90 shadow-2xs transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] cursor-pointer disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white shadow-xs transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] cursor-pointer disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)' }}
                   >
                     {refundPending || refundConfirming ? (
                       <>
-                        <Loader2 size={13} className="animate-spin shrink-0 text-rose-600" />
+                        <Loader2 size={13} className="animate-spin shrink-0 text-white" />
                         <span>Claiming...</span>
                       </>
                     ) : (

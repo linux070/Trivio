@@ -27,6 +27,7 @@ import {
   Activity,
   KeyRound,
   AlertCircle,
+  AlertTriangle,
   Loader2,
   HelpCircle,
 } from 'lucide-react'
@@ -1215,8 +1216,8 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                   className="relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-rose-500/15 via-rose-500/8 to-amber-500/10 p-3.5 sm:p-4 border border-rose-200/90 shadow-xs transition-all"
                 >
                   <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
-                    <div className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500 text-white shadow-xs">
-                      <AlertCircle size={20} className="stroke-[2.2]" />
+                    <div className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-amber-950 shadow-xs">
+                      <AlertTriangle size={20} className="stroke-[2.2]" />
                     </div>
 
                     <div className="min-w-0">
@@ -1244,17 +1245,6 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
                       className="inline-flex items-center justify-center rounded-xl px-3.5 sm:px-4 py-2 text-xs font-bold text-white shadow-xs transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600"
                     >
                       <span>Claim Refund</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        removePendingRefundRoom(pending.roomCode, activeAddress)
-                        setPendingRefunds(getPendingRefundRooms(activeAddress))
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-                      title="Dismiss reminder"
-                    >
-                      <X size={15} />
                     </button>
                   </div>
                 </motion.div>

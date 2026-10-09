@@ -458,6 +458,49 @@ export function getRoomPrize(roomCode: string | null | undefined): string | null
   }
 }
 
+const STORAGE_ROOM_BUYIN_PREFIX = 'trivio_room_buyin_'
+
+/** Save the buy-in amount for a room code */
+export function saveRoomBuyIn(roomCode: string, buyIn: string): void {
+  if (!roomCode || !buyIn) return
+  const code = roomCode.trim().toUpperCase()
+  try {
+    localStorage.setItem(`${STORAGE_ROOM_BUYIN_PREFIX}${code}`, buyIn)
+    sessionStorage.setItem(`${STORAGE_ROOM_BUYIN_PREFIX}${code}`, buyIn)
+  } catch {
+    // ignore
+  }
+}
+
+/** Retrieve the saved buy-in amount for a room code */
+export function getRoomBuyIn(roomCode: string | null | undefined): string | null {
+  if (!roomCode) return null
+  const code = roomCode.trim().toUpperCase()
+  try {
+    const saved =
+      sessionStorage.getItem(`${STORAGE_ROOM_BUYIN_PREFIX}${code}`) ||
+      localStorage.getItem(`${STORAGE_ROOM_BUYIN_PREFIX}${code}`)
+    if (saved) return saved
+  } catch {
+    // ignore
+  }
+  // Check pending refunds
+  try {
+    const pending = getPendingRefundRooms().find(r => r.roomCode === code)
+    if (pending?.buyIn) return pending.buyIn
+  } catch {
+    // ignore
+  }
+  // Check live rooms
+  try {
+    const live = getRegisteredLiveRooms().find(r => r.roomCode === code)
+    if (live?.buyIn) return live.buyIn
+  } catch {
+    // ignore
+  }
+  return null
+}
+
 export const EVENT_ROOM_SCORES_UPDATED = 'trivio_room_scores_updated'
 const STORAGE_ROOM_SCORES_PREFIX = 'trivio_room_scores_'
 
