@@ -880,26 +880,28 @@ export default function GameRoom({ roomCode, category, onBack, onGameEnd }: Game
             </div>
 
             {/* Host & Joined Players Section */}
-            <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-2xl p-3 sm:p-3.5" style={glass.inner}>
+            <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-3.5 rounded-2xl p-3 sm:p-3.5" style={glass.inner}>
               {/* Host Column */}
-              <div className="flex flex-col gap-1 min-w-0">
+              <div className="flex flex-col gap-1 min-w-0 pr-1 sm:pr-0">
                 <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   Host
                 </span>
-                {host && host !== '0x0000000000000000000000000000000000000000' ? (
-                  <PlayerTag address={host} />
-                ) : (
-                  <span className="text-xs text-slate-400 font-medium">Pending...</span>
-                )}
+                <div className="min-w-0 truncate pt-0.5">
+                  {host && host !== '0x0000000000000000000000000000000000000000' ? (
+                    <PlayerTag address={host} />
+                  ) : (
+                    <span className="text-xs text-slate-400 font-medium">Pending...</span>
+                  )}
+                </div>
               </div>
 
               {/* Joined Players Column */}
-              <div className="flex flex-col gap-1 min-w-0 sm:border-l sm:border-slate-200/60 sm:pl-3.5">
-                <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              <div className="flex flex-col gap-1 min-w-0 border-l border-slate-200/70 pl-2.5 sm:pl-3.5">
+                <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 truncate">
                   Joined Players ({rawPlayersList?.length ?? 0}/{maxP ?? '—'})
                 </span>
                 {rawPlayersList && rawPlayersList.length > 0 ? (
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-x-2.5 sm:gap-x-3 gap-y-1 pt-0.5 min-w-0">
                     {(rawPlayersList as `0x${string}`[]).map((pAddr) => (
                       <PlayerTag key={pAddr} address={pAddr} />
                     ))}

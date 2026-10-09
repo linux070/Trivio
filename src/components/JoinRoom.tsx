@@ -368,47 +368,17 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
   const contractReady = Boolean(TRIVIA_GAME_ADDRESS)
 
   const handleInputChange = (raw: string) => {
-    const extracted = extractRoomCode(raw)
-    if (extracted && extracted.roomCode) {
-      setInput(extracted.roomCode)
-      setCheckedCode(extracted.roomCode)
+    const clean = raw.toUpperCase()
+    setInput(clean)
+    if (clean.trim().length === 0) {
+      setCheckedCode(null)
       try {
-        sessionStorage.setItem(STORAGE_JOIN_CODE_KEY, extracted.roomCode)
-        localStorage.setItem(STORAGE_JOIN_CODE_KEY, extracted.roomCode)
+        sessionStorage.removeItem(STORAGE_JOIN_CODE_KEY)
+        localStorage.removeItem(STORAGE_JOIN_CODE_KEY)
       } catch {}
-      setPendingJoin(extracted.roomCode, extracted.category)
-      if (extracted.category) {
-        setHostCategory(extracted.category)
-        saveRoomCategory(extracted.roomCode, extracted.category)
-      }
-      if (typeof window !== 'undefined' && window.location.hash !== `#/join/${extracted.roomCode}`) {
-        window.history.replaceState(null, '', `#/join/${extracted.roomCode}`)
-      }
-    } else {
-      const clean = raw.toUpperCase()
-      setInput(clean)
-      const cleanCode = clean.replace(/[^A-Z0-9]/g, '').slice(0, 8)
-      if (cleanCode.length >= 4) {
-        setCheckedCode(cleanCode)
-        try {
-          sessionStorage.setItem(STORAGE_JOIN_CODE_KEY, cleanCode)
-          localStorage.setItem(STORAGE_JOIN_CODE_KEY, cleanCode)
-        } catch {}
-        const cat = getRoomCategory(cleanCode) || inferCategoryFromCode(cleanCode) || undefined
-        setPendingJoin(cleanCode, cat)
-        if (typeof window !== 'undefined' && window.location.hash !== `#/join/${cleanCode}`) {
-          window.history.replaceState(null, '', `#/join/${cleanCode}`)
-        }
-      } else if (cleanCode.length === 0) {
-        setCheckedCode(null)
-        try {
-          sessionStorage.removeItem(STORAGE_JOIN_CODE_KEY)
-          localStorage.removeItem(STORAGE_JOIN_CODE_KEY)
-        } catch {}
-        clearPendingJoin()
-        if (typeof window !== 'undefined' && window.location.hash !== '#/join') {
-          window.history.replaceState(null, '', '#/join')
-        }
+      clearPendingJoin()
+      if (typeof window !== 'undefined' && window.location.hash !== '#/join') {
+        window.history.replaceState(null, '', '#/join')
       }
     }
   }
@@ -431,6 +401,9 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
 
     if (checkedCode !== code) {
       setCheckedCode(code)
+      if (typeof window !== 'undefined' && window.location.hash !== `#/join/${code}`) {
+        window.history.replaceState(null, '', `#/join/${code}`)
+      }
       return
     }
 
@@ -576,9 +549,10 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                   }}
                 />
                 <button
+                  type="button"
                   onClick={handleLookupOrJoin}
                   disabled={input.trim().length < 4 || joinPending || joinConfirming}
-                  className="shrink-0 rounded-2xl px-4 sm:px-5 py-3 text-sm font-semibold transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-40 cursor-pointer shadow-xs"
+                  className="shrink-0 rounded-2xl px-4 sm:px-5 py-3 text-sm font-semibold transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-40 cursor-pointer shadow-xs touch-manipulation"
                   style={{ background: 'var(--accent)', color: 'white' }}
                 >
                   {joinPending || joinConfirming ? 'Joining...' : 'Join'}
@@ -709,26 +683,28 @@ export default function JoinRoom({ initialCategory = 'General Knowledge', prefil
                     </div>
 
                     {/* Host & Joined Players Section */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-2xl p-3 sm:p-3.5" style={glass.inner}>
+                    <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 rounded-2xl p-3 sm:p-3.5" style={glass.inner}>
                       {/* Host Column */}
-                      <div className="flex flex-col gap-1 min-w-0">
+                      <div className="flex flex-col gap-1 min-w-0 pr-1 sm:pr-0">
                         <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                           Host
                         </span>
-                        {host && host !== '0x0000000000000000000000000000000000000000' ? (
-                          <PlayerTag address={host} />
-                        ) : (
-                          <span className="text-xs text-slate-400 font-medium">Pending...</span>
-                        )}
+                        <div className="min-w-0 truncate pt-0.5">
+                          {host && host !== '0x0000000000000000000000000000000000000000' ? (
+                            <PlayerTag address={host} />
+                          ) : (
+                            <span className="text-xs text-slate-400 font-medium">Pending...</span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Joined Players Column */}
-                      <div className="flex flex-col gap-1 min-w-0 sm:border-l sm:border-slate-200/60 sm:pl-3.5">
-                        <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                      <div className="flex flex-col gap-1 min-w-0 border-l border-slate-200/70 pl-2.5 sm:pl-3.5">
+                        <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 truncate">
                           Joined Players ({effectivePlayersList.length}/{maxPlayersNum})
                         </span>
                         {effectivePlayersList.length > 0 ? (
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
+                          <div className="flex flex-wrap items-center gap-x-2.5 sm:gap-x-3 gap-y-1 pt-0.5 min-w-0">
                             {effectivePlayersList.map((pAddr) => (
                               <PlayerTag key={pAddr} address={pAddr} />
                             ))}

@@ -44,7 +44,7 @@ export function PlayerTag({ address, className = '', isHost = false }: PlayerTag
           e.currentTarget.src = getDiceBearAvatarUrl('bottts-neutral', address || username)
         }}
       />
-      <span className="text-xs sm:text-sm font-bold text-slate-800 tracking-tight">
+      <span className="text-xs sm:text-sm font-bold text-slate-800 tracking-tight truncate max-w-[95px] sm:max-w-[140px] md:max-w-none">
         @{username}
       </span>
       {isHost && (
