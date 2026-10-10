@@ -79,6 +79,7 @@ export function recordWinnerPayout(payout: {
   amount: string
   category: string
   txHash?: string
+  timestamp?: number
 }): void {
   if (!payout.winnerAddress || payout.winnerAddress === '0x0000000000000000000000000000000000000000') return
 
@@ -94,7 +95,7 @@ export function recordWinnerPayout(payout: {
       avatarSeed,
       amount: parseFloat(payout.amount || '0').toFixed(2),
       category: payout.category || 'General Knowledge',
-      timestamp: Date.now(),
+      timestamp: payout.timestamp || Date.now(),
       txHash: payout.txHash,
     }
 
@@ -118,6 +119,11 @@ export function recordWinnerPayout(payout: {
       }
       if (parseFloat(record.amount) > parseFloat(existing[existingIdx].amount || '0')) {
         existing[existingIdx].amount = record.amount
+        updated = true
+      }
+      // Update with exact onchain block timestamp if available
+      if (payout.timestamp && Math.abs(existing[existingIdx].timestamp - payout.timestamp) > 30000) {
+        existing[existingIdx].timestamp = payout.timestamp
         updated = true
       }
     } else {
@@ -175,99 +181,129 @@ export function formatTimeAgo(timestamp: number): string {
 
 /**
  * Calculate dynamic live leaderboard from all recorded payouts
+ * Computes both Daily (24h rolling window) and All-Time leaderboards
  */
 export function computeLeaderboard(
-  rawPayouts: WinnerPayoutRecord[]
+  rawPayouts: WinnerPayoutRecord[],
+  timeframe: 'daily' | 'all-time' = 'daily'
 ): {
   leaderboard: LiveLeaderboardEntry[]
+  dailyLeaderboard: LiveLeaderboardEntry[]
+  allTimeLeaderboard: LiveLeaderboardEntry[]
   totalToday: string
+  totalAllTime: string
   latestPayout: LatestPayoutInfo | null
+  recentPayouts: LatestPayoutInfo[]
   payouts: WinnerPayoutRecord[]
 } {
   const realPayouts = deduplicatePayouts(rawPayouts)
   const now = Date.now()
   const oneDayAgo = now - 24 * 60 * 60 * 1000
 
-  // 1. Calculate today's total payout sum
+  // 1. Calculate sums
   let todaySum = 0
+  let allTimeSum = 0
+
   for (const p of realPayouts) {
+    const val = parseFloat(p.amount) || 0
+    allTimeSum += val
     if (p.timestamp >= oneDayAgo) {
-      todaySum += parseFloat(p.amount) || 0
+      todaySum += val
     }
   }
 
-  // 2. Aggregate real user stats
-  const userMap = new Map<
-    string,
-    {
-      username: string
-      address: string
-      avatarSeed: string
-      total: number
-      wins: number
-    }
-  >()
+  // 2. Helper to aggregate users for a filtered set of payouts
+  const aggregateUsers = (payoutsSubset: WinnerPayoutRecord[]): LiveLeaderboardEntry[] => {
+    const userMap = new Map<
+      string,
+      {
+        username: string
+        address: string
+        avatarSeed: string
+        total: number
+        wins: number
+      }
+    >()
 
-  for (const p of realPayouts) {
-    const addr = p.winnerAddress.toLowerCase()
+    for (const p of payoutsSubset) {
+      const addr = p.winnerAddress.toLowerCase()
+      const freshProfile = getUserProfile(p.winnerAddress)
+      const current = userMap.get(addr) || {
+        username:
+          freshProfile?.username ||
+          (p.username && !p.username.startsWith('0x') ? p.username : generateRandomUsername(p.winnerAddress)),
+        address: p.winnerAddress,
+        avatarSeed: freshProfile?.avatarSeed || p.avatarSeed || p.username || addr,
+        total: 0,
+        wins: 0,
+      }
+      current.total += parseFloat(p.amount) || 0
+      current.wins += 1
+      if (freshProfile?.username) {
+        current.username = freshProfile.username
+        current.avatarSeed = freshProfile.avatarSeed || freshProfile.username
+      }
+      userMap.set(addr, current)
+    }
+
+    return Array.from(userMap.values())
+      .sort((a, b) => b.total - a.total || b.wins - a.wins)
+      .map((u, idx) => ({
+        rank: idx + 1,
+        username: u.username,
+        address: u.address,
+        avatarSeed: u.avatarSeed,
+        totalWinnings: u.total.toFixed(2),
+        winCount: u.wins,
+      }))
+  }
+
+  const dailySubset = realPayouts.filter((p) => p.timestamp >= oneDayAgo)
+  const dailyLeaderboard = aggregateUsers(dailySubset)
+  const allTimeLeaderboard = aggregateUsers(realPayouts)
+
+  // 3. Determine recent payouts stream (up to 10 latest)
+  const recentPayouts: LatestPayoutInfo[] = realPayouts.slice(0, 10).map((p) => {
     const freshProfile = getUserProfile(p.winnerAddress)
-    const current = userMap.get(addr) || {
-      username: freshProfile?.username || (p.username && !p.username.startsWith('0x') ? p.username : generateRandomUsername(p.winnerAddress)),
-      address: p.winnerAddress,
-      avatarSeed: freshProfile?.avatarSeed || p.avatarSeed || p.username || addr,
-      total: 0,
-      wins: 0,
-    }
-    current.total += parseFloat(p.amount) || 0
-    current.wins += 1
-    if (freshProfile?.username) {
-      current.username = freshProfile.username
-      current.avatarSeed = freshProfile.avatarSeed || freshProfile.username
-    }
-    userMap.set(addr, current)
-  }
-
-  const realLeaderboard: LiveLeaderboardEntry[] = Array.from(userMap.values())
-    .sort((a, b) => b.total - a.total || b.wins - a.wins)
-    .map((u, idx) => ({
-      rank: idx + 1,
-      username: u.username,
-      address: u.address,
-      avatarSeed: u.avatarSeed,
-      totalWinnings: u.total.toFixed(2),
-      winCount: u.wins,
-    }))
-
-  // 3. Determine latest payout
-  let latest: LatestPayoutInfo | null = null
-  if (realPayouts.length > 0) {
-    const mostRecent = realPayouts[0]
-    const freshProfile = getUserProfile(mostRecent.winnerAddress)
     const resolvedUsername =
       freshProfile?.username ||
-      (mostRecent.username && !mostRecent.username.startsWith('0x')
-        ? mostRecent.username
-        : generateRandomUsername(mostRecent.winnerAddress))
-    latest = {
+      (p.username && !p.username.startsWith('0x')
+        ? p.username
+        : generateRandomUsername(p.winnerAddress))
+
+    return {
       username: resolvedUsername,
-      address: mostRecent.winnerAddress,
-      amount: mostRecent.amount,
-      category: mostRecent.category,
-      timeAgo: formatTimeAgo(mostRecent.timestamp),
-      timestamp: mostRecent.timestamp,
-      txHash: mostRecent.txHash,
+      address: p.winnerAddress,
+      amount: p.amount,
+      category: p.category || 'General Knowledge',
+      timeAgo: formatTimeAgo(p.timestamp),
+      timestamp: p.timestamp,
+      txHash: p.txHash,
     }
-  }
+  })
+
+  const latest = recentPayouts.length > 0 ? recentPayouts[0] : null
 
   const totalTodayFormatted =
     todaySum > 0
       ? `$${todaySum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Today`
       : '$0.00 Today'
 
+  const totalAllTimeFormatted =
+    allTimeSum > 0
+      ? `$${allTimeSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} All-Time`
+      : '$0.00 All-Time'
+
+  const activeLeaderboard = timeframe === 'daily' ? dailyLeaderboard : allTimeLeaderboard
+
   return {
-    leaderboard: realLeaderboard,
+    leaderboard: activeLeaderboard,
+    dailyLeaderboard,
+    allTimeLeaderboard,
     totalToday: totalTodayFormatted,
+    totalAllTime: totalAllTimeFormatted,
     latestPayout: latest,
+    recentPayouts,
     payouts: realPayouts,
   }
 }

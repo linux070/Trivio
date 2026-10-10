@@ -7,8 +7,10 @@
 |---|---|---|---|
 | TrivioProfileRegistry | Arc Testnet | `0xd69522761493ce3fc74fc07ae99d5cbd6de5f480` | [View](https://explorer.testnet.arc.io/address/0xd69522761493ce3fc74fc07ae99d5cbd6de5f480) |
 | TriviaGame | Arc Testnet | `0x1b785e38e8ebb334b52a305a10e92b5ef9564624` | [View](https://explorer.testnet.arc.io/address/0x1b785e38e8ebb334b52a305a10e92b5ef9564624) |
+| TrivioProfileRegistry | Arc Mainnet | `0x0000000000000000000000000000000000000000` | [View](https://explorer.arc.io) |
+| TriviaGame | Arc Mainnet | `0x0000000000000000000000000000000000000000` | [View](https://explorer.arc.io) |
 
-USDC constructor arg (Arc Testnet): `0x3600000000000000000000000000000000000000`
+USDC constructor arg (Arc Testnet & Mainnet): `0x3600000000000000000000000000000000000000`
 
 > Built with Arc Studio - money-powered apps in minutes
 
@@ -17,8 +19,7 @@ This is the **project memory** - what Arc Studio remembers about building this a
 ---
 
 ## What trivio Does :
-
-**trivio** is a high-speed, competitive onchain trivia platform built on Arc Network where players test their knowledge, compete in real-time multiplayer rooms, and win USDC prize pools.
+play real-time multiplayer onchain trivia and win USDC on Arc.
 
 ### Key Features & Capabilities:
 - **Frictionless Web3 Onboarding**: Instant zero-gas play powered by Privy (Google, Email, Passkeys, and Injected Web3 Wallets).
@@ -29,7 +30,15 @@ This is the **project memory** - what Arc Studio remembers about building this a
   - 🥈 Top 2 Split (70% / 30%)
   - 🥉 Top 3 Podium (50% / 30% / 20%)
   - 🏅 Top 5 Split (40% / 25% / 15% / 10% / 10%)
-- **Anti-Cheat & Player Protection**: Non-custodial escrow with EIP-712 cryptographic score validation, question seed hash commitments, in-progress cancellation locks, and emergency inactivity timeout refunds.
+- **Anti-Cheat & Fair-Play Engine**:
+  - 🔒 **Mid-Game Answer Locking**: Once chosen (or timed out), selections are locked across browser refreshes so players cannot peek at answers and pick again.
+  - ⏱️ **Question Timestamp Lock**: Calculates real elapsed time against `questionStartTime` to eliminate stalling or timer reset exploits.
+  - 👁️ **Tab Switching & Defocus Detection**: Penalizes tab switching (Google/ChatGPT lookups) by capping the speed bonus ($25\text{ pts}$).
+  - 🔀 **Player-Specific Option Shuffling**: Shuffles choices (A, B, C, D) per player seed to eliminate voice-chat collusion (*"Choose B!"*).
+  - 🚫 **Anti-Bot Scraping & Copy/Paste Lock**: Blocks text selection, context menus, and clipboard dragging on question cards.
+  - ⚡ **Minimum Human Reaction Time Threshold**: Flags sub-$250\text{ms}$ automated macro submissions and limits them to baseline ($10\text{ pts}$).
+  - 🔐 **In-Memory Cryptographic Salted Hashing**: Active questions in React memory only store `answerHash`—no plain answer indices before submission.
+  - 📜 **Smart Contract Protections**: Non-custodial escrow, EIP-712 proofs, seed commitments, cancellation locks, and emergency timeout self-refunds.
 
 ## Tech Stack
 

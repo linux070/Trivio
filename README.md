@@ -1,12 +1,12 @@
 # trivio — Having Fun Onchain
 
-[![Chain](https://img.shields.io/badge/Network-Arc_Testnet-6366f1?style=flat-square)](https://explorer.testnet.arc.io)
+[![Chain](https://img.shields.io/badge/Network-Arc_Testnet_|_Arc_Mainnet-6366f1?style=flat-square)](https://explorer.testnet.arc.io)
 [![Token](https://img.shields.io/badge/Prize_Token-USDC-2775ca?style=flat-square)](https://circle.com)
 [![Framework](https://img.shields.io/badge/Frontend-React_18_+_Vite-61dafb?style=flat-square)](https://reactjs.org)
 [![Contracts](https://img.shields.io/badge/Solidity-0.8.28-363636?style=flat-square)](https://soliditylang.org)
 [![Build](https://img.shields.io/badge/Foundry-Passing-success?style=flat-square)](https://getfoundry.sh)
 
-**trivio** is a high-speed, competitive onchain trivia platform built on Arc Network where players test their knowledge, compete in real-time multiplayer rooms, and win USDC prize pools.
+**trivio**: play real-time multiplayer onchain trivia and win USDC on Arc.
 
 ---
 
@@ -16,8 +16,10 @@
 |---|---|---|---|
 | **TrivioProfileRegistry** | Arc Testnet (`5042002`) | `0xd69522761493ce3fc74fc07ae99d5cbd6de5f480` | [View on Explorer](https://explorer.testnet.arc.io/address/0xd69522761493ce3fc74fc07ae99d5cbd6de5f480) |
 | **TriviaGame** | Arc Testnet (`5042002`) | `0x1b785e38e8ebb334b52a305a10e92b5ef9564624` | [View on Explorer](https://explorer.testnet.arc.io/address/0x1b785e38e8ebb334b52a305a10e92b5ef9564624) |
+| **TrivioProfileRegistry** | Arc Mainnet (`5042`) | `0x0000000000000000000000000000000000000000` | [View on Explorer](https://explorer.arc.io) |
+| **TriviaGame** | Arc Mainnet (`5042`) | `0x0000000000000000000000000000000000000000` | [View on Explorer](https://explorer.arc.io) |
 
-* **USDC Token (Arc Testnet)**: `0x3600000000000000000000000000000000000000` (6 decimals)
+* **USDC Token Address (Arc Testnet & Mainnet)**: `0x3600000000000000000000000000000000000000` (6 decimals)
 
 ---
 
@@ -45,12 +47,47 @@ Support for both **Buy-in** (entry fee) and **Sponsored** (free-to-play) rooms w
 - 🥉 **Top 3 Podium**: 50% / 30% / 20%
 - 🏅 **Top 5 Split**: 40% / 25% / 15% / 10% / 10%
 
-### 5. 🔒 Anti-Cheat & Player Protection
-- **Cryptographic Score Validation**: EIP-712 score receipts verify player achievements and prevent falsified leaderboards.
-- **Question Seed Commitment**: PRNG seed hash committed onchain at room creation to prevent mid-game question swapping.
-- **In-Progress Cancellation Lock**: Hosts cannot cancel a game once it begins.
-- **Host Inactivity Timeout**: Emergency player self-refund circuit breaker if a host disconnects or abandons a room.
-- **Non-Custodial Vault**: `SafeERC20`, `ReentrancyGuard`, and `Pausable` protection for all prize pools.
+---
+
+## 🛡️ Comprehensive Anti-Cheat & Fair-Play Engine
+
+Trivio implements a multi-layer anti-cheat architecture protecting prize pools and guaranteeing honest competition across web clients and smart contracts:
+
+### 1. 🔒 Mid-Game Answer Locking & Persistence
+- **Locked Choice**: Once a player selects an option or time expires (`0s`), their decision is immediately locked in session storage.
+- **Refresh Protection**: If a user refreshes the page mid-game, they return to their exact question index with their chosen answer locked (`disabled`), preventing players from peeking at the correct answer, refreshing, and picking another choice.
+
+### 2. ⏱️ Question Timestamp Lock (Anti-Timer Reset)
+- **Epoch Tracking**: `questionStartTime` is recorded at the start of each round.
+- **Elapsed Calculation**: Upon refresh, remaining time is strictly computed as $\text{Duration} - (\text{Now} - \text{StartTime})$. If the round duration has elapsed while away, the question is evaluated as timed out (`0s`), preventing timer manipulation or stalling.
+
+### 3. 👁️ Tab Switching & Defocus Detection (Anti-Googling / Anti-ChatGPT)
+- **Focus Monitoring**: Monitors `document.visibilitychange` (`document.hidden`) and `window.blur` events during active questions.
+- **Fair-Play Speed Penalty**: If a player switches tabs or defocuses the window to search for answers, a warning toast triggers, a badge appears on their score bar, and speed bonus points on that question are capped to baseline ($25\text{ pts}$).
+
+### 4. 🔀 Player-Specific Option Shuffling (Anti-Collusion & Screen Peeking)
+- **Personalized Shuffling**: While all room participants answer the identical 10 questions in real time, the 4 answer choices (A, B, C, D) are deterministically shuffled per player address (`shuffleQuestionOptionsForPlayer`).
+- **Collusion Shield**: Option A on Player 1's screen is different from Option A on Player 2's screen, neutralizing voice-chat collusion (*"Choose B!"*).
+
+### 5. 🚫 Anti-Bot Scraping & Copy/Paste Lock
+- **Clipboard & Context Lock**: Suppresses `user-select`, right-click context menus, `onCopy`, `onCut`, and dragging across all question cards and answer buttons.
+- **Prompt Protection**: Prevents instant copying of question text into search engines or AI bots.
+
+### 6. ⚡ Minimum Human Reaction Time Threshold (Anti-Bot Scripts)
+- **Reflex Validation**: Human visual perception and motor synaptic response take at least **$250\text{ms}$–$300\text{ms}$**.
+- **Macro Blocking**: Submissions in $< 250\text{ms}$ from question render are flagged as automated scripts/macros, triggering a warning and capping points to baseline ($10\text{ pts}$).
+
+### 7. 🔐 In-Memory Salted Cryptographic Answer Hashing
+- **Zero Plain Answers in State**: Active questions stored in React memory and DOM only contain a cryptographic hash:
+  $$\text{answerHash} = \text{hash}(\text{SALT} + \text{questionText} + \text{correctOptionText})$$
+- **Inspection-Proof**: Inspecting React DevTools, state dumps, or DOM attributes reveals zero hints about which choice is correct until the player has submitted their answer.
+
+### 8. 📜 Smart Contract & Escrow Protections
+- **EIP-712 Score Verification**: Cryptographic score proofs committed onchain.
+- **Question Seed Commitments**: Seed hashes committed at room creation.
+- **In-Progress Cancellation Locks**: Hosts cannot cancel a game once it begins.
+- **Emergency Inactivity Timeout**: Automated player self-refund circuit breaker if a host disconnects.
+- **Non-Custodial Vault**: Built with `SafeERC20`, `ReentrancyGuard`, `Pausable`, and `Ownable2Step`.
 
 ---
 

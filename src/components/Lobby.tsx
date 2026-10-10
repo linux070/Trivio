@@ -70,7 +70,7 @@ import {
 } from '@/lib/roomStorage'
 import { useLiveRooms } from '@/hooks/useLiveRooms'
 import { useLiveWinners } from '@/hooks/useLiveWinners'
-import { type LiveLeaderboardEntry, type LatestPayoutInfo } from '@/lib/winnersStorage'
+import { type LiveLeaderboardEntry, type LatestPayoutInfo, formatTimeAgo } from '@/lib/winnersStorage'
 import SoloPracticeModal from '@/components/SoloPracticeModal'
 import HowToPlayModal from '@/components/HowToPlayModal'
 
@@ -82,35 +82,21 @@ interface LobbyProps {
   onDisconnect?: () => void
 }
 
-function PodiumWinnerCard({
+const RANK_BADGE_STYLES = [
+  'bg-amber-400 text-white', // 1st Place
+  'bg-slate-400 text-white', // 2nd Place
+  'bg-amber-600 text-white', // 3rd Place
+  'bg-slate-200 text-slate-600', // 4th Place
+  'bg-slate-200 text-slate-600', // 5th Place
+]
+
+function LeaderboardListItem({
   winner,
   rankIndex,
 }: {
   winner: LiveLeaderboardEntry
   rankIndex: number
 }) {
-  const podiumColors = [
-    {
-      border: 'border-amber-300',
-      bg: 'bg-gradient-to-b from-amber-500/10 via-amber-50/50 to-white',
-      badge: 'bg-amber-400 text-amber-950',
-      medal: '🥇',
-    },
-    {
-      border: 'border-slate-300',
-      bg: 'bg-gradient-to-b from-slate-200/40 via-slate-50/50 to-white',
-      badge: 'bg-slate-300 text-slate-900',
-      medal: '🥈',
-    },
-    {
-      border: 'border-amber-700/30',
-      bg: 'bg-gradient-to-b from-amber-700/10 via-amber-50/30 to-white',
-      badge: 'bg-amber-700/30 text-amber-950',
-      medal: '🥉',
-    },
-  ]
-  const style = podiumColors[rankIndex] || podiumColors[2]
-
   const { profile: onchainProfile } = useOnchainProfile(winner.address)
   const localProfile = winner.address ? getUserProfile(winner.address.toLowerCase()) : null
 
@@ -132,127 +118,105 @@ function PodiumWinnerCard({
       ? getDiceBearAvatarUrl(onchainProfile?.avatarStyle || localProfile?.avatarStyle || 'bottts-neutral', winner.avatarSeed)
       : getDiceBearAvatarUrl(onchainProfile?.avatarStyle || localProfile?.avatarStyle || 'bottts-neutral', winner.address || rawUsername))
 
-  return (
-    <div
-      className={`relative flex flex-col items-center text-center p-3 rounded-2xl border ${style.border} ${style.bg} shadow-xs transition-all hover:scale-[1.02]`}
-    >
-      {/* Rank Badge */}
-      <div className="absolute -top-2.5 flex items-center justify-center">
-        <span className={`text-[10px] font-black px-2 py-0.2 rounded-full shadow-2xs ${style.badge}`}>
-          #{winner.rank}
-        </span>
-      </div>
+  const rankBg = RANK_BADGE_STYLES[rankIndex] || RANK_BADGE_STYLES[3]
 
-      {/* Avatar */}
-      <div className="mt-1 relative">
+  return (
+    <div className="flex items-center justify-between p-2.5 sm:p-3 rounded-2xl border border-slate-200/75 bg-slate-50/50 hover:bg-slate-50/80 transition-colors shadow-2xs">
+      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+        {/* Rank Badge (Exact match to Game Concluded modal) */}
+        <span
+          className={`inline-flex items-center justify-center h-6 w-6 rounded-md text-[11px] font-extrabold shrink-0 shadow-2xs ${rankBg}`}
+        >
+          {winner.rank}
+        </span>
+
+        {/* Avatar */}
         <img
           src={resolvedAvatar}
           alt={rawUsername}
-          className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-white border border-slate-200/80 shadow-xs object-cover p-0.5"
+          className="h-8 w-8 sm:h-9 sm:w-9 rounded-full border border-slate-200/90 bg-white object-cover p-0.5 shrink-0 ring-1 ring-slate-100 shadow-2xs"
           onError={(e) => {
             e.currentTarget.src = getDiceBearAvatarUrl('bottts-neutral', winner.address || rawUsername)
           }}
         />
-        <span className="absolute -bottom-1 -right-1 text-xs">
-          {style.medal}
-        </span>
-      </div>
 
-      {/* Username */}
-      <span
-        className="text-xs font-bold text-slate-900 tracking-tight mt-1.5 truncate max-w-[90%]"
-        title={formattedUsername}
-      >
-        {formattedUsername}
-      </span>
-
-      {/* USDC Won */}
-      <div className="flex items-center gap-1.5 mt-0.5">
-        <TokenUSDC variant="branded" size={17} className="shrink-0" />
-        <span className="text-xs sm:text-sm font-black text-slate-950 tabular-nums">
-          ${winner.totalWinnings}
-        </span>
-      </div>
-
-      {/* Wins count */}
-      <span className="text-[10px] font-semibold text-slate-500 mt-0.5">
-        {winner.winCount} {winner.winCount === 1 ? 'win' : 'wins'}
-      </span>
-    </div>
-  )
-}
-
-function RunnerUpRow({ entry }: { entry: LiveLeaderboardEntry }) {
-  const { profile: onchainProfile } = useOnchainProfile(entry.address)
-  const localProfile = entry.address ? getUserProfile(entry.address.toLowerCase()) : null
-
-  const rawUsername =
-    onchainProfile?.username ||
-    localProfile?.username ||
-    (entry.username && !entry.username.startsWith('0x')
-      ? entry.username
-      : generateRandomUsername(entry.address))
-
-  const formattedUsername = rawUsername.startsWith('@')
-    ? rawUsername
-    : `@${rawUsername}`
-
-  const resolvedAvatar =
-    onchainProfile?.avatarUrl ||
-    localProfile?.avatarUrl ||
-    (entry.avatarSeed
-      ? getDiceBearAvatarUrl(onchainProfile?.avatarStyle || localProfile?.avatarStyle || 'bottts-neutral', entry.avatarSeed)
-      : getDiceBearAvatarUrl(onchainProfile?.avatarStyle || localProfile?.avatarStyle || 'bottts-neutral', entry.address || rawUsername))
-
-  return (
-    <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 border border-slate-200/70 hover:bg-white transition-colors">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <span className="text-xs font-black text-slate-400 w-4 text-center">
-          #{entry.rank}
-        </span>
-        <img
-          src={resolvedAvatar}
-          alt={rawUsername}
-          className="h-7 w-7 rounded-full bg-white border border-slate-200 shadow-2xs object-cover p-0.5 shrink-0"
-          onError={(e) => {
-            e.currentTarget.src = getDiceBearAvatarUrl('bottts-neutral', entry.address || rawUsername)
-          }}
-        />
+        {/* Username & Win count */}
         <div className="min-w-0">
-          <p className="text-xs font-bold text-slate-900 truncate">
+          <p className="text-xs sm:text-[13px] font-semibold text-slate-900 truncate tracking-tight">
             {formattedUsername}
           </p>
-          <p className="text-[10px] text-slate-500 font-medium">
-            {entry.winCount} {entry.winCount === 1 ? 'win' : 'wins'}
+          <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium">
+            {winner.winCount} {winner.winCount === 1 ? 'match won' : 'matches won'}
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5">
-        <TokenUSDC variant="branded" size={15} className="shrink-0" />
-        <span className="text-xs font-extrabold text-slate-900 tabular-nums">
-          ${entry.totalWinnings}
+      {/* USDC Total */}
+      <div className="flex items-center gap-1.5 shrink-0 pl-2">
+        <TokenUSDC variant="branded" size={17} className="shrink-0" />
+        <span className="text-xs sm:text-sm font-extrabold text-slate-900 tabular-nums tracking-tight">
+          ${winner.totalWinnings}
         </span>
       </div>
     </div>
   )
 }
 
-function LatestPayoutTicker({ latestPayout }: { latestPayout: LatestPayoutInfo | null }) {
-  if (!latestPayout) {
+function LatestPayoutTicker({
+  recentPayouts,
+  latestPayout,
+}: {
+  recentPayouts?: LatestPayoutInfo[]
+  latestPayout: LatestPayoutInfo | null
+}) {
+  const payoutsList =
+    recentPayouts && recentPayouts.length > 0
+      ? recentPayouts
+      : latestPayout
+      ? [latestPayout]
+      : []
+
+  const [currentIndex, setCurrentIndex] = useState(0)
+
+  useEffect(() => {
+    if (payoutsList.length <= 1) return
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % payoutsList.length)
+    }, 4500)
+    return () => clearInterval(interval)
+  }, [payoutsList.length])
+
+  if (payoutsList.length === 0) {
     return (
-      <span className="text-slate-400 italic truncate ml-2 text-right">
-        No payouts yet today · Win a room to appear here live!
+      <span className="text-slate-400 italic text-[11px] truncate">
+        No payouts yet · Win a room to appear here live!
       </span>
     )
   }
 
-  return <LatestPayoutItem latestPayout={latestPayout} />
+  const currentPayout = payoutsList[currentIndex % payoutsList.length]
+
+  return (
+    <div className="min-w-0 overflow-hidden relative h-5.5 flex items-center justify-end flex-1">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={currentPayout.address + currentPayout.timestamp + currentIndex}
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -5 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="flex items-center gap-1.5 text-slate-600 text-[11px] truncate"
+        >
+          <LatestPayoutItem latestPayout={currentPayout} />
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  )
 }
 
 function LatestPayoutItem({ latestPayout }: { latestPayout: LatestPayoutInfo }) {
   const { profile: onchainProfile } = useOnchainProfile(latestPayout.address)
-  const localProfile = getUserProfile(latestPayout.address)
+  const localProfile = latestPayout.address ? getUserProfile(latestPayout.address.toLowerCase()) : null
 
   const rawUsername =
     onchainProfile?.username ||
@@ -270,8 +234,10 @@ function LatestPayoutItem({ latestPayout }: { latestPayout: LatestPayoutInfo }) 
     localProfile?.avatarUrl ||
     getDiceBearAvatarUrl('bottts-neutral', latestPayout.address || rawUsername)
 
+  const timeDisplay = formatTimeAgo(latestPayout.timestamp)
+
   return (
-    <span className="inline-flex items-center gap-1.5 text-slate-600 truncate ml-2 text-right min-w-0">
+    <div className="inline-flex items-center gap-1.5 text-slate-700 truncate">
       <img
         src={resolvedAvatar}
         alt={rawUsername}
@@ -280,12 +246,25 @@ function LatestPayoutItem({ latestPayout }: { latestPayout: LatestPayoutInfo }) 
           e.currentTarget.src = getDiceBearAvatarUrl('bottts-neutral', latestPayout.address || rawUsername)
         }}
       />
-      <strong className="text-slate-900 truncate">{formattedUsername}</strong>
-      <span>won</span>
-      <strong className="text-emerald-700 font-bold shrink-0">${latestPayout.amount} USDC</strong>
+      <span className="font-bold text-slate-900 truncate max-w-[110px] sm:max-w-[140px]">
+        {formattedUsername}
+      </span>
+      <span className="text-slate-500 font-medium">won</span>
+      <span className="text-emerald-700 font-extrabold shrink-0">${latestPayout.amount} USDC</span>
       <span className="text-slate-500 truncate hidden sm:inline">in {latestPayout.category}</span>
-      <span className="text-slate-400 shrink-0">({latestPayout.timeAgo})</span>
-    </span>
+      <span className="text-slate-400 font-medium shrink-0">({timeDisplay})</span>
+      {latestPayout.txHash && (
+        <a
+          href={`https://explorer.testnet.arc.io/tx/${latestPayout.txHash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="View on Arc Explorer"
+          className="text-slate-400 hover:text-slate-700 transition-colors shrink-0 ml-0.5"
+        >
+          <ExternalLink size={11} />
+        </a>
+      )}
+    </div>
   )
 }
 
@@ -1093,7 +1072,17 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
   const [practiceOpen, setPracticeOpen] = useState(false)
   const [howToPlayOpen, setHowToPlayOpen] = useState(false)
   const { liveRooms, totalCount } = useLiveRooms(1500)
-  const { leaderboard: liveLeaderboard, totalToday, latestPayout } = useLiveWinners()
+  const {
+    dailyLeaderboard,
+    allTimeLeaderboard,
+    totalToday,
+    totalAllTime,
+    latestPayout,
+    recentPayouts,
+  } = useLiveWinners()
+  const [winnerTimeframe, setWinnerTimeframe] = useState<'daily' | 'all-time'>('daily')
+  const activeLeaderboard = winnerTimeframe === 'daily' ? dailyLeaderboard : allTimeLeaderboard
+  const activeTotal = winnerTimeframe === 'daily' ? totalToday : totalAllTime
 
   const { user } = usePrivy()
   const { address: wagmiAddress } = useAccount()
@@ -1650,69 +1639,90 @@ export default function Lobby({ initialCategory, onCreateRoom, onJoinRoom, onCon
             )}
           </section>
 
-          {/* ── Feature: 🏆 Top Daily Winners ── */}
+          {/* ── Feature: 🏆 Top Winners (Modern List Style & Live Payout Stream) ── */}
           <section className="rounded-3xl bg-white p-3.5 sm:p-5 border border-slate-200/90 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.05)] space-y-3.5">
-            {/* Header */}
-            <div className="flex items-center justify-between gap-2 px-0.5">
+            {/* Header with Segmented Timeframe Switcher */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-0.5">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 text-amber-600 border border-amber-200/70">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 text-amber-600 border border-amber-200/70 shrink-0">
                   <Trophy size={16} />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight">
-                      Top Daily Winners
-                    </h2>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200/60 px-2 py-0.5 text-[10px] font-bold text-amber-800">
-                      <Flame size={11} className="text-amber-600 fill-amber-500" />
-                      {totalToday}
-                    </span>
-                  </div>
+                  <h2 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight">
+                    {winnerTimeframe === 'daily' ? 'Top Daily Winners' : 'All-Time Champions'}
+                  </h2>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    Leaderboard champions earning USDC on Arc
+                    {winnerTimeframe === 'daily'
+                      ? 'Live 24h leaderboard earning USDC on Arc'
+                      : 'Lifetime champions earning USDC on Arc'}
                   </p>
                 </div>
               </div>
+
+              {/* Segmented Timeframe Switcher */}
+              <div className="inline-flex items-center p-0.5 rounded-xl bg-slate-100/90 border border-slate-200/60 self-start sm:self-auto shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setWinnerTimeframe('daily')}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                    winnerTimeframe === 'daily'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Today (24h)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWinnerTimeframe('all-time')}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                    winnerTimeframe === 'all-time'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  All-Time
+                </button>
+              </div>
             </div>
 
-            {/* Leaderboard content: empty state or real live podium & runners up */}
-            {liveLeaderboard.length === 0 ? (
+            {/* Leaderboard content: empty state or modern list layout */}
+            {activeLeaderboard.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-7 px-4 text-center rounded-2xl bg-slate-50/70 border border-slate-200/80">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 mb-2 shadow-2xs">
                   <Trophy size={20} />
                 </div>
-                <p className="text-xs font-bold text-slate-800">No daily winners yet today</p>
+                <p className="text-xs font-bold text-slate-800">
+                  {winnerTimeframe === 'daily'
+                    ? 'No daily winners yet in the last 24h'
+                    : 'No winners recorded yet'}
+                </p>
                 <p className="text-[11px] text-slate-500 mt-0.5 max-w-xs">
-                  Join or create a live trivia match and win USDC to claim your spot on the podium!
+                  Join or create a live trivia match and win USDC to claim your spot on the leaderboard!
                 </p>
               </div>
             ) : (
-              <>
-                {/* Podium (Top 3) */}
-                <div className="grid grid-cols-3 gap-2 pt-1">
-                  {liveLeaderboard.slice(0, 3).map((winner, idx) => (
-                    <PodiumWinnerCard key={winner.address + idx} winner={winner} rankIndex={idx} />
-                  ))}
-                </div>
-
-                {/* Runners Up (Ranks 4 & 5 if present) */}
-                {liveLeaderboard.length > 3 && (
-                  <div className="space-y-1.5 pt-1">
-                    {liveLeaderboard.slice(3, 5).map((entry, idx) => (
-                      <RunnerUpRow key={entry.address + idx} entry={entry} />
-                    ))}
-                  </div>
-                )}
-              </>
+              <div className="space-y-1.5 sm:space-y-2">
+                {activeLeaderboard.slice(0, 5).map((winner, idx) => (
+                  <LeaderboardListItem
+                    key={winner.address + idx}
+                    winner={winner}
+                    rankIndex={idx}
+                  />
+                ))}
+              </div>
             )}
 
-            {/* Recent Winners Live Stream Ticker */}
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+            {/* Live Payout Stream Ticker (Clean & No Emojis) */}
+            <div className="pt-2.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-slate-500">
               <span className="font-semibold text-slate-700 flex items-center gap-1.5 shrink-0">
-                <Sparkles size={12} className="text-violet-600" />
-                Latest Payout:
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="text-[11px] font-bold text-slate-800 tracking-tight">Latest Payout:</span>
               </span>
-              <LatestPayoutTicker latestPayout={latestPayout} />
+              <LatestPayoutTicker recentPayouts={recentPayouts} latestPayout={latestPayout} />
             </div>
           </section>
 

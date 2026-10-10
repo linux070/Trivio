@@ -62,8 +62,26 @@ export function useLiveWinners() {
 
         if (!isSubscribed) return
 
+        const blockCache = new Map<bigint, number>()
+
         for (const log of logs) {
           const { winners, amounts } = log.args
+          let blockTimestampMs: number | undefined
+
+          if (log.blockNumber) {
+            if (blockCache.has(log.blockNumber)) {
+              blockTimestampMs = blockCache.get(log.blockNumber)
+            } else {
+              try {
+                const block = await client.getBlock({ blockNumber: log.blockNumber })
+                blockTimestampMs = Number(block.timestamp) * 1000
+                blockCache.set(log.blockNumber, blockTimestampMs)
+              } catch {
+                // fallback
+              }
+            }
+          }
+
           if (winners && amounts && winners.length > 0) {
             for (let i = 0; i < winners.length; i++) {
               const winnerAddr = winners[i]
@@ -76,8 +94,39 @@ export function useLiveWinners() {
                   amount: usdcAmount,
                   category: 'Crypto',
                   txHash: log.transactionHash,
+                  timestamp: blockTimestampMs,
                 })
               }
+            }
+          }
+        }
+
+        // Also verify and correct timestamps for any stored payouts that have a txHash
+        const stored = getStoredPayouts()
+        for (const p of stored.slice(0, 10)) {
+          if (p.txHash && p.txHash.startsWith('0x')) {
+            try {
+              const tx = await client.getTransaction({ hash: p.txHash as `0x${string}` })
+              if (tx && tx.blockNumber) {
+                let blockTimeMs = blockCache.get(tx.blockNumber)
+                if (!blockTimeMs) {
+                  const block = await client.getBlock({ blockNumber: tx.blockNumber })
+                  blockTimeMs = Number(block.timestamp) * 1000
+                  blockCache.set(tx.blockNumber, blockTimeMs)
+                }
+                if (blockTimeMs && Math.abs(p.timestamp - blockTimeMs) > 10000) {
+                  recordWinnerPayout({
+                    roomCode: p.roomCode,
+                    winnerAddress: p.winnerAddress,
+                    amount: p.amount,
+                    category: p.category,
+                    txHash: p.txHash,
+                    timestamp: blockTimeMs,
+                  })
+                }
+              }
+            } catch {
+              // ignore
             }
           }
         }
