@@ -19,6 +19,7 @@ interface OnboardingModalProps {
   initialProfile?: UserProfile | null
   isEditing?: boolean
   onClose?: () => void
+  onDisconnect?: () => void
   onComplete: (profile: UserProfile) => void
 }
 
@@ -33,6 +34,7 @@ export default function OnboardingModal({
   initialProfile,
   isEditing = false,
   onClose,
+  onDisconnect,
   onComplete,
 }: OnboardingModalProps) {
   const suggestions = getDefaultProfileSuggestions(address, provider)
@@ -425,7 +427,7 @@ export default function OnboardingModal({
                         {isEditing ? 'Save Changes' : 'Enter Lobby'}
                       </button>
 
-                      {isEditing && (
+                      {isEditing ? (
                         <button
                           type="button"
                           onClick={() => onClose?.()}
@@ -433,7 +435,15 @@ export default function OnboardingModal({
                         >
                           Cancel
                         </button>
-                      )}
+                      ) : onDisconnect ? (
+                        <button
+                          type="button"
+                          onClick={() => onDisconnect()}
+                          className="w-full text-center text-xs font-medium text-gray-400 hover:text-gray-600 py-1 transition-colors cursor-pointer"
+                        >
+                          Cancel & Disconnect
+                        </button>
+                      ) : null}
                     </div>
                   </form>
                 </motion.div>

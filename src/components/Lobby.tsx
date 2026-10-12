@@ -713,12 +713,15 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
             </span>
           )}
 
-          {/* Micro status indicator */}
-          {!isProfileVerified && !isOnchainLoading && profile?.username && (
+          {/* Micro status indicator: pulsing yellow notification dot */}
+          {!isProfileVerified && !isOnchainLoading && (
             <span
-              className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white"
-              title="Handle not yet claimed onchain"
-            />
+              className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5"
+              title="Profile not yet verified onchain — click to edit & claim"
+            >
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500 ring-2 ring-white" />
+            </span>
           )}
         </div>
 
@@ -979,7 +982,10 @@ function WalletProfile({ onDisconnect }: { onDisconnect?: () => void }) {
                             </>
                           ) : (
                             <>
-                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                              </span>
                               <span>Unclaimed</span>
                             </>
                           )}

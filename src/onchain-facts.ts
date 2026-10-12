@@ -65,7 +65,14 @@ const FACTS: OnchainFacts = {
       "family": "arc",
       "explorerBase": "https://explorer.testnet.arc.io",
       "rpcUrls": [
-        "https://rpc.testnet.arc.io"
+        "https://rpc.testnet.arc.io",
+        "https://rpc.testnet.arc.network",
+        "https://rpc.quicknode.testnet.arc.io",
+        "https://rpc.quicknode.testnet.arc.network",
+        "https://rpc.drpc.testnet.arc.io",
+        "https://rpc.drpc.testnet.arc.network",
+        "https://rpc.blockdaemon.testnet.arc.io",
+        "https://rpc.blockdaemon.testnet.arc.network"
       ],
       "nativeCurrency": {
         "symbol": "USDC",

@@ -24,7 +24,6 @@ import CreateRoom from '@/components/CreateRoom'
 import JoinRoom from '@/components/JoinRoom'
 import GameRoom from '@/components/GameRoom'
 import Results from '@/components/Results'
-import OnboardingModal from '@/components/OnboardingModal'
 
 export { getJoinParamsFromUrl } from '@/lib/roomStorage'
 
@@ -76,6 +75,9 @@ function getInitialScreen(): Screen {
 
   // Check if we have an authenticated user with a profile
   const isAuth = typeof window !== 'undefined' && localStorage.getItem(STORAGE_AUTH_KEY) === 'true'
+  if (isAuth && typeof window !== 'undefined' && !hasUserProfile()) {
+    getOrCreateUserProfile()
+  }
   const hasProfile = typeof window !== 'undefined' && hasUserProfile()
 
   if (typeof window !== 'undefined') {
@@ -100,7 +102,7 @@ function getInitialScreen(): Screen {
     if (themeMeta) themeMeta.setAttribute('content', isLanding ? '#6d28d9' : '#ffffff')
   }
 
-  if (isAuth && hasProfile) {
+  if (isAuth) {
     if (joinParams || pendingJoin) {
       const pendingObj = joinParams || pendingJoin
       if (pendingObj?.roomCode) {
@@ -188,7 +190,6 @@ export default function App() {
   const { address } = useAccount()
   const { authenticated, ready, user, logout } = usePrivy()
   const [screen, setScreen] = useState<Screen>(getInitialScreen)
-  const [showOnboarding, setShowOnboarding] = useState(false)
   const wasConnectedRef = useRef(false)
 
   // Derive active wallet address from Privy user or wagmi
@@ -313,23 +314,24 @@ export default function App() {
 
       // When Privy session is authenticated and wallet address is available
       if (activeAddress) {
-        // Deterministically ensure profile exists in local cache so user never gets stuck
-        const existing = getUserProfile(activeAddress)
-        if (!existing) {
+        // Ensure profile exists in local cache (creates default generic name if new)
+        const localExisting = getUserProfile(activeAddress)
+        if (!localExisting) {
           getOrCreateUserProfile(activeAddress, provider)
         }
 
-        setShowOnboarding(false)
         if (screen.name === 'landing') {
           restoreGameScreen()
         }
 
         // Asynchronously check cloud & onchain profile to sync any custom avatar/name in background
-        fetchCloudProfile(activeAddress).then((cloud) => {
-          if (cloud && (cloud.avatarUrl || cloud.username)) {
-            saveUserProfile(cloud, activeAddress)
-          }
-        }).catch(() => {})
+        fetchCloudProfile(activeAddress)
+          .then((cloud) => {
+            if (cloud && (cloud.avatarUrl || cloud.username)) {
+              saveUserProfile(cloud, activeAddress)
+            }
+          })
+          .catch(() => {})
       }
     } else if (ready && !authenticated) {
       if (wasConnectedRef.current) {
@@ -347,7 +349,6 @@ export default function App() {
         } catch {
           // ignore
         }
-        setShowOnboarding(false)
         setScreen({ name: 'landing' })
       }
     }
@@ -484,14 +485,8 @@ export default function App() {
       if (!existing) {
         getOrCreateUserProfile(activeAddress, provider)
       }
-      setShowOnboarding(false)
       restoreGameScreen()
     }
-  }
-
-  const handleOnboardingComplete = () => {
-    setShowOnboarding(false)
-    restoreGameScreen()
   }
 
   const handleDisconnect = async () => {
@@ -515,37 +510,17 @@ export default function App() {
     } catch {
       // ignore
     }
-    setShowOnboarding(false)
     setScreen({ name: 'landing' })
   }
 
   // Check if we have an active stored user session with a valid profile
-  const hasValidProfile = Boolean(activeAddress ? hasUserProfile(activeAddress) : hasUserProfile())
   const isStoredAuth =
     typeof window !== 'undefined' &&
-    localStorage.getItem(STORAGE_AUTH_KEY) === 'true' &&
-    hasUserProfile()
+    localStorage.getItem(STORAGE_AUTH_KEY) === 'true'
 
-  // Auth & Onboarding guard:
-  // If showOnboarding is active, or screen is landing, or session is not authenticated,
-  // do NOT flash the Lobby in the background. Keep the clean Landing Page backdrop.
-  if (
-    showOnboarding ||
-    screen.name === 'landing' ||
-    (!isStoredAuth && (!ready || !authenticated || !hasValidProfile))
-  ) {
-    return (
-      <>
-        <LandingPage onConnected={handleConnected} />
-        <OnboardingModal
-          key={activeAddress || 'onboarding'}
-          open={showOnboarding && authenticated}
-          address={activeAddress}
-          provider={provider}
-          onComplete={handleOnboardingComplete}
-        />
-      </>
-    )
+  // If user is explicitly on landing screen or session is not authenticated, show LandingPage
+  if (screen.name === 'landing' || (!isStoredAuth && (!ready || !authenticated))) {
+    return <LandingPage onConnected={handleConnected} />
   }
 
   if (screen.name === 'lobby') {

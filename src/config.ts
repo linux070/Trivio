@@ -3,10 +3,21 @@
  * Built with Arc Studio — https://studio.arc.io
  */
 
-import { http, createConfig } from 'wagmi'
+import { http, createConfig, fallback } from 'wagmi'
 import { mainnet } from 'wagmi/chains'
 import { defineChain } from 'viem'
 import { registerChain } from './tracing'
+
+export const ARC_TESTNET_RPCS = [
+  'https://rpc.testnet.arc.io',
+  'https://rpc.testnet.arc.network',
+  'https://rpc.quicknode.testnet.arc.io',
+  'https://rpc.quicknode.testnet.arc.network',
+  'https://rpc.drpc.testnet.arc.io',
+  'https://rpc.drpc.testnet.arc.network',
+  'https://rpc.blockdaemon.testnet.arc.io',
+  'https://rpc.blockdaemon.testnet.arc.network',
+] as const
 
 export const arcTestnet = defineChain({
   id: 5042002,
@@ -17,7 +28,7 @@ export const arcTestnet = defineChain({
     symbol: 'USDC',
   },
   rpcUrls: {
-    default: { http: ['https://rpc.testnet.arc.io'] },
+    default: { http: [...ARC_TESTNET_RPCS] },
   },
   blockExplorers: {
     default: { name: 'Arc Explorer', url: 'https://explorer.testnet.arc.io' },
@@ -42,7 +53,7 @@ export const arcMainnet = defineChain({
 })
 
 // Pre-register chain RPC URLs so trace events show correct chain names immediately
-registerChain(arcTestnet.id, 'https://rpc.testnet.arc.io')
+ARC_TESTNET_RPCS.forEach((rpc) => registerChain(arcTestnet.id, rpc))
 registerChain(arcMainnet.id, 'https://rpc.mainnet.arc.io')
 
 export const ARC_TESTNET_CHAIN_ID = arcTestnet.id
@@ -92,10 +103,15 @@ export function getProfileRegistryAddress(chainId?: number): `0x${string}` {
   return TRIVIO_PROFILE_REGISTRY_ADDRESS
 }
 
+export const arcTestnetTransport = fallback(
+  ARC_TESTNET_RPCS.map((url) => http(url, { retryCount: 2, timeout: 8_000 })),
+  { rank: false }
+)
+
 export const config = createConfig({
   chains: [arcTestnet, arcMainnet, mainnet], // mainnet needed for ENS resolution
   transports: {
-    [arcTestnet.id]: http('https://rpc.testnet.arc.io'),
+    [arcTestnet.id]: arcTestnetTransport,
     [arcMainnet.id]: http('https://rpc.mainnet.arc.io'),
     [mainnet.id]: http(), // ENS resolution uses mainnet
   },
